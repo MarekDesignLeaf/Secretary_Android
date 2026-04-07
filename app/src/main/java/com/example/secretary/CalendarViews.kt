@@ -8,8 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,7 +81,7 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
         // Navigation
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { date = prevDate(mode, date) }) {
-                Icon(Icons.Default.KeyboardArrowLeft, null)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null)
             }
             Text(
                 dateLabel(mode, date),
@@ -91,7 +91,7 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
                 fontSize = 16.sp
             )
             IconButton(onClick = { date = nextDate(mode, date) }) {
-                Icon(Icons.Default.KeyboardArrowRight, null)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
             }
         }
         HorizontalDivider()
