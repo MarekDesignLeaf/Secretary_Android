@@ -51,7 +51,12 @@ data class Client(
     val created_at: String? = null,
     val updated_at: String? = null,
     val tenant_id: Int? = 1,
-    val default_hourly_rate: Double? = 0.0
+    val default_hourly_rate: Double? = null,
+    val rate_garden_maintenance: Double? = null,
+    val rate_hedge_trimming: Double? = null,
+    val rate_arborist_works: Double? = null,
+    val rate_waste_bulkbag: Double? = null,
+    val rate_minimum_charge: Double? = null
 )
 
 data class ClientDetail(

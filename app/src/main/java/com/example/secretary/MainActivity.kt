@@ -1142,7 +1142,31 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                     InfoRow(Strings.preferredContact, c.preferred_contact_method)
                     InfoRow(Strings.status, c.status)
                     InfoRow(Strings.commercial, if (c.is_commercial) Strings.yes else Strings.no)
-                    if ((c.default_hourly_rate ?: 0.0) > 0) InfoRow("Hodinová sazba", "£${c.default_hourly_rate}/h")
+                }
+            }
+        }
+        item {
+            val rateRows = listOf(
+                Triple("🌿", "Garden Maintenance", c.rate_garden_maintenance),
+                Triple("🌳", "Hedge Trimming & Pruning", c.rate_hedge_trimming),
+                Triple("🪓", "Arborist Works", c.rate_arborist_works),
+                Triple("🗑", "Odvoz odpadu (bulk bag)", c.rate_waste_bulkbag),
+                Triple("💰", "Min. cena zakázky", c.rate_minimum_charge)
+            )
+            Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Sazby služeb", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("(prázdné = globální výchozí)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    rateRows.forEach { (emoji, label, value) ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("$emoji $label", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            if ((value ?: 0.0) > 0.0)
+                                Text("£$value", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            else
+                                Text("globální", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             }
         }
@@ -1350,7 +1374,11 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
     var billingCity by remember { mutableStateOf(client.billing_city ?: "") }
     var billingPostcode by remember { mutableStateOf(client.billing_postcode ?: "") }
     var isCommercial by remember { mutableStateOf(client.is_commercial) }
-    var hourlyRate by remember { mutableStateOf((client.default_hourly_rate ?: 0.0).let { if (it > 0) it.toString() else "" }) }
+    var rateGarden   by remember { mutableStateOf((client.rate_garden_maintenance ?: 0.0).let { if (it > 0) it.toString() else "" }) }
+    var rateHedge    by remember { mutableStateOf((client.rate_hedge_trimming ?: 0.0).let { if (it > 0) it.toString() else "" }) }
+    var rateArborist by remember { mutableStateOf((client.rate_arborist_works ?: 0.0).let { if (it > 0) it.toString() else "" }) }
+    var rateWaste    by remember { mutableStateOf((client.rate_waste_bulkbag ?: 0.0).let { if (it > 0) it.toString() else "" }) }
+    var rateMin      by remember { mutableStateOf((client.rate_minimum_charge ?: 0.0).let { if (it > 0) it.toString() else "" }) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editClient) },
         text = {
             LazyColumn(Modifier.heightIn(max = 400.dp)) {
@@ -1377,8 +1405,12 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
                     OutlinedTextField(value = phoneSecondary, onValueChange = { phoneSecondary = it }, label = { Text(Strings.phoneSecondary) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(value = website, onValueChange = { website = it }, label = { Text(Strings.website) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(Modifier.height(12.dp))
-                    Text("Sazby", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-                    OutlinedTextField(value = hourlyRate, onValueChange = { hourlyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Hodinová sazba (£/h)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Text("Sazby služeb (prázdné = globální)", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    OutlinedTextField(value = rateGarden,   onValueChange = { rateGarden   = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🌿 Garden Maintenance (£/h)") },       modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = rateHedge,    onValueChange = { rateHedge    = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🌳 Hedge Trimming & Pruning (£/h)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = rateArborist, onValueChange = { rateArborist = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🪓 Arborist Works (£/h)") },           modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = rateWaste,    onValueChange = { rateWaste    = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🗑 Odvoz odpadu bulk bag (£)") },       modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = rateMin,      onValueChange = { rateMin      = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("💰 Min. cena zakázky (£)") },           modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(Modifier.height(12.dp))
                     Text(Strings.billingAddress, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
                     OutlinedTextField(value = billingAddr, onValueChange = { billingAddr = it }, label = { Text(Strings.billingAddress) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1399,7 +1431,11 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
                 "website" to website.ifBlank { null },
                 "billing_address_line1" to billingAddr.ifBlank { null },
                 "billing_city" to billingCity.ifBlank { null }, "billing_postcode" to billingPostcode.ifBlank { null },
-                "default_hourly_rate" to (hourlyRate.toDoubleOrNull() ?: 0.0)
+                "rate_garden_maintenance" to rateGarden.toDoubleOrNull(),
+                "rate_hedge_trimming" to rateHedge.toDoubleOrNull(),
+                "rate_arborist_works" to rateArborist.toDoubleOrNull(),
+                "rate_waste_bulkbag" to rateWaste.toDoubleOrNull(),
+                "rate_minimum_charge" to rateMin.toDoubleOrNull()
             ))
         }) { Text(Strings.save) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
