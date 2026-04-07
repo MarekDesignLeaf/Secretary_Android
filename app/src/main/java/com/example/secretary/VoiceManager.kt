@@ -51,9 +51,9 @@ class VoiceManager(
     }
 
     private fun getHotwords(): List<String> {
-        val custom = settings.activationWord.lowercase()
-        val base = listOf("sekretářko", "sekretářka", "marcus", "hej kundo", "kundo", "hej k****")
-        return (base + custom).distinct()
+        val custom = settings.activationWord.lowercase().trim()
+        // Custom word replaces defaults; if empty, use built-in defaults
+        return if (custom.isNotBlank()) listOf(custom) else listOf("hej kundo", "kundo")
     }
 
     private fun matchesHotword(text: String): Boolean {
@@ -73,6 +73,9 @@ class VoiceManager(
     fun startListening() {
         if (isSpeaking) return
         cancelRecognizer()
+        // Destroy and recreate recognizer so any language change takes effect
+        try { recognizer?.destroy() } catch (_: Exception) {}
+        recognizer = null
         mode = ListenMode.COMMAND
         consecutiveErrors = 0
         onStatusChange("${Strings.listening}...")
@@ -96,11 +99,15 @@ class VoiceManager(
         }
         isSpeaking = true
         cancelRecognizer()
-        // Update TTS locale — try current language, fall back to en-GB
+        // Update TTS locale — try current language, fall back to cs-CZ then device default
         val locale = Locale.forLanguageTag(settings.recognitionLanguage)
         val langResult = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
         if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-            tts?.setLanguage(Locale.forLanguageTag("en-GB"))
+            Log.w(TAG, "TTS: ${settings.recognitionLanguage} not available, trying cs-CZ")
+            val csResult = tts?.setLanguage(Locale.forLanguageTag("cs-CZ")) ?: TextToSpeech.LANG_NOT_SUPPORTED
+            if (csResult == TextToSpeech.LANG_MISSING_DATA || csResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts?.setLanguage(Locale.getDefault())
+            }
         }
         val params = Bundle().apply {
             putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "reply")
@@ -272,8 +279,8 @@ class VoiceManager(
                     }
                     override fun onError(id: String?) {
                         isSpeaking = false
-                        Log.e(TAG, "TTS onError: $id")
-                        handler.post { startHotwordLoop() }
+                        Log.e(TAG, "TTS onError: $id expectReply=$expectReplyAfterSpeak")
+                        handler.post { if (expectReplyAfterSpeak) startListening() else startHotwordLoop() }
                     }
                 })
                 isTtsReady = true
