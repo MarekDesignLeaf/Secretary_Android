@@ -281,9 +281,6 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
 }
 
 @Composable
-// CalendarScreen is defined in CalendarViews.kt
-
-@Composable
 fun AddClientDialog(onDismiss: () -> Unit, onConfirm: (String, String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
