@@ -472,3 +472,51 @@ fun CommunicationEditDialog(onDismiss: () -> Unit, clients: List<Client>, onSave
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
+
+// ========== IMPORT CONTACTS DIALOG ==========
+@Composable
+fun ImportContactsDialog(
+    onDismiss: () -> Unit,
+    onImport: (onlyUkNumbers: Boolean, skipWithoutPhone: Boolean, skipWithoutName: Boolean, removeDuplicates: Boolean, includeEmail: Boolean) -> Unit
+) {
+    var onlyUkNumbers by remember { mutableStateOf(true) }
+    var skipWithoutPhone by remember { mutableStateOf(true) }
+    var skipWithoutName by remember { mutableStateOf(true) }
+    var removeDuplicates by remember { mutableStateOf(true) }
+    var includeEmail by remember { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import kontaktů") },
+        text = {
+            Column {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Pouze UK čísla (+44 nebo 0...)")
+                    Switch(checked = onlyUkNumbers, onCheckedChange = { onlyUkNumbers = it })
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Přeskočit bez telefonu")
+                    Switch(checked = skipWithoutPhone, onCheckedChange = { skipWithoutPhone = it })
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Přeskočit bez jména")
+                    Switch(checked = skipWithoutName, onCheckedChange = { skipWithoutName = it })
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Odstranit duplicity")
+                    Switch(checked = removeDuplicates, onCheckedChange = { removeDuplicates = it })
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Zahrnout e-mail")
+                    Switch(checked = includeEmail, onCheckedChange = { includeEmail = it })
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onImport(onlyUkNumbers, skipWithoutPhone, skipWithoutName, removeDuplicates, includeEmail) }) {
+                Text("Importovat")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
+    )
+}

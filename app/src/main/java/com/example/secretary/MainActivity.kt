@@ -590,7 +590,17 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
 @Composable
 fun ClientsListTab(clients: List<Client>, navController: NavHostController, viewModel: SecretaryViewModel) {
     var searchQuery by remember { mutableStateOf("") }
+    var showImportDialog by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
+    if (showImportDialog) {
+        ImportContactsDialog(
+            onDismiss = { showImportDialog = false },
+            onImport = { onlyUk, skipNoPhone, skipNoName, removeDups, withEmail ->
+                showImportDialog = false
+                viewModel.syncPhoneContacts(ctx, onlyUk, skipNoPhone, skipNoName, removeDups, withEmail)
+            }
+        )
+    }
     val filtered = if (searchQuery.isBlank()) clients
         else clients.filter {
             it.display_name.contains(searchQuery, ignoreCase = true) ||
@@ -609,8 +619,8 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                 singleLine = true
             )
             Spacer(Modifier.width(8.dp))
-            IconButton(onClick = { viewModel.syncPhoneContacts(ctx) }) {
-                Icon(Icons.Default.Refresh, "Sync kontaktů", tint = MaterialTheme.colorScheme.primary)
+            IconButton(onClick = { showImportDialog = true }) {
+                Icon(Icons.Default.Refresh, "Import kontaktů", tint = MaterialTheme.colorScheme.primary)
             }
         }
         if (filtered.isEmpty()) {
@@ -2364,18 +2374,44 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun syncPhoneContacts(context: Context, filterUk: Boolean = true) {
+    fun syncPhoneContacts(
+        context: Context,
+        onlyUkNumbers: Boolean = true,
+        skipWithoutPhone: Boolean = true,
+        skipWithoutName: Boolean = true,
+        removeDuplicates: Boolean = true,
+        includeEmail: Boolean = true
+    ) {
         viewModelScope.launch {
             try {
                 val cm = ContactManager(context)
-                val contacts = cm.getContactsWithEmail()
-                Log.d("ViewModel", "Syncing ${contacts.size} phone contacts to server (filterUk=$filterUk)")
-                val res = api.syncContacts(mapOf("contacts" to contacts, "filter_uk" to filterUk))
+                var contacts = if (includeEmail) cm.getContactsWithEmail() else cm.getAllContacts()
+
+                if (skipWithoutPhone) contacts = contacts.filter { it["phone"].orEmpty().isNotBlank() }
+                if (skipWithoutName) contacts = contacts.filter { it["name"].orEmpty().isNotBlank() }
+
+                contacts = contacts.map { c ->
+                    val cleaned = c["phone"].orEmpty()
+                        .replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+                    c.toMutableMap().also { it["phone"] = cleaned }
+                }
+
+                if (onlyUkNumbers) {
+                    contacts = contacts.filter { c ->
+                        val p = c["phone"].orEmpty()
+                        p.startsWith("+44") || p.startsWith("0")
+                    }
+                }
+
+                if (removeDuplicates) {
+                    contacts = contacts.distinctBy { it["phone"] }
+                }
+
+                Log.d("ViewModel", "Syncing ${contacts.size} contacts (onlyUk=$onlyUkNumbers)")
+                val res = api.syncContacts(mapOf("contacts" to contacts, "filter_uk" to onlyUkNumbers))
                 if (res.isSuccessful) {
                     val body = res.body()
-                    val created = body?.get("created") ?: 0
-                    val skipped = body?.get("skipped") ?: 0
-                    Log.d("ViewModel", "Sync done: created=$created, skipped=$skipped")
+                    Log.d("ViewModel", "Sync done: created=${body?.get("created")}, skipped=${body?.get("skipped")}")
                     refreshCrmData()
                 }
             } catch (e: Exception) { Log.e("ViewModel", "Sync contacts error", e) }
