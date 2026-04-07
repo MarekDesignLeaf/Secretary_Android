@@ -386,7 +386,7 @@ fun AddTaskDialog(
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                TextField(value = deadline, onValueChange = { deadline = it }, label = { Text("${Strings.deadline} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
+                DatePickerField(value = deadline, onValueChange = { deadline = it }, label = Strings.deadline, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { Button(onClick = { if (title.isNotBlank()) onConfirm(title, selectedType, selectedPrio, selectedClientId, selectedClientName, deadline.ifBlank { null }) }, enabled = title.isNotBlank()) { Text(Strings.create) } },
@@ -1465,7 +1465,7 @@ fun AddJobDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (Strin
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                TextField(value = startDate, onValueChange = { startDate = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
+                DatePickerField(value = startDate, onValueChange = { startDate = it }, label = Strings.plannedStart, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { Button(onClick = { if (title.isNotBlank()) onConfirm(title, selectedClientId, startDate.ifBlank { null }) }, enabled = title.isNotBlank()) { Text(Strings.create) } },

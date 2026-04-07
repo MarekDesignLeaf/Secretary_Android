@@ -1,5 +1,6 @@
 package com.example.secretary
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,9 +14,34 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+// ========== DATE PICKER FIELD ==========
+@Composable
+fun DatePickerField(value: String, onValueChange: (String) -> Unit, label: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val cal = java.util.Calendar.getInstance().also { c ->
+        if (value.length == 10) try {
+            val p = value.split("-")
+            c.set(p[0].toInt(), p[1].toInt() - 1, p[2].toInt())
+        } catch (_: Exception) {}
+    }
+    Box(modifier = modifier) {
+        OutlinedTextField(
+            value = value, onValueChange = {}, readOnly = true,
+            label = { Text(label) }, modifier = Modifier.fillMaxWidth(),
+            trailingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) }
+        )
+        Box(modifier = Modifier.matchParentSize().clickable {
+            DatePickerDialog(context, { _, y, m, d ->
+                onValueChange("%04d-%02d-%02d".format(y, m + 1, d))
+            }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+        })
+    }
+}
 
 // ========== JOB EDIT DIALOG ==========
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,7 +54,7 @@ fun EditJobDialog(job: Job, onDismiss: () -> Unit, onSave: (Map<String, Any?>) -
             Column {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Název zakázky") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("Plánované zahájení (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DatePickerField(value = startDate, onValueChange = { startDate = it }, label = "Plánované zahájení", modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { Button(onClick = { onSave(mapOf("job_title" to title, "start_date_planned" to startDate.ifBlank { null })) }) { Text(Strings.save) } },
@@ -122,7 +148,7 @@ fun CreateInvoiceDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm:
                 }
                 OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Částka (£)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = dueDate, onValueChange = { dueDate = it }, label = { Text("Splatnost (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DatePickerField(value = dueDate, onValueChange = { dueDate = it }, label = "Splatnost", modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { Button(onClick = {
@@ -170,7 +196,7 @@ fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfi
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                OutlinedTextField(value = workDate, onValueChange = { workDate = it }, label = { Text("Datum (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DatePickerField(value = workDate, onValueChange = { workDate = it }, label = "Datum", modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = totalHours, onValueChange = { totalHours = it }, label = { Text("Celkem hodin") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
