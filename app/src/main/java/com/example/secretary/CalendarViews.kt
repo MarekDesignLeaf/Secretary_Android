@@ -339,8 +339,8 @@ fun WeekView(date: LocalDate, events: List<CalendarEvent>) {
                             val startMin = ev.localStart(z).let { it.hour * 60 + it.minute }
                             val endMin = ev.localEnd(z).let { it.hour * 60 + it.minute }
                             val durMin = maxOf(endMin - startMin, 30)
-                            val topDp = startMin * HOUR_DP / 60
-                            val heightDp = durMin * HOUR_DP / 60
+                            val topDp = HOUR_DP * startMin / 60
+                            val heightDp = HOUR_DP * durMin / 60
                             Box(
                                 Modifier
                                     .absoluteOffset(y = topDp)
@@ -417,8 +417,8 @@ fun DayView(date: LocalDate, events: List<CalendarEvent>) {
                     val startMin = ev.localStart(z).let { it.hour * 60 + it.minute }
                     val endMin = ev.localEnd(z).let { it.hour * 60 + it.minute }
                     val durMin = maxOf(endMin - startMin, 30)
-                    val topDp = startMin * HOUR_DP / 60
-                    val heightDp = durMin * HOUR_DP / 60
+                    val topDp = HOUR_DP * startMin / 60
+                    val heightDp = HOUR_DP * durMin / 60
                     Box(
                         Modifier
                             .absoluteOffset(y = topDp)
