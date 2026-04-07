@@ -281,31 +281,7 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
 }
 
 @Composable
-fun CalendarScreen(viewModel: SecretaryViewModel) {
-    val state by viewModel.uiState.collectAsState()
-    val calendarText = remember { mutableStateOf("Načítám kalendář...") }
-    LaunchedEffect(Unit) {
-        val ctx = viewModel.getCalendarText(7)
-        calendarText.value = ctx
-    }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Kalendář", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        val scheduledTasks = state.tasks.filter { it.plannedDate != null || it.deadline != null }
-        if (scheduledTasks.isNotEmpty()) {
-            Text("Naplánované úkoly", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-            scheduledTasks.forEach { t ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(t.deadline ?: t.plannedDate ?: "", fontSize = 12.sp, modifier = Modifier.width(80.dp), color = MaterialTheme.colorScheme.primary)
-                    Text(t.title, fontSize = 14.sp)
-                }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        }
-        Text("Události z kalendáře", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-        Text(calendarText.value)
-    }
-}
+// CalendarScreen is defined in CalendarViews.kt
 
 @Composable
 fun AddClientDialog(onDismiss: () -> Unit, onConfirm: (String, String, String) -> Unit) {

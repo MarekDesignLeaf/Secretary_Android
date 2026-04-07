@@ -123,6 +123,14 @@ data class Lead(
     val updated_at: String? = null
 )
 
+data class CalendarEvent(
+    val id: Long,
+    val title: String,
+    val startMillis: Long,
+    val endMillis: Long,
+    val allDay: Boolean = false
+)
+
 // === INVOICE — matches DB: invoices table ===
 data class Invoice(
     val id: Long = 0,

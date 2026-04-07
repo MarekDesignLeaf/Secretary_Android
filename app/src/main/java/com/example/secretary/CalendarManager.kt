@@ -96,6 +96,42 @@ class CalendarManager(context: Context) {
         }
     }
 
+    fun getEventsInRange(startMillis: Long, endMillis: Long): List<CalendarEvent> {
+        if (!hasReadPermission()) return emptyList()
+        val excluded = getExcludedCalendarIds()
+        val result = mutableListOf<CalendarEvent>()
+        try {
+            val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
+            ContentUris.appendId(builder, startMillis)
+            ContentUris.appendId(builder, endMillis)
+            appContext.contentResolver.query(
+                builder.build(),
+                arrayOf(
+                    CalendarContract.Instances.EVENT_ID,
+                    CalendarContract.Instances.TITLE,
+                    CalendarContract.Instances.BEGIN,
+                    CalendarContract.Instances.END,
+                    CalendarContract.Instances.ALL_DAY,
+                    CalendarContract.Instances.CALENDAR_ID
+                ),
+                null, null, CalendarContract.Instances.BEGIN + " ASC"
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val calId = cursor.getLong(5)
+                    if (calId in excluded) continue
+                    result.add(CalendarEvent(
+                        id = cursor.getLong(0),
+                        title = cursor.getString(1) ?: "Bez názvu",
+                        startMillis = cursor.getLong(2),
+                        endMillis = cursor.getLong(3),
+                        allDay = cursor.getInt(4) != 0
+                    ))
+                }
+            }
+        } catch (e: Exception) { Log.e(TAG, "getEventsInRange failed", e) }
+        return result
+    }
+
     fun getCalendarContext(days: Int = 7): String {
         if (!hasReadPermission()) return "SYSTÉM: Chybí oprávnění ke kalendáři."
 
