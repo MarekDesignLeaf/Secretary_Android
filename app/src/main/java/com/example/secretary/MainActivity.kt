@@ -195,9 +195,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostController) {
+    val uiState by viewModel.uiState.collectAsState()
+    val appLanguage = uiState.appLanguage
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var showAddClientDialog by remember { mutableStateOf(false) }
+    val navItemsWithLabels = remember(appLanguage) { navItems.map { it to it.title } }
 
     if (showAddClientDialog) {
         AddClientDialog(
@@ -213,10 +216,10 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
         bottomBar = {
             if (currentRoute in navItems.map { it.route }) {
                 NavigationBar {
-                    navItems.forEach { screen ->
+                    navItemsWithLabels.forEach { (screen, label) ->
                         NavigationBarItem(
                             icon = { Icon(screen.icon, null) },
-                            label = { Text(screen.title, fontSize = 10.sp) },
+                            label = { Text(label, fontSize = 10.sp) },
                             selected = currentRoute == screen.route,
                             onClick = {
                                 navController.navigate(screen.route) {
@@ -1943,6 +1946,8 @@ class SecretaryViewModel : ViewModel() {
 
     fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager) {
         voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
+        Strings.setLanguage(sm.appLanguage)
+        _uiState.value = _uiState.value.copy(appLanguage = sm.appLanguage)
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
@@ -2861,7 +2866,7 @@ class SecretaryViewModel : ViewModel() {
         Strings.setLanguage(langCode)
         // Update recognition language to match
         settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
-        _uiState.value = _uiState.value.copy(lastAiReply = Strings.waitingForCommand)
+        _uiState.value = _uiState.value.copy(appLanguage = langCode, lastAiReply = Strings.waitingForCommand)
     }
     fun resetSettings() { settingsManager?.resetAll(); setStatus("Nastaveni obnovena") }
     fun exportCrmData() { viewModelScope.launch { setStatus("Export neni v teto verzi") } }
@@ -2906,6 +2911,7 @@ class SecretaryViewModel : ViewModel() {
 }
 
 data class UiState(
+    val appLanguage: String = Strings.getLangCode(),
     val isListening: Boolean = false, 
     val status: String = "Připravena", 
     val lastAiReply: String = "Čekám na váš povel...",
