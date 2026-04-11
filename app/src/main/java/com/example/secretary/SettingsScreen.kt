@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.VisualTransformation
 
 @Composable
 fun SettingsScreen(viewModel: SecretaryViewModel) {
@@ -38,7 +39,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         item { CrmSection(sm) }
         item { NotificationSection(sm) }
         item { WorkProfileSection(sm) }
-        item { UsersSection(sm) }
+        item { UsersSection(sm, viewModel) }
         item { DataSection(sm, viewModel) }
         item { AboutSection() }
         item { VersionHistorySection() }
@@ -280,10 +281,11 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 }
 
 // 6. UZIVATELE A PRAVA
-@Composable private fun UsersSection(sm: SettingsManager) {
+@Composable private fun UsersSection(sm: SettingsManager, viewModel: SecretaryViewModel) {
     var exp by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
     var showUser by remember { mutableStateOf(false) }
+    var showRegister by remember { mutableStateOf(false) }
     var editUser by remember { mutableStateOf<UserProfile?>(null) }
     var profiles by remember { mutableStateOf(sm.getUserProfiles()) }
     var authed by remember { mutableStateOf(sm.adminPasswordHash.isBlank()) }
@@ -291,6 +293,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     if (showPwd) PasswordDialog({ showPwd = false }, { o, n -> if (sm.verifyPassword(o)) { sm.setAdminPassword(n); showPwd = false } }, sm.adminPasswordHash.isNotBlank())
     if (showUser) UserEditDialog(editUser, { showUser = false; editUser = null }, { u -> profiles = if (editUser != null) profiles.map { if (it.id == u.id) u else it } else profiles + u; sm.saveUserProfiles(profiles); showUser = false; editUser = null },
         if (editUser != null && editUser?.id != "admin") { { profiles = profiles.filter { it.id != editUser?.id }; sm.saveUserProfiles(profiles); showUser = false; editUser = null } } else null)
+    if (showRegister) RegisterServerUserDialog(viewModel = viewModel, onDismiss = { showRegister = false })
 
     SCard("Uzivatele a prava", Icons.Default.Lock, exp, { exp = !exp }) {
         if (!authed && sm.adminPasswordHash.isNotBlank()) {
@@ -311,9 +314,107 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 }; Spacer(Modifier.height(4.dp))
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { editUser = null; showUser = true }, Modifier.fillMaxWidth()) { Text("+ Pridat uzivatele") }
+            OutlinedButton(onClick = { editUser = null; showUser = true }, Modifier.fillMaxWidth()) { Text("+ Pridat lokalni profil") }
+            Spacer(Modifier.height(4.dp))
+            Button(onClick = { showRegister = true }, Modifier.fillMaxWidth()) { Text("+ Pridat uzivatele na server") }
         }
     }
+}
+
+@Composable private fun RegisterServerUserDialog(viewModel: SecretaryViewModel, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var password2 by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
+    var roleExp by remember { mutableStateOf(false) }
+    var selectedRole by remember { mutableStateOf(2) } // list index 2 = Worker (role_id=3)
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var success by remember { mutableStateOf(false) }
+
+    // role_id values match backend: 1=admin, 2=manager, 3=worker, 4=assistant
+    val roles = listOf(1 to "Admin (Spravce)", 2 to "Manager (Manazer)", 3 to "Worker (Pracovnik)", 4 to "Assistant (Pomocnik)")
+
+    val emailValid = android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    val passwordsMatch = password == password2
+    val canSubmit = name.isNotBlank() && emailValid && password.length >= 6 && passwordsMatch && !loading
+
+    if (success) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Uzivatel pridan") },
+            text = { Text("Uzivatel $name ($email) byl uspesne registrovan na serveru.") },
+            confirmButton = { Button(onClick = onDismiss) { Text("OK") } }
+        )
+        return
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        title = { Text("Novy uzivatel na serveru") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 480.dp)) {
+                item {
+                    OutlinedTextField(name, { name = it; error = null },
+                        label = { Text("Zobrazovane jmeno *") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(email, { email = it.trim(); error = null },
+                        label = { Text("Email *") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        isError = email.isNotBlank() && !emailValid,
+                        supportingText = if (email.isNotBlank() && !emailValid) ({ Text("Neplatny email", color = MaterialTheme.colorScheme.error) }) else null)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(phone, { phone = it; error = null },
+                        label = { Text("Telefon") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(password, { password = it; error = null },
+                        label = { Text("Heslo * (min 6 zn.)") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(if (showPassword) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null)
+                            }
+                        })
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(password2, { password2 = it; error = null },
+                        label = { Text("Potvrdit heslo *") },
+                        modifier = Modifier.fillMaxWidth(), singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = password2.isNotBlank() && !passwordsMatch,
+                        supportingText = if (password2.isNotBlank() && !passwordsMatch) ({ Text("Hesla se neshoduji", color = MaterialTheme.colorScheme.error) }) else null)
+                    Spacer(Modifier.height(8.dp))
+                    SDrop("Role", roles[selectedRole].second, roleExp, { roleExp = it }, roles.map { it.second }) { selectedRole = it; roleExp = false }
+                    if (error != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(error!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    loading = true; error = null
+                    viewModel.registerUser(name.trim(), email, phone.trim(), password, roles[selectedRole].first) { ok, msg ->
+                        loading = false
+                        if (ok) success = true else error = msg ?: "Nastala chyba"
+                    }
+                },
+                enabled = canSubmit
+            ) {
+                if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Text("Registrovat")
+            }
+        },
+        dismissButton = { TextButton(onClick = { if (!loading) onDismiss() }) { Text("Zrusit") } }
+    )
 }
 
 @Composable private fun PasswordDialog(onDismiss: () -> Unit, onOk: (String, String) -> Unit, hasOld: Boolean) {

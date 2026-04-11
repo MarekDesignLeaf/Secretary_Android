@@ -192,6 +192,12 @@ interface SecretaryApi {
     @GET("auth/me")
     suspend fun authMe(@retrofit2.http.Header("Authorization") token: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    @POST("auth/register")
+    suspend fun registerUser(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("auth/users")
+    suspend fun getServerUsers(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
     // === INVOICE ITEMS ===
     @GET("crm/invoices/{invoiceId}/items")
     suspend fun getInvoiceItems(@Path("invoiceId") invoiceId: Long): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
