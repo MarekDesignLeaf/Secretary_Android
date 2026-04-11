@@ -195,6 +195,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostController) {
+    val state by viewModel.uiState.collectAsState()
+    val lang = state.appLang // used in key() below to force nav bar recomposition on language change
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     var showAddClientDialog by remember { mutableStateOf(false) }
@@ -212,19 +214,22 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
     Scaffold(
         bottomBar = {
             if (currentRoute in navItems.map { it.route }) {
-                NavigationBar {
-                    navItems.forEach { screen ->
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, null) },
-                            label = { Text(screen.title, fontSize = 10.sp) },
-                            selected = currentRoute == screen.route,
-                            onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.startDestinationId)
-                                    launchSingleTop = true
+                // key(lang) forces recomposition of the NavigationBar when language changes
+                key(lang) {
+                    NavigationBar {
+                        navItems.forEach { screen ->
+                            NavigationBarItem(
+                                icon = { Icon(screen.icon, null) },
+                                label = { Text(screen.title, fontSize = 10.sp) },
+                                selected = currentRoute == screen.route,
+                                onClick = {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(navController.graph.startDestinationId)
+                                        launchSingleTop = true
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -1943,6 +1948,8 @@ class SecretaryViewModel : ViewModel() {
 
     fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager) {
         voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
+        // Restore saved language into UiState so navigation bar recomposes correctly
+        _uiState.value = _uiState.value.copy(appLang = sm.appLanguage)
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
@@ -2861,7 +2868,40 @@ class SecretaryViewModel : ViewModel() {
         Strings.setLanguage(langCode)
         // Update recognition language to match
         settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
-        _uiState.value = _uiState.value.copy(lastAiReply = Strings.waitingForCommand)
+        _uiState.value = _uiState.value.copy(lastAiReply = Strings.waitingForCommand, appLang = langCode)
+    }
+
+    fun registerUser(
+        name: String, email: String, phone: String,
+        password: String, roleId: Int,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val data: Map<String, Any?> = mapOf(
+                    "name" to name, "email" to email, "phone" to phone,
+                    "password" to password, "role_id" to roleId
+                )
+                val res = api.registerUser(data)
+                if (res.isSuccessful) onResult(true, null)
+                else {
+                    val msg = try { res.errorBody()?.string() } catch (_: Exception) { null }
+                    onResult(false, msg ?: "Chyba registrace (${res.code()})")
+                }
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Chyba pripojeni")
+            }
+        }
+    }
+
+    fun loadServerUsers(onResult: (List<Map<String, Any?>>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.getServerUsers()
+                if (res.isSuccessful) onResult(res.body() ?: emptyList())
+                else onResult(emptyList())
+            } catch (_: Exception) { onResult(emptyList()) }
+        }
     }
     fun resetSettings() { settingsManager?.resetAll(); setStatus("Nastaveni obnovena") }
     fun exportCrmData() { viewModelScope.launch { setStatus("Export neni v teto verzi") } }
@@ -2939,5 +2979,6 @@ data class UiState(
     val isVoiceSessionActive: Boolean = false,
     val onboardingComplete: Boolean? = null,
     val tenantConfig: Map<String, Any?>? = null,
-    val loggedIn: Boolean? = null
+    val loggedIn: Boolean? = null,
+    val appLang: String = "cs"
 )
