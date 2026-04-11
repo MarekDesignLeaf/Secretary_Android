@@ -34,8 +34,9 @@ class VoiceService : Service() {
         super.onCreate()
         Log.d(TAG, "Service created")
         settings = SettingsManager(this)
+        Strings.setLanguage(settings.appLanguage)
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Sekretářka je připravena"))
+        startForeground(NOTIFICATION_ID, buildNotification(Strings.serviceReady))
     }
 
     fun initVoiceManager(
@@ -81,10 +82,10 @@ class VoiceService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Hlasové ovládání",
+            Strings.serviceChannelName,
             NotificationManager.IMPORTANCE_MIN
         ).apply {
-            description = "Sekretářka naslouchá příkazům"
+            description = Strings.serviceChannelDesc
             setShowBadge(false)
             setSound(null, null)
             enableVibration(false)
@@ -105,7 +106,7 @@ class VoiceService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Sekretářka")
+            .setContentTitle(Strings.serviceTitle)
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(pendingIntent)

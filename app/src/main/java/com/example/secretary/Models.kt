@@ -18,6 +18,7 @@ data class MessageRequest(
 
 data class AssistantResponse(
     val reply_cs: String,
+    val reply: String? = null,
     val action_type: String? = null,
     val action_data: Map<String, @JvmSuppressWildcards Any>? = null,
     val needs_confirmation: Boolean = false,

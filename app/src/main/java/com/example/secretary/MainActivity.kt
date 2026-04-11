@@ -2616,7 +2616,7 @@ class SecretaryViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("ViewModel", "Voice session input error", e)
-                voiceManager?.speak("Chyba spojení se serverem.", expectReply = true)
+                voiceManager?.speak(Strings.serverConnectionError, expectReply = true)
             }
         }
     }
@@ -2650,12 +2650,12 @@ class SecretaryViewModel : ViewModel() {
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
         if (lower.contains("odhlásit") || lower.contains("odhlasit") || lower == "logout") {
-            val msg = ChatMessage("assistant", "Odhlašuji vás. Na shledanou!")
+            val msg = ChatMessage("assistant", Strings.loggingOut)
             _uiState.value = _uiState.value.copy(
                 history = (_uiState.value.history + ChatMessage("user", text) + msg).takeLast(30),
                 lastAiReply = msg.content
             )
-            voiceManager?.speak("Odhlašuji vás. Na shledanou!")
+            voiceManager?.speak(Strings.loggingOut)
             viewModelScope.launch {
                 kotlinx.coroutines.delay(2500) // wait for TTS
                 logout()
@@ -2687,15 +2687,16 @@ class SecretaryViewModel : ViewModel() {
                 ))
                 if (res.isSuccessful) {
                     res.body()?.let { response ->
-                        val newAssistantMessage = ChatMessage("assistant", response.reply_cs)
+                        val replyText = response.reply ?: response.reply_cs
+                        val newAssistantMessage = ChatMessage("assistant", replyText)
                         _uiState.value = _uiState.value.copy(
-                            lastAiReply = response.reply_cs,
+                            lastAiReply = replyText,
                             status = if (response.is_question) "${Strings.listening}..." else Strings.waitingForCommand,
                             history = _uiState.value.history + newAssistantMessage
                         )
                         handleAction(response)
                         if (response.action_type != "SEARCH_CONTACTS" && response.action_type != "LIST_CALENDAR_EVENTS" && response.action_type != "START_WORK_REPORT") {
-                            voiceManager?.speak(response.reply_cs, expectReply = response.is_question)
+                            voiceManager?.speak(Strings.formatForSpeech(replyText), expectReply = response.is_question)
                         }
                         // Refresh CRM data ale NEZNICIT lokalni tasky
                         refreshCrmDataKeepTasks()
@@ -2707,7 +2708,7 @@ class SecretaryViewModel : ViewModel() {
             } catch (e: Exception) { 
                 Log.e("ViewModel", "Network Error", e)
                 _uiState.value = _uiState.value.copy(status = "Chyba sítě")
-                voiceManager?.speak("Marku, nemůžu se spojit se serverem.")
+                voiceManager?.speak(Strings.networkError)
             }
         }
     }
@@ -2723,7 +2724,7 @@ class SecretaryViewModel : ViewModel() {
                     val names = results.joinToString(", ") { it["name"] ?: "" }
                     onVoiceInput("SYSTÉM: Našla jsem tyto kontakty: $names. Přečti je uživateli a nabídni volání.")
                 } else {
-                    voiceManager?.speak("V kontaktech jsem nikoho pro '$query' nenašla.")
+                    voiceManager?.speak(Strings.contactNotFound(query))
                 }
             }
             "ADD_CALENDAR_EVENT" -> {

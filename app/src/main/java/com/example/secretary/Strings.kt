@@ -185,9 +185,61 @@ object Strings {
     val backgroundActive get() = t("Background active", "Na pozadí aktivní", "Aktywne w tle")
     val backgroundInactive get() = t("Background inactive", "Na pozadí neaktivní", "Nieaktywne w tle")
 
+    // === VOICE ERROR MESSAGES (spoken via TTS) ===
+    val serverConnectionError get() = t("Connection error.", "Chyba spojení se serverem.", "Błąd połączenia z serwerem.")
+    val networkError get() = t("I can't reach the server.", "Nemůžu se spojit se serverem.", "Nie mogę połączyć się z serwerem.")
+    val loggingOut get() = t("Logging out. Goodbye!", "Odhlašuji vás. Na shledanou!", "Wylogowuję. Do widzenia!")
+    fun contactNotFound(query: String) = t(
+        "I didn't find anyone in contacts for '$query'.",
+        "V kontaktech jsem nikoho pro '$query' nenašla.",
+        "Nie znalazłam nikogo w kontaktach dla '$query'."
+    )
+
+    // === SERVICE NOTIFICATION ===
+    val serviceTitle get() = t("Secretary", "Sekretářka", "Sekretarka")
+    val serviceReady get() = t("Secretary is ready", "Sekretářka je připravena", "Sekretarka jest gotowa")
+    val serviceChannelName get() = t("Voice control", "Hlasové ovládání", "Sterowanie głosowe")
+    val serviceChannelDesc get() = t("Secretary listens for commands", "Sekretářka naslouchá příkazům", "Sekretarka słucha poleceń")
+
     // === HELPER ===
     private fun t(en: String, cs: String, pl: String): String = when (current) {
         Lang.EN -> en; Lang.CS -> cs; Lang.PL -> pl
+    }
+
+    /**
+     * Expands numeric unit symbols (°C, °F, °) to their full spoken form in the current language,
+     * so that TTS engines read them correctly regardless of the voice locale.
+     */
+    fun formatForSpeech(text: String): String {
+        var result = text
+        // Temperature – Celsius: "20°C" or "20 °C" (case-insensitive)
+        result = result.replace(Regex("(-?\\d+(?:[.,]\\d+)?)\\s*°[Cc]")) { m ->
+            val n = m.groupValues[1]
+            when (current) {
+                Lang.CS -> "$n stupňů Celsia"
+                Lang.PL -> "$n stopni Celsjusza"
+                Lang.EN -> "$n degrees Celsius"
+            }
+        }
+        // Temperature – Fahrenheit: "68°F" (case-insensitive)
+        result = result.replace(Regex("(-?\\d+(?:[.,]\\d+)?)\\s*°[Ff]")) { m ->
+            val n = m.groupValues[1]
+            when (current) {
+                Lang.CS -> "$n stupňů Fahrenheita"
+                Lang.PL -> "$n stopni Fahrenheita"
+                Lang.EN -> "$n degrees Fahrenheit"
+            }
+        }
+        // Bare degree symbol: "45°" (not followed by C/c or F/f)
+        result = result.replace(Regex("(-?\\d+(?:[.,]\\d+)?)°(?![CFcf])")) { m ->
+            val n = m.groupValues[1]
+            when (current) {
+                Lang.CS -> "$n stupňů"
+                Lang.PL -> "$n stopni"
+                Lang.EN -> "$n degrees"
+            }
+        }
+        return result
     }
 
     // === STATUS LOCALIZATION ===
