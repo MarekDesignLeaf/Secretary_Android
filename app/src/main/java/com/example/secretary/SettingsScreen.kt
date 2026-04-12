@@ -218,7 +218,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 // 3. CRM
 @Composable private fun CrmSection(sm: SettingsManager) {
     var exp by remember { mutableStateOf(false) }
-    SCard("CRM", Icons.Default.Person, exp, { exp = !exp }) {
+    SCard(Strings.crm, Icons.Default.Person, exp, { exp = !exp }) {
         var rE by remember { mutableStateOf(false) }; val ints = listOf(0 to Strings.manualRefresh, 5 to "5 min", 15 to "15 min", 30 to "30 min")
         SDrop(Strings.autoRefresh, ints.first { it.first == sm.autoRefreshInterval }.second, rE, { rE = it }, ints.map { it.second }) { sm.autoRefreshInterval = ints[it].first; rE = false }
         var tE by remember { mutableStateOf(false) }; val tabs = listOf(Strings.clients, Strings.properties, Strings.jobs, Strings.waste, Strings.finance)
@@ -363,7 +363,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     val roles = listOf("admin" to Strings.adminRole, "manager" to Strings.managerRole, "worker" to Strings.workerRole, "viewer" to Strings.viewerRole)
     val pl = mapOf("crm_read" to "CRM cteni", "crm_write" to "CRM zapis", "crm_delete" to "CRM mazani", "calendar_read" to "Kalendar cteni", "calendar_write" to "Kalendar zapis",
         "contacts_read" to "Kontakty cteni", "contacts_write" to "Kontakty zapis", "voice_commands" to "Hlasove prikazy", "settings_access" to "Nastaveni", "import_data" to "Import", "export_data" to "Export", "manage_users" to "Sprava uzivatelu")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (user == null) "Novy uzivatel" else "Upravit: ${user.name}") }, text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (user == null) Strings.newUser else "${Strings.edit}: ${user.name}") }, text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
         item { OutlinedTextField(name, { name = it }, label = { Text(Strings.nameLabel) }, modifier = Modifier.fillMaxWidth(), singleLine = true); Spacer(Modifier.height(8.dp)) }
         item { SDrop(Strings.roleLabel, roles.first { it.first == role }.second, rE, { rE = it }, roles.map { it.second }) { role = roles[it].first; perms = UserProfile.defaultPermissions(role); rE = false }; Spacer(Modifier.height(8.dp)); Text(Strings.permissionsLabel, fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
         pl.forEach { (k, l) -> item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(l, Modifier.weight(1f), fontSize = 13.sp); Switch(perms[k] ?: false, { perms = perms.toMutableMap().apply { this[k] = it } }) } } }
