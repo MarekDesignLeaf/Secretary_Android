@@ -1939,7 +1939,22 @@ class SecretaryViewModel : ViewModel() {
             val request = if (token != null) {
                 original.newBuilder().header("Authorization", "Bearer $token").build()
             } else original
-            chain.proceed(request)
+            val response = chain.proceed(request)
+            // 401 → try to refresh the token once and retry
+            if (response.code == 401 && settingsManager?.refreshToken != null) {
+                response.close()
+                if (refreshTokenSync()) {
+                    val newToken = settingsManager?.accessToken
+                    val retryRequest = if (newToken != null) {
+                        original.newBuilder().header("Authorization", "Bearer $newToken").build()
+                    } else original
+                    chain.proceed(retryRequest)
+                } else {
+                    // Refresh failed — mark as logged out on main thread and return the 401
+                    viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) { logout() }
+                    chain.proceed(original)
+                }
+            } else response
         }
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -2021,7 +2036,13 @@ class SecretaryViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(loggedIn = false, onboardingComplete = null, tenantConfig = null)
     }
 
-    fun tryRefreshToken(): Boolean {
+    fun tryRefreshToken(): Boolean = refreshTokenSync()
+
+    /**
+     * Synchronní refresh tokenu — může být volán z OkHttp interceptoru (background vlákno).
+     * Vrací true pokud byl token úspěšně obnoven.
+     */
+    private fun refreshTokenSync(): Boolean {
         val rt = settingsManager?.refreshToken ?: return false
         return try {
             val url = (settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL) + "auth/refresh"
@@ -2030,10 +2051,19 @@ class SecretaryViewModel : ViewModel() {
             val response = okhttp3.OkHttpClient().newCall(request).execute()
             if (response.isSuccessful) {
                 val json = org.json.JSONObject(response.body?.string() ?: "{}")
-                settingsManager?.accessToken = json.optString("access_token", null)
-                Log.d("ViewModel", "Token refreshed")
-                true
-            } else false
+                val newToken = json.optString("access_token").takeIf { it.isNotBlank() && it != "null" }
+                if (newToken != null) {
+                    settingsManager?.accessToken = newToken
+                    Log.d("ViewModel", "Token refreshed OK")
+                    true
+                } else {
+                    Log.w("ViewModel", "Refresh response missing access_token")
+                    false
+                }
+            } else {
+                Log.w("ViewModel", "Token refresh failed: HTTP ${response.code}")
+                false
+            }
         } catch (e: Exception) {
             Log.e("ViewModel", "Token refresh error", e)
             false
