@@ -3245,8 +3245,11 @@ class SecretaryViewModel : ViewModel() {
                         voiceSessionSummary = null, voiceSessionWhatsApp = null
                     )
                     voiceManager?.speak(prompt, expectReply = true)
+                } else {
+                    Log.e("ViewModel", "Start voice session error: ${res.code()}")
+                    voiceManager?.speak(Strings.serverConnectionError, expectReply = false)
                 }
-            } catch (e: Exception) { Log.e("ViewModel", "Start voice session error", e) }
+            } catch (e: Exception) { Log.e("ViewModel", "Start voice session error", e); voiceManager?.startHotwordLoop() }
         }
     }
 
@@ -3274,6 +3277,9 @@ class SecretaryViewModel : ViewModel() {
                         _uiState.value = _uiState.value.copy(voiceSessionStep = step, voiceSessionPrompt = prompt)
                         voiceManager?.speak(prompt, expectReply = true)
                     }
+                } else {
+                    Log.e("ViewModel", "Voice session input error: ${res.code()}")
+                    voiceManager?.speak(Strings.serverConnectionError, expectReply = true)
                 }
             } catch (e: Exception) {
                 Log.e("ViewModel", "Voice session input error", e)
@@ -3309,7 +3315,10 @@ class SecretaryViewModel : ViewModel() {
 
     fun onVoiceInput(text: String) {
         // Block voice commands if user lacks permission
-        if (_uiState.value.activeUserPermissions["voice_commands"] == false) return
+        if (_uiState.value.activeUserPermissions["voice_commands"] == false) {
+            voiceManager?.startHotwordLoop()
+            return
+        }
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
         if (lower.contains("odhlásit") || lower.contains("odhlasit") || lower == "logout") {
@@ -3367,6 +3376,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     Log.e("ViewModel", "API Error: ${res.code()}")
                     _uiState.value = _uiState.value.copy(status = "Chyba serveru ${res.code()}")
+                    voiceManager?.speak(Strings.networkError)
                 }
             } catch (e: Exception) { 
                 Log.e("ViewModel", "Network Error", e)
