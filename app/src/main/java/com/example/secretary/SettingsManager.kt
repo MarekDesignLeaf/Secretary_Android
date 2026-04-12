@@ -167,6 +167,24 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("app_language", "cs") ?: "cs"
         set(v) = prefs.edit { putString("app_language", v) }
 
+    // 10. Synchronizace zakázek do kalendáře
+    var jobCalendarSyncEnabled: Boolean
+        get() = prefs.getBoolean("job_cal_sync", true)
+        set(v) = prefs.edit { putBoolean("job_cal_sync", v) }
+    /** Čárkou oddělené e-maily účastníků (správce + účetní + ostatní). */
+    var jobCalendarAttendees: String
+        get() = prefs.getString("job_cal_attendees", "marek@designleaf.co.uk") ?: "marek@designleaf.co.uk"
+        set(v) = prefs.edit { putString("job_cal_attendees", v) }
+    /** Délka zakázky v hodinách (výchozí délka kalendářní události). */
+    var jobCalendarDurationHours: Int
+        get() = prefs.getInt("job_cal_duration_h", 8)
+        set(v) = prefs.edit { putInt("job_cal_duration_h", v) }
+
+    /** Uloží/přepíše ID kalendářní události pro danou zakázku. */
+    fun setJobCalendarEventId(jobId: Long, eventId: Long) = prefs.edit { putLong("job_cal_ev_$jobId", eventId) }
+    fun getJobCalendarEventId(jobId: Long): Long? = prefs.getLong("job_cal_ev_$jobId", -1L).takeIf { it >= 0 }
+    fun clearJobCalendarEventId(jobId: Long) = prefs.edit { remove("job_cal_ev_$jobId") }
+
     // Utility
     fun resetAll() = prefs.edit { clear() }
     fun isWithinWorkHours(): Boolean {

@@ -2481,8 +2481,27 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("create_job" to createJob)
-                api.approveQuote(quoteId, data)
-                refreshCrmData()
+                val res = api.approveQuote(quoteId, data)
+                if (res.isSuccessful && createJob) {
+                    refreshCrmData()
+                    // Pokud server vrátil novou zakázku, zapíš ji do kalendáře
+                    val jobId = (res.body()?.get("job_id") as? Double)?.toLong()
+                        ?: (res.body()?.get("job_id") as? Long)
+                    if (jobId != null) {
+                        // Načti zakázku pro titulek a klienta
+                        try {
+                            val jobRes = api.getJobDetail(jobId)
+                            if (jobRes.isSuccessful) {
+                                val job = jobRes.body()?.job
+                                if (job != null) {
+                                    syncJobToCalendar(jobId, job.job_title, job.client_name, job.start_date_planned)
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                } else {
+                    refreshCrmData()
+                }
             } catch (e: Exception) { Log.e("ViewModel", "Approve quote error", e) }
         }
     }
@@ -2497,12 +2516,96 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Zapíše zakázku do Google Kalendáře (pokud je synchronizace povolena).
+     * Vrací ID kalendářní události pro budoucí update/delete.
+     */
+    private fun syncJobToCalendar(jobId: Long, jobTitle: String, clientName: String?, startDate: String?, durationHours: Int? = null): Long? {
+        val sm = settingsManager ?: return null
+        if (!sm.jobCalendarSyncEnabled) return null
+        val cm = calendarManager ?: return null
+
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val startMs = try {
+            if (!startDate.isNullOrBlank()) sdf.parse(startDate)?.time ?: System.currentTimeMillis()
+            else System.currentTimeMillis()
+        } catch (_: Exception) { System.currentTimeMillis() }
+
+        val durH = (durationHours ?: sm.jobCalendarDurationHours).toLong()
+        val endMs = startMs + durH * 3600_000L
+
+        val description = buildString {
+            append("Zakázka ze Secretary CRM")
+            if (!clientName.isNullOrBlank()) append("\nKlient: $clientName")
+        }
+
+        val attendees = sm.jobCalendarAttendees
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
+        val eventId = cm.addJobEvent(
+            title = "📋 $jobTitle",
+            startTimeMillis = startMs,
+            endTimeMillis = endMs,
+            description = description,
+            attendeeEmails = attendees
+        )
+        if (eventId != null) {
+            sm.setJobCalendarEventId(jobId, eventId)
+            Log.d("ViewModel", "Zakázka $jobId zapsána do kalendáře (eventId=$eventId)")
+        }
+        return eventId
+    }
+
+    /** Aktualizuje existující kalendářní událost zakázky nebo vytvoří novou, pokud neexistuje. */
+    private fun updateJobInCalendar(jobId: Long, jobTitle: String, clientName: String?, startDate: String?) {
+        val sm = settingsManager ?: return
+        if (!sm.jobCalendarSyncEnabled) return
+        val cm = calendarManager ?: return
+
+        val existingEventId = sm.getJobCalendarEventId(jobId)
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val startMs = try {
+            if (!startDate.isNullOrBlank()) sdf.parse(startDate)?.time ?: return
+            else return
+        } catch (_: Exception) { return }
+
+        val durH = sm.jobCalendarDurationHours.toLong()
+        val endMs = startMs + durH * 3600_000L
+        val description = buildString {
+            append("Zakázka ze Secretary CRM")
+            if (!clientName.isNullOrBlank()) append("\nKlient: $clientName")
+        }
+
+        if (existingEventId != null) {
+            val ok = cm.updateJobEvent(existingEventId, "📋 $jobTitle", startMs, endMs, description)
+            if (!ok) {
+                // Událost možná smazána — vytvoř novou
+                sm.clearJobCalendarEventId(jobId)
+                syncJobToCalendar(jobId, jobTitle, clientName, startDate)
+            }
+        } else {
+            syncJobToCalendar(jobId, jobTitle, clientName, startDate)
+        }
+    }
+
     fun createJobManual(title: String, clientId: Long?, startDate: String?) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("title" to title, "client_id" to clientId, "start_date" to startDate)
                 val res = api.createJob(data)
-                if (res.isSuccessful) refreshCrmData()
+                if (res.isSuccessful) {
+                    refreshCrmData()
+                    // Zjisti jméno klienta pro popis události
+                    val clientName = _uiState.value.clients.firstOrNull { it.id == clientId }?.display_name
+                    // Zjisti ID nové zakázky z odpovědi serveru
+                    val newJobId = (res.body()?.get("id") as? Double)?.toLong()
+                        ?: (res.body()?.get("id") as? Long)
+                    if (newJobId != null) {
+                        syncJobToCalendar(newJobId, title, clientName, startDate)
+                    }
+                }
             } catch (e: Exception) { Log.e("ViewModel", "Create job error", e) }
         }
     }
@@ -2521,7 +2624,20 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val res = api.updateJob(jobId, data)
-                if (res.isSuccessful) { loadJobDetail(jobId); refreshCrmData() }
+                if (res.isSuccessful) {
+                    loadJobDetail(jobId)
+                    refreshCrmData()
+                    // Pokud se změnil titulek nebo datum zahájení, aktualizuj kalendář
+                    val newTitle = data["job_title"] as? String
+                    val newDate = data["start_date_planned"] as? String
+                    if (newTitle != null || newDate != null) {
+                        val detail = _uiState.value.selectedJobDetail
+                        val title = newTitle ?: detail?.job?.job_title ?: return@launch
+                        val date = newDate ?: detail?.job?.start_date_planned
+                        val clientName = detail?.job?.client_name
+                        updateJobInCalendar(jobId, title, clientName, date)
+                    }
+                }
             } catch (e: Exception) { Log.e("ViewModel", "Update job error", e) }
         }
     }

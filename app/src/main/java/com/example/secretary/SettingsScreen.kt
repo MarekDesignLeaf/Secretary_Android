@@ -252,6 +252,37 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         var pE by remember { mutableStateOf(false) }; val prios = listOf("low" to "Nizka", "normal" to "Normalni", "high" to "Vysoka", "urgent" to "Urgentni")
         SDrop("Vychozi priorita", prios.first { it.first == sm.defaultTaskPriority }.second, pE, { pE = it }, prios.map { it.second }) { sm.defaultTaskPriority = prios[it].first; pE = false }
 
+        // === SYNCHRONIZACE ZAKAZEK DO KALENDARE ===
+        Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
+        Text("Synchronizace zakázek do kalendáře", fontWeight = FontWeight.SemiBold)
+        var calSync by remember { mutableStateOf(sm.jobCalendarSyncEnabled) }
+        SSwitch("Automatický zápis do kalendáře", "Každá nová/upravená zakázka se zapíše do Google Kalendáře", calSync) { calSync = it; sm.jobCalendarSyncEnabled = it }
+        if (calSync) {
+            var attendees by remember { mutableStateOf(sm.jobCalendarAttendees) }
+            var attendeesDirty by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = attendees,
+                onValueChange = { attendees = it; attendeesDirty = true },
+                label = { Text("Účastníci (e-maily oddělené čárkou)") },
+                placeholder = { Text("marek@designleaf.co.uk, accountant@firma.cz") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            Text("Zadejte správce, účetní a ostatní, kteří mají vidět zakázky v kalendáři.", fontSize = 11.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+            if (attendeesDirty) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { attendees = sm.jobCalendarAttendees; attendeesDirty = false }) { Text("Zrušit") }
+                    Spacer(Modifier.width(4.dp))
+                    Button(onClick = { sm.jobCalendarAttendees = attendees.trim(); attendeesDirty = false }) { Text("Uložit") }
+                }
+            }
+            var durE by remember { mutableStateOf(false) }
+            val durations = listOf(1 to "1 hod", 2 to "2 hod", 4 to "4 hod", 8 to "8 hod (celý den)", 16 to "2 dny", 24 to "3 dny")
+            val curDur = sm.jobCalendarDurationHours
+            val durLabel = durations.firstOrNull { it.first == curDur }?.second ?: "$curDur hod"
+            SDrop("Výchozí délka zakázky", durLabel, durE, { durE = it }, durations.map { it.second }) { i -> sm.jobCalendarDurationHours = durations[i].first; durE = false }
+        }
+
         Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
         Text("Emailove podpisy", fontWeight = FontWeight.SemiBold)
         var sigs by remember { mutableStateOf(sm.getSavedSignatures()) }

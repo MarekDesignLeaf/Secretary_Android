@@ -19,26 +19,87 @@ class CalendarManager(context: Context) {
     private fun hasReadPermission() = ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     private fun hasWritePermission() = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
-    fun addEvent(summary: String, startTimeMillis: Long, endTimeMillis: Long): Boolean {
+    fun addEvent(summary: String, startTimeMillis: Long, endTimeMillis: Long): Boolean =
+        addEventFull(summary, startTimeMillis, endTimeMillis) != null
+
+    /**
+     * Zapíše zakázku do kalendáře s popisem, místem a pozvanými účastníky.
+     * Vrací ID vytvořené události (nebo null při chybě) — uložte pro pozdější update/delete.
+     */
+    fun addJobEvent(
+        title: String,
+        startTimeMillis: Long,
+        endTimeMillis: Long,
+        description: String = "",
+        location: String = "",
+        attendeeEmails: List<String> = emptyList()
+    ): Long? {
+        val eventId = addEventFull(title, startTimeMillis, endTimeMillis, description, location)
+            ?: return null
+        // Přidat účastníky (Android Calendar Attendees API)
+        var failed = 0
+        attendeeEmails.filter { it.isNotBlank() }.forEach { email ->
+            try {
+                val av = ContentValues().apply {
+                    put(CalendarContract.Attendees.EVENT_ID, eventId)
+                    put(CalendarContract.Attendees.ATTENDEE_EMAIL, email)
+                    put(CalendarContract.Attendees.ATTENDEE_TYPE, CalendarContract.Attendees.TYPE_REQUIRED)
+                    put(CalendarContract.Attendees.ATTENDEE_RELATIONSHIP, CalendarContract.Attendees.RELATIONSHIP_ATTENDEE)
+                }
+                appContext.contentResolver.insert(CalendarContract.Attendees.CONTENT_URI, av)
+                Log.d(TAG, "Pozván účastník: $email (event=$eventId)")
+            } catch (e: Exception) { Log.e(TAG, "ERR: Přidání účastníka $email selhalo", e); failed++ }
+        }
+        if (failed > 0) Log.w(TAG, "Varování: $failed/${attendeeEmails.size} účastníků se nepodařilo přidat (event=$eventId)")
+        return eventId
+    }
+
+    /** Aktualizuje existující událost zakázky (titulek, čas, popis, místo). */
+    fun updateJobEvent(eventId: Long, title: String, startTimeMillis: Long, endTimeMillis: Long, description: String = "", location: String = ""): Boolean {
+        if (!hasWritePermission()) return false
+        return try {
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.TITLE, title)
+                put(CalendarContract.Events.DTSTART, startTimeMillis)
+                put(CalendarContract.Events.DTEND, endTimeMillis)
+                put(CalendarContract.Events.DESCRIPTION, description)
+                put(CalendarContract.Events.EVENT_LOCATION, location)
+            }
+            val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
+            appContext.contentResolver.update(uri, values, null, null) > 0
+        } catch (e: Exception) { Log.e(TAG, "ERR: Update job event selhalo", e); false }
+    }
+
+    private fun addEventFull(
+        summary: String,
+        startTimeMillis: Long,
+        endTimeMillis: Long,
+        description: String = "",
+        location: String = ""
+    ): Long? {
         if (!hasWritePermission()) {
             Log.e(TAG, "ERR: Chybí právo zápisu")
-            return false
+            return null
         }
         return try {
-            val calendarId = getDefaultCalendarId() ?: return false
+            val calendarId = getDefaultCalendarId() ?: return null
             val values = ContentValues().apply {
                 put(CalendarContract.Events.DTSTART, startTimeMillis)
                 put(CalendarContract.Events.DTEND, endTimeMillis)
                 put(CalendarContract.Events.TITLE, summary)
                 put(CalendarContract.Events.CALENDAR_ID, calendarId)
                 put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                if (description.isNotBlank()) put(CalendarContract.Events.DESCRIPTION, description)
+                if (location.isNotBlank()) put(CalendarContract.Events.EVENT_LOCATION, location)
+                put(CalendarContract.Events.HAS_ATTENDEE_DATA, 1)
             }
             val uri = appContext.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-            Log.d(TAG, "OK: Událost zapsána do kalendáře $calendarId (URI: $uri)")
-            true
+            val id = uri?.lastPathSegment?.toLongOrNull()
+            Log.d(TAG, "OK: Událost zapsána do kalendáře $calendarId (ID=$id)")
+            id
         } catch (e: Exception) {
             Log.e(TAG, "ERR: Zápis selhal: ${e.message}")
-            false
+            null
         }
     }
 
