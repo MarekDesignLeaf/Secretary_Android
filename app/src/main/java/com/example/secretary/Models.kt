@@ -244,3 +244,12 @@ data class WorkReport(
 )
 
 enum class ConnectionStatus { UNKNOWN, TESTING, CONNECTED, DISCONNECTED }
+
+data class CalendarEvent(
+    val id: Long,
+    val title: String,
+    val startMs: Long,
+    val endMs: Long,
+    val allDay: Boolean = false,
+    val calendarId: Long = 0
+)

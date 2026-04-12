@@ -1,5 +1,7 @@
 package com.example.secretary
 
+import java.util.Locale
+
 object Strings {
     enum class Lang { EN, CS, PL }
 
@@ -200,6 +202,22 @@ object Strings {
     val serviceReady get() = t("Secretary is ready", "Sekretářka je připravena", "Sekretarka jest gotowa")
     val serviceChannelName get() = t("Voice control", "Hlasové ovládání", "Sterowanie głosowe")
     val serviceChannelDesc get() = t("Secretary listens for commands", "Sekretářka naslouchá příkazům", "Sekretarka słucha poleceń")
+
+    // === CALENDAR VIEW ===
+    val calViewDay get() = t("Day", "Den", "Dzień")
+    val calViewWeek get() = t("Week", "Týden", "Tydzień")
+    val calViewMonth get() = t("Month", "Měsíc", "Miesiąc")
+    val calAllDay get() = t("All day", "Celý den", "Cały dzień")
+    val calDayLabels get() = when (getCurrent()) {
+        Lang.EN -> listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        Lang.CS -> listOf("Po", "Út", "St", "Čt", "Pá", "So", "Ne")
+        Lang.PL -> listOf("Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd")
+    }
+    fun calLocale() = when (getCurrent()) {
+        Lang.EN -> Locale.ENGLISH
+        Lang.CS -> Locale("cs", "CZ")
+        Lang.PL -> Locale("pl", "PL")
+    }
 
     // === HELPER ===
     private fun t(en: String, cs: String, pl: String): String = when (current) {

@@ -157,6 +157,48 @@ class CalendarManager(context: Context) {
         }
     }
 
+    fun getEvents(startMs: Long, endMs: Long): List<CalendarEvent> {
+        if (!hasReadPermission()) return emptyList()
+        val excludedCalendars = getExcludedCalendarIds()
+        val events = mutableListOf<CalendarEvent>()
+        try {
+            val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
+            ContentUris.appendId(builder, startMs)
+            ContentUris.appendId(builder, endMs)
+            appContext.contentResolver.query(
+                builder.build(),
+                arrayOf(
+                    CalendarContract.Instances.EVENT_ID,
+                    CalendarContract.Instances.TITLE,
+                    CalendarContract.Instances.BEGIN,
+                    CalendarContract.Instances.END,
+                    CalendarContract.Instances.ALL_DAY,
+                    CalendarContract.Instances.CALENDAR_ID
+                ),
+                null, null,
+                CalendarContract.Instances.BEGIN + " ASC"
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val calId = cursor.getLong(5)
+                    if (calId in excludedCalendars) continue
+                    events.add(
+                        CalendarEvent(
+                            id = cursor.getLong(0),
+                            title = cursor.getString(1) ?: "Bez názvu",
+                            startMs = cursor.getLong(2),
+                            endMs = cursor.getLong(3),
+                            allDay = cursor.getInt(4) != 0,
+                            calendarId = calId
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "ERR: getEvents selhalo: ${e.message}")
+        }
+        return events
+    }
+
     fun getCalendarContext(days: Int = 7): String {
         if (!hasReadPermission()) return "SYSTÉM: Chybí oprávnění ke kalendáři."
 

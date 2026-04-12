@@ -17,10 +17,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -285,28 +289,503 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
 
 @Composable
 fun CalendarScreen(viewModel: SecretaryViewModel) {
-    val state by viewModel.uiState.collectAsState()
-    val calendarText = remember { mutableStateOf("Načítám kalendář...") }
-    LaunchedEffect(Unit) {
-        val ctx = viewModel.getCalendarText(7)
-        calendarText.value = ctx
+    // ── View modes ──────────────────────────────────────────────────────────
+    val viewModes = listOf(Strings.calViewDay, Strings.calViewWeek, Strings.calViewMonth)
+    var selectedMode by remember { mutableIntStateOf(1) } // default: Week
+
+    // ── Anchor day (today stripped to midnight) ──────────────────────────
+    val today = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
     }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Kalendář", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        val scheduledTasks = state.tasks.filter { it.plannedDate != null || it.deadline != null }
-        if (scheduledTasks.isNotEmpty()) {
-            Text("Naplánované úkoly", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-            scheduledTasks.forEach { t ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(t.deadline ?: t.plannedDate ?: "", fontSize = 12.sp, modifier = Modifier.width(80.dp), color = MaterialTheme.colorScheme.primary)
-                    Text(t.title, fontSize = 14.sp)
+    var anchorMs by remember { mutableLongStateOf(today) }
+
+    // ── Events state ──────────────────────────────────────────────────────
+    var events by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
+
+    // Window to load: always fetch ±35 days around anchor for smooth swipe
+    fun windowStart(anchor: Long, mode: Int): Long {
+        val c = Calendar.getInstance().apply { timeInMillis = anchor }
+        return when (mode) {
+            0 -> { c.set(Calendar.HOUR_OF_DAY, 0); c.timeInMillis }
+            1 -> {
+                c.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                c.set(Calendar.HOUR_OF_DAY, 0); c.timeInMillis
+            }
+            else -> {
+                c.set(Calendar.DAY_OF_MONTH, 1)
+                c.set(Calendar.HOUR_OF_DAY, 0); c.timeInMillis
+            }
+        }
+    }
+    fun windowEnd(start: Long, mode: Int): Long {
+        val c = Calendar.getInstance().apply { timeInMillis = start }
+        return when (mode) {
+            0 -> start + 24 * 3600_000L
+            1 -> start + 7 * 24 * 3600_000L
+            else -> {
+                c.add(Calendar.MONTH, 1); c.timeInMillis
+            }
+        }
+    }
+
+    val corScope = rememberCoroutineScope()
+    fun reload() {
+        val ws = windowStart(anchorMs, selectedMode)
+        val we = windowEnd(ws, selectedMode)
+        corScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val e = viewModel.getCalendarEvents(ws - 24 * 3600_000L, we + 24 * 3600_000L)
+            events = e
+        }
+    }
+    LaunchedEffect(anchorMs, selectedMode) { reload() }
+
+    // ── Navigation helpers ────────────────────────────────────────────────
+    fun navigate(forward: Boolean) {
+        val delta = if (forward) 1 else -1
+        val c = Calendar.getInstance().apply { timeInMillis = anchorMs }
+        when (selectedMode) {
+            0 -> c.add(Calendar.DAY_OF_YEAR, delta)
+            1 -> c.add(Calendar.WEEK_OF_YEAR, delta)
+            2 -> c.add(Calendar.MONTH, delta)
+        }
+        anchorMs = c.timeInMillis
+    }
+
+    // ── Period label ──────────────────────────────────────────────────────
+    val periodLabel: String = remember(anchorMs, selectedMode) {
+        val c = Calendar.getInstance().apply { timeInMillis = anchorMs }
+        val locale = Strings.calLocale()
+        when (selectedMode) {
+            0 -> {
+                val df = SimpleDateFormat("EEEE d. MMMM yyyy", locale)
+                df.format(Date(anchorMs))
+            }
+            1 -> {
+                val start = Calendar.getInstance().apply {
+                    timeInMillis = anchorMs
+                    set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+                }
+                val end = start.clone() as Calendar
+                end.add(Calendar.DAY_OF_YEAR, 6)
+                val sf = SimpleDateFormat("d. MMM", locale)
+                "${sf.format(start.time)} – ${sf.format(end.time)} ${end.get(Calendar.YEAR)}"
+            }
+            else -> {
+                val mf = SimpleDateFormat("LLLL yyyy", locale)
+                mf.format(Date(anchorMs)).replaceFirstChar { it.uppercase(locale) }
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // ── Header bar ────────────────────────────────────────────────────
+        Surface(shadowElevation = 4.dp, color = MaterialTheme.colorScheme.surface) {
+            Column {
+                // View-mode tabs
+                TabRow(
+                    selectedTabIndex = selectedMode,
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    viewModes.forEachIndexed { i, label ->
+                        Tab(
+                            selected = selectedMode == i,
+                            onClick = { selectedMode = i },
+                            text = { Text(label, fontWeight = if (selectedMode == i) FontWeight.Bold else FontWeight.Normal) }
+                        )
+                    }
+                }
+                // Period navigation
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { navigate(false) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Předchozí")
+                    }
+                    Text(
+                        periodLabel,
+                        Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                    IconButton(onClick = { navigate(true) }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Další")
+                    }
+                    // Today button
+                    TextButton(onClick = { anchorMs = today }) {
+                        Text(Strings.today, fontSize = 13.sp)
+                    }
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
         }
-        Text("Události z kalendáře", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-        Text(calendarText.value)
+
+        // ── Content ───────────────────────────────────────────────────────
+        when (selectedMode) {
+            0 -> CalendarDayView(anchorMs, events)
+            1 -> CalendarWeekView(anchorMs, events, today)
+            2 -> CalendarMonthView(anchorMs, events, today) { day -> anchorMs = day; selectedMode = 0 }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONTH VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun CalendarMonthView(
+    anchorMs: Long,
+    events: List<CalendarEvent>,
+    todayMs: Long,
+    onDayClick: (Long) -> Unit
+) {
+    val anchor = Calendar.getInstance().apply { timeInMillis = anchorMs }
+    val year = anchor.get(Calendar.YEAR)
+    val month = anchor.get(Calendar.MONTH)
+
+    // First day of month and day-of-week offset (Mon=0 … Sun=6)
+    val firstDay = Calendar.getInstance().apply {
+        set(year, month, 1, 0, 0, 0); set(Calendar.MILLISECOND, 0)
+    }
+    val offset = ((firstDay.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY) + 7) % 7
+    val daysInMonth = firstDay.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+    val todayCal = Calendar.getInstance().apply { timeInMillis = todayMs }
+    val todayDay = todayCal.get(Calendar.DAY_OF_MONTH)
+    val todayMonth = todayCal.get(Calendar.MONTH)
+    val todayYear = todayCal.get(Calendar.YEAR)
+
+    // Map day-of-month → event count
+    val eventCountByDay: Map<Int, Int> = events.filter {
+        val c = Calendar.getInstance().apply { timeInMillis = it.startMs }
+        c.get(Calendar.YEAR) == year && c.get(Calendar.MONTH) == month
+    }.groupBy {
+        Calendar.getInstance().apply { timeInMillis = it.startMs }.get(Calendar.DAY_OF_MONTH)
+    }.mapValues { it.value.size }
+
+    val dayLabels = Strings.calDayLabels
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+        // Day-of-week header
+        Row(Modifier.fillMaxWidth()) {
+            dayLabels.forEach { lbl ->
+                Text(
+                    lbl,
+                    Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        HorizontalDivider()
+
+        val cells = offset + daysInMonth
+        val rows = (cells + 6) / 7
+        var day = 1 - offset
+
+        for (row in 0 until rows) {
+            Row(Modifier.fillMaxWidth().weight(1f)) {
+                for (col in 0 until 7) {
+                    val d = day
+                    if (d in 1..daysInMonth) {
+                        val isToday = d == todayDay && month == todayMonth && year == todayYear
+                        val dotCount = eventCountByDay[d] ?: 0
+                        val dayMs = Calendar.getInstance().apply {
+                            set(year, month, d, 0, 0, 0); set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
+
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { onDayClick(dayMs) }
+                                .padding(2.dp),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(
+                                    Modifier.size(28.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isToday) {
+                                        Box(
+                                            Modifier.size(28.dp).then(
+                                                Modifier.background(
+                                                    MaterialTheme.colorScheme.primary,
+                                                    CircleShape
+                                                )
+                                            )
+                                        )
+                                    }
+                                    Text(
+                                        "$d",
+                                        fontSize = 13.sp,
+                                        color = if (isToday) MaterialTheme.colorScheme.onPrimary
+                                        else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                                // Event dots (max 3)
+                                if (dotCount > 0) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        repeat(minOf(dotCount, 3)) {
+                                            Box(
+                                                Modifier.size(5.dp).background(
+                                                    MaterialTheme.colorScheme.primary,
+                                                    CircleShape
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Box(Modifier.weight(1f).fillMaxHeight())
+                    }
+                    day++
+                }
+            }
+            day = 1 - offset + (row + 1) * 7
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEEK VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun CalendarWeekView(anchorMs: Long, events: List<CalendarEvent>, todayMs: Long) {
+    val weekStart = Calendar.getInstance().apply {
+        timeInMillis = anchorMs
+        set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
+
+    val todayCal = Calendar.getInstance().apply { timeInMillis = todayMs }
+
+    val days = (0 until 7).map { offset ->
+        val c = weekStart.clone() as Calendar
+        c.add(Calendar.DAY_OF_YEAR, offset)
+        c
+    }
+    val dayLabels = Strings.calDayLabels
+
+    // Events bucketed by day-of-week column (0=Mon … 6=Sun)
+    val eventsByDay: Map<Int, List<CalendarEvent>> = events.groupBy { ev ->
+        val evCal = Calendar.getInstance().apply { timeInMillis = ev.startMs }
+        // find which column this event belongs to
+        days.indexOfFirst { dc ->
+            dc.get(Calendar.YEAR) == evCal.get(Calendar.YEAR) &&
+            dc.get(Calendar.DAY_OF_YEAR) == evCal.get(Calendar.DAY_OF_YEAR)
+        }
+    }.filter { it.key >= 0 }
+
+    Column(Modifier.fillMaxSize()) {
+        // Day header row
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Spacer(Modifier.width(36.dp)) // time gutter
+            days.forEachIndexed { i, dc ->
+                val isToday = dc.get(Calendar.YEAR) == todayCal.get(Calendar.YEAR) &&
+                              dc.get(Calendar.DAY_OF_YEAR) == todayCal.get(Calendar.DAY_OF_YEAR)
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(dayLabels[i], fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+                        if (isToday) {
+                            Box(Modifier.size(26.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+                        }
+                        Text(
+                            "${dc.get(Calendar.DAY_OF_MONTH)}",
+                            fontSize = 13.sp,
+                            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isToday) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+        HorizontalDivider()
+
+        // Scrollable hourly grid
+        val scrollState = rememberScrollState()
+        // Auto-scroll to current hour
+        LaunchedEffect(Unit) {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            scrollState.scrollTo((hour * 60).coerceAtMost(scrollState.maxValue))
+        }
+        Row(Modifier.fillMaxSize().verticalScroll(scrollState)) {
+            // Time gutter
+            Column(Modifier.width(36.dp)) {
+                repeat(24) { h ->
+                    Box(Modifier.height(60.dp), contentAlignment = Alignment.TopEnd) {
+                        Text(
+                            "%02d:00".format(h),
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 4.dp, top = 0.dp)
+                        )
+                    }
+                }
+            }
+            // Day columns
+            days.forEachIndexed { colIdx, _ ->
+                Box(
+                    Modifier.weight(1f).fillMaxHeight()
+                ) {
+                    // Hour lines
+                    Column {
+                        repeat(24) {
+                            Box(
+                                Modifier.fillMaxWidth().height(60.dp)
+                                    .then(
+                                        Modifier.then(
+                                            if (it > 0) Modifier.then(Modifier)
+                                            else Modifier
+                                        )
+                                    )
+                            ) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                            }
+                        }
+                    }
+                    // Events overlay
+                    val colEvents = eventsByDay[colIdx] ?: emptyList()
+                    colEvents.filter { !it.allDay }.forEach { ev ->
+                        val evCal = Calendar.getInstance().apply { timeInMillis = ev.startMs }
+                        val startMinute = evCal.get(Calendar.HOUR_OF_DAY) * 60 + evCal.get(Calendar.MINUTE)
+                        val durationMin = ((ev.endMs - ev.startMs) / 60_000L).coerceIn(30, 24 * 60).toInt()
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 1.dp)
+                                .height((durationMin).dp)
+                                .offset(y = startMinute.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(2.dp)
+                        ) {
+                            Text(
+                                ev.title,
+                                fontSize = 10.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAY VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+@Composable
+fun CalendarDayView(anchorMs: Long, events: List<CalendarEvent>) {
+    val anchorCal = Calendar.getInstance().apply { timeInMillis = anchorMs }
+
+    val dayEvents = events.filter { ev ->
+        val evCal = Calendar.getInstance().apply { timeInMillis = ev.startMs }
+        evCal.get(Calendar.YEAR) == anchorCal.get(Calendar.YEAR) &&
+        evCal.get(Calendar.DAY_OF_YEAR) == anchorCal.get(Calendar.DAY_OF_YEAR)
+    }
+    val allDayEvents = dayEvents.filter { it.allDay }
+    val timedEvents = dayEvents.filter { !it.allDay }
+
+    Column(Modifier.fillMaxSize()) {
+        // All-day events strip
+        if (allDayEvents.isNotEmpty()) {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(Strings.calAllDay, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    allDayEvents.forEach { ev ->
+                        Box(
+                            Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(ev.title, fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        }
+                    }
+                }
+            }
+            HorizontalDivider()
+        }
+
+        val scrollState = rememberScrollState()
+        LaunchedEffect(Unit) {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            scrollState.scrollTo((hour * 60).coerceAtMost(scrollState.maxValue))
+        }
+
+        Row(Modifier.fillMaxSize().verticalScroll(scrollState)) {
+            // Time gutter
+            Column(Modifier.width(52.dp)) {
+                repeat(24) { h ->
+                    Box(Modifier.height(60.dp), contentAlignment = Alignment.TopEnd) {
+                        Text(
+                            "%02d:00".format(h),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 6.dp)
+                        )
+                    }
+                }
+            }
+            // Event column
+            Box(Modifier.weight(1f)) {
+                // Hour lines
+                Column {
+                    repeat(24) {
+                        Box(Modifier.fillMaxWidth().height(60.dp)) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        }
+                    }
+                }
+                // Events
+                timedEvents.forEach { ev ->
+                    val evCal = Calendar.getInstance().apply { timeInMillis = ev.startMs }
+                    val startMin = evCal.get(Calendar.HOUR_OF_DAY) * 60 + evCal.get(Calendar.MINUTE)
+                    val durationMin = ((ev.endMs - ev.startMs) / 60_000L).coerceIn(30, 24 * 60).toInt()
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 4.dp, end = 4.dp)
+                            .height(durationMin.dp)
+                            .offset(y = startMin.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Column {
+                            val tf = SimpleDateFormat("HH:mm", Locale.getDefault())
+                            Text(
+                                "${tf.format(Date(ev.startMs))} – ${tf.format(Date(ev.endMs))}",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                            Text(
+                                ev.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2072,6 +2551,7 @@ class SecretaryViewModel : ViewModel() {
     
     fun getSettingsManager() = settingsManager
     fun getCalendarText(days: Int = 7): String = calendarManager?.getCalendarContext(days) ?: "Kalendář není dostupný"
+    fun getCalendarEvents(startMs: Long, endMs: Long): List<CalendarEvent> = calendarManager?.getEvents(startMs, endMs) ?: emptyList()
 
     fun hasPermission(p: String): Boolean = _uiState.value.activeUserPermissions[p] ?: false
 
