@@ -288,7 +288,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         var sigs by remember { mutableStateOf(sm.getSavedSignatures()) }
         var actId by remember { mutableStateOf(sm.activeSignatureId.ifBlank { sigs.firstOrNull()?.id ?: "" }) }
         var content by remember { mutableStateOf(sigs.find { it.id == actId }?.content ?: sm.emailSignature) }
-        var name by remember { mutableStateOf(sigs.find { it.id == actId }?.name ?: "Podpis") }
+        var name by remember { mutableStateOf(sigs.find { it.id == actId }?.name ?: Strings.signature) }
         var dirty by remember { mutableStateOf(false) }
 
         var slE by remember { mutableStateOf(false) }
@@ -303,7 +303,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
             OutlinedButton(onClick = { val o = sigs.find { it.id == actId }; content = o?.content ?: ""; name = o?.name ?: ""; dirty = false }, enabled = dirty, modifier = Modifier.weight(1f)) { Text(Strings.cancel) }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { val n = SavedSignature(name = "Podpis ${sigs.size + 1}"); sigs = sigs + n; sm.saveSignatures(sigs); actId = n.id; content = ""; name = n.name; dirty = false; sm.activeSignatureId = n.id }, modifier = Modifier.weight(1f)) { Text(Strings.addNew) }
+            OutlinedButton(onClick = { val n = SavedSignature(name = "${Strings.signature} ${sigs.size + 1}"); sigs = sigs + n; sm.saveSignatures(sigs); actId = n.id; content = ""; name = n.name; dirty = false; sm.activeSignatureId = n.id }, modifier = Modifier.weight(1f)) { Text(Strings.addNew) }
             if (sigs.size > 1) OutlinedButton(onClick = { sigs = sigs.filter { it.id != actId }; sm.saveSignatures(sigs); val f = sigs.first(); actId = f.id; content = f.content; name = f.name; sm.activeSignatureId = f.id; sm.emailSignature = f.content; dirty = false },
                 modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)) { Text(Strings.delete) }
         }
@@ -361,8 +361,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     var name by remember { mutableStateOf(user?.name ?: "") }; var role by remember { mutableStateOf(user?.role ?: "worker") }
     var perms by remember { mutableStateOf(user?.permissions ?: UserProfile.defaultPermissions("worker")) }; var rE by remember { mutableStateOf(false) }
     val roles = listOf("admin" to Strings.adminRole, "manager" to Strings.managerRole, "worker" to Strings.workerRole, "viewer" to Strings.viewerRole)
-    val pl = mapOf("crm_read" to "CRM cteni", "crm_write" to "CRM zapis", "crm_delete" to "CRM mazani", "calendar_read" to "Kalendar cteni", "calendar_write" to "Kalendar zapis",
-        "contacts_read" to "Kontakty cteni", "contacts_write" to "Kontakty zapis", "voice_commands" to "Hlasove prikazy", "settings_access" to "Nastaveni", "import_data" to "Import", "export_data" to "Export", "manage_users" to "Sprava uzivatelu")
+    val pl = Strings.permissionLabels
     AlertDialog(onDismissRequest = onDismiss, title = { Text(if (user == null) Strings.newUser else "${Strings.edit}: ${user.name}") }, text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
         item { OutlinedTextField(name, { name = it }, label = { Text(Strings.nameLabel) }, modifier = Modifier.fillMaxWidth(), singleLine = true); Spacer(Modifier.height(8.dp)) }
         item { SDrop(Strings.roleLabel, roles.first { it.first == role }.second, rE, { rE = it }, roles.map { it.second }) { role = roles[it].first; perms = UserProfile.defaultPermissions(role); rE = false }; Spacer(Modifier.height(8.dp)); Text(Strings.permissionsLabel, fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
@@ -411,7 +410,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
             SDrop(Strings.tableLabel, tbls.first { it.first == sm.importTargetTable }.second, tE, { tE = it }, tbls.map { it.second }) { sm.importTargetTable = tbls[it].first; tE = false }
             SSwitch(Strings.autoImportOnStart, null, ai) { ai = it; sm.autoImportEnabled = it }
             Button(onClick = { vm.triggerManualImport() }, Modifier.fillMaxWidth(), enabled = path.isNotBlank()) { Text(Strings.startImport) }
-            Text("Hlasem: 'importuj databazi klientu'", fontSize = 11.sp, color = Color.Gray)
+            Text(Strings.importVoiceHint, fontSize = 11.sp, color = Color.Gray)
             Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
         }
         OutlinedButton(onClick = { showCl = true }, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)) { Text(Strings.clearHistory) }

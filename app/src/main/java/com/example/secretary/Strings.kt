@@ -431,6 +431,21 @@ object Strings {
     val convertArrow get() = t("Convert →", "Převést →", "Konwertuj →")
     fun invoiceN(n: Int) = t("Invoice ${n}×", "Fakturovat ${n}×", "Fakturuj ${n}×")
     fun createdInvoices(n: Int, errors: Int) = if (errors > 0) t("Created $n invoices, $errors errors", "Vytvořeno $n faktur, $errors chyb", "Utworzono $n faktur, $errors błędów") else t("Created $n invoices", "Vytvořeno $n faktur", "Utworzono $n faktur")
+    val importVoiceHint get() = t("By voice: 'import client database'", "Hlasem: 'importuj databazi klientu'", "Głosowo: 'importuj baze klientow'")
+    val permissionLabels get() = mapOf(
+        "crm_read" to t("CRM read", "CRM čtení", "CRM odczyt"),
+        "crm_write" to t("CRM write", "CRM zápis", "CRM zapis"),
+        "crm_delete" to t("CRM delete", "CRM mazání", "CRM usuwanie"),
+        "calendar_read" to t("Calendar read", "Kalendář čtení", "Kalendarz odczyt"),
+        "calendar_write" to t("Calendar write", "Kalendář zápis", "Kalendarz zapis"),
+        "contacts_read" to t("Contacts read", "Kontakty čtení", "Kontakty odczyt"),
+        "contacts_write" to t("Contacts write", "Kontakty zápis", "Kontakty zapis"),
+        "voice_commands" to t("Voice commands", "Hlasové příkazy", "Polecenia głosowe"),
+        "settings_access" to t("Settings", "Nastavení", "Ustawienia"),
+        "import_data" to t("Import", "Import", "Import"),
+        "export_data" to t("Export", "Export", "Eksport"),
+        "manage_users" to t("Manage users", "Správa uživatelů", "Zarządzanie użytkownikami")
+    )
 
     // === HELPER ===
     private fun t(en: String, cs: String, pl: String): String = when (current) {
