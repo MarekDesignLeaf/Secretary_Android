@@ -126,7 +126,7 @@ class VoiceManager(
                 Log.d(TAG, "ensureRecognizerAndListen: mode=$mode isSpeaking=$isSpeaking")
                 if (!SpeechRecognizer.isRecognitionAvailable(context)) {
                     Log.e(TAG, "Speech recognition NOT available!")
-                    onStatusChange("Speech recognition not available")
+                    onStatusChange(Strings.speechRecognitionUnavailable)
                     return@post
                 }
                 if (recognizer == null) {

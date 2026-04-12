@@ -1,15 +1,19 @@
 package com.example.secretary
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
 object Strings {
     enum class Lang { EN, CS, PL }
 
-    private var current: Lang = Lang.EN
+    private var activeLang: Lang by mutableStateOf(Lang.EN)
 
-    fun setLanguage(lang: Lang) { current = lang }
-    fun setLanguage(code: String) { current = fromCode(code) }
-    fun getCurrent(): Lang = current
-    fun getLangCode(): String = when (current) { Lang.EN -> "en"; Lang.CS -> "cs"; Lang.PL -> "pl" }
-    fun getRecognitionLocale(): String = when (current) { Lang.EN -> "en-GB"; Lang.CS -> "cs-CZ"; Lang.PL -> "pl-PL" }
+    fun setLanguage(lang: Lang) { activeLang = lang }
+    fun setLanguage(code: String) { activeLang = fromCode(code) }
+    fun getCurrent(): Lang = activeLang
+    fun getLangCode(): String = when (activeLang) { Lang.EN -> "en"; Lang.CS -> "cs"; Lang.PL -> "pl" }
+    fun getRecognitionLocale(): String = when (activeLang) { Lang.EN -> "en-GB"; Lang.CS -> "cs-CZ"; Lang.PL -> "pl-PL" }
     fun fromCode(code: String): Lang = when { code.lowercase().startsWith("cs") -> Lang.CS; code.lowercase().startsWith("pl") -> Lang.PL; else -> Lang.EN }
 
     // === NAVIGATION ===
@@ -176,6 +180,234 @@ object Strings {
     val language get() = t("Language", "Jazyk", "Język")
     val changeLanguage get() = t("Change language", "Změnit jazyk", "Zmień język")
     val languageChangeConfirm get() = t("Change app language to", "Změnit jazyk aplikace na", "Zmienić język aplikacji na")
+    val logout get() = t("Log out", "Odhlásit se", "Wyloguj się")
+    val login get() = t("Sign in", "Přihlášení", "Logowanie")
+    val password get() = t("Password", "Heslo", "Hasło")
+    val showPassword get() = t("Show password", "Zobrazit heslo", "Pokaż hasło")
+    val signInWithFingerprint get() = t("Sign in with fingerprint", "Přihlaste se otiskem prstu", "Zaloguj się odciskiem palca")
+    val fingerprint get() = t("Fingerprint", "Otisk prstu", "Odcisk palca")
+    val loginWithPassword get() = t("Sign in with password", "Přihlásit se heslem", "Zaloguj się hasłem")
+    val backToFingerprint get() = t("Back to fingerprint", "Zpět na otisk prstu", "Powrót do odcisku palca")
+    val biometricUnavailable get() = t("Biometrics are not available on this device", "Biometrie není k dispozici na tomto zařízení", "Biometria nie jest dostępna na tym urządzeniu")
+    val loginFirstWithPassword get() = t("First sign in with password", "Nejdříve se přihlaste heslem", "Najpierw zaloguj się hasłem")
+    val fillEmailPassword get() = t("Enter email and password", "Vyplňte email a heslo", "Wpisz email i hasło")
+    val appTheme get() = t("App theme", "Motiv aplikace", "Motyw aplikacji")
+    val accordingToSystem get() = t("Follow system", "Podle systému", "Zgodnie z systemem")
+    val lightTheme get() = t("Light", "Světlý", "Jasny")
+    val darkTheme get() = t("Dark", "Tmavý", "Ciemny")
+    val themeRestartHint get() = t("Change takes effect after app restart", "Změna se projeví po restartu aplikace", "Zmiana zacznie działać po restarcie aplikacji")
+    val voiceControl get() = t("Voice control", "Hlasové ovládání", "Sterowanie głosem")
+    val hotwordDetection get() = t("Wake word detection", "Detekce aktivačního slova", "Wykrywanie słowa aktywującego")
+    val hotwordListeningHint get() = t("Listens for the hotword", "Naslouchá na hot word", "Nasłuchuje słowa aktywującego")
+    val activationWord get() = t("Wake word", "Aktivační slovo", "Słowo aktywujące")
+    val speechRate get() = t("Speech rate", "Rychlost řeči", "Szybkość mowy")
+    val voicePitch get() = t("Voice pitch", "Výška hlasu", "Wysokość głosu")
+    val silenceLengthLabel get() = t("Silence length", "Délka ticha", "Długość ciszy")
+    val serverConnection get() = t("Server and connection", "Server a připojení", "Serwer i połączenie")
+    val apiServerUrl get() = t("API server URL", "URL API serveru", "URL serwera API")
+    val connected get() = t("Connected", "Připojeno", "Połączono")
+    val disconnected get() = t("Disconnected", "Odpojeno", "Rozłączono")
+    val testing get() = t("Testing...", "Testuji...", "Testuję...")
+    val unknown get() = t("Unknown", "Neznám", "Nieznany")
+    val serverUnavailable get() = t("Server unavailable", "Server nedostupný", "Serwer niedostępny")
+    val checkUrlAndServer get() = t("Check the URL and make sure the server is running", "Zkontrolujte URL a že server běží", "Sprawdź adres URL i upewnij się, że serwer działa")
+    val testConnection get() = t("Test connection", "Testovat spojení", "Testuj połączenie")
+    val offlineMode get() = t("Offline mode", "Offline mód", "Tryb offline")
+    val offlineQueueHint get() = t("Queue commands until connection returns", "Fronta příkazů až do připojení", "Kolejkuj polecenia do czasu przywrócenia połączenia")
+    val usersAndPermissions get() = t("Users and permissions", "Uživatelé a práva", "Użytkownicy i uprawnienia")
+    val role get() = t("Role", "Role", "Rola")
+    val adminPassword get() = t("Admin password", "Heslo správce", "Hasło administratora")
+    val enterAdminPassword get() = t("Enter admin password", "Zadejte heslo správce", "Wpisz hasło administratora")
+    val verify get() = t("Verify", "Ověřit", "Zweryfikuj")
+    val setAdminPassword get() = t("Set admin password", "Nastavit heslo správce", "Ustaw hasło administratora")
+    val changePassword get() = t("Change password", "Změnit heslo", "Zmień hasło")
+    val active get() = t("Active", "Aktivní", "Aktywny")
+    val switchUser get() = t("Switch", "Přepnout", "Przełącz")
+    val createBackendUser get() = t("Create user", "Vytvořit uživatele", "Utwórz użytkownika")
+    val addLocalProfile get() = t("Add local profile", "Přidat lokální profil", "Dodaj profil lokalny")
+    val backendUserCreated get() = t("Backend user created", "Backendový uživatel byl vytvořen", "Użytkownik backendu został utworzony")
+    val backendUserUpdated get() = t("Backend user updated", "Backendový uživatel byl upraven", "Użytkownik backendu został zaktualizowany")
+    val backendUserDeleted get() = t("Backend user deleted", "Backendový uživatel byl smazán", "Użytkownik backendu został usunięty")
+    val backendUserHint get() = t("This creates a backend login. Local profiles below are only for this device.", "Tento krok vytvoří přihlášení do backendu. Lokální profily níže jsou jen pro toto zařízení.", "Ten krok tworzy konto backendowe. Lokalne profile poniżej działają tylko na tym urządzeniu.")
+    val backendUsersLabel get() = t("Backend users", "Backendoví uživatelé", "Użytkownicy backendu")
+    val backendUsersEmpty get() = t("No backend users found", "Nebyli nalezeni žádní backendoví uživatelé", "Nie znaleziono użytkowników backendu")
+    val backendUsersLoadFailed get() = t("Failed to load backend users", "Nepodařilo se načíst backendové uživatele", "Nie udało się wczytać użytkowników backendu")
+    val localProfilesLabel get() = t("Local profiles on this device", "Lokální profily v tomto zařízení", "Profile lokalne na tym urządzeniu")
+    val localProfilesHint get() = t("These profiles only affect this phone and do not change server permissions.", "Tyto profily ovlivňují jen tento telefon a nemění serverová oprávnění.", "Te profile wpływają tylko na ten telefon i nie zmieniają uprawnień na serwerze.")
+    val roleControlsPermissionsHint get() = t("Permissions are controlled by the selected server role.", "Oprávnění řídí zvolená serverová role.", "Uprawnienia są sterowane przez wybraną rolę serwerową.")
+    val currentPassword get() = t("Current password", "Současné heslo", "Obecne hasło")
+    val newPassword get() = t("New password", "Nové heslo", "Nowe hasło")
+    val confirmPassword get() = t("Confirm password", "Potvrdit heslo", "Potwierdź hasło")
+    val passwordsDoNotMatch get() = t("Passwords do not match", "Neshodují se", "Hasła nie są zgodne")
+    val permissions get() = t("Permissions", "Oprávnění", "Uprawnienia")
+    val nameField get() = t("Name", "Jméno", "Nazwa")
+    val users get() = t("Users", "Uživatelé", "Użytkownicy")
+    val createUserFailed get() = t("User creation failed", "Vytvoření uživatele selhalo", "Tworzenie użytkownika nie powiodło się")
+    val updateUserFailed get() = t("User update failed", "Úprava uživatele selhala", "Aktualizacja użytkownika nie powiodła się")
+    val deleteUserFailed get() = t("User deletion failed", "Smazání uživatele selhalo", "Usunięcie użytkownika nie powiodło się")
+    val reload get() = t("Reload", "Načíst znovu", "Wczytaj ponownie")
+    val createLocalProfile get() = t("Create local profile", "Vytvořit lokální profil", "Utwórz profil lokalny")
+    val editLocalProfile get() = t("Edit local profile", "Upravit lokální profil", "Edytuj profil lokalny")
+    val serverAccount get() = t("Server account", "Serverový účet", "Konto serwerowe")
+    val localProfile get() = t("Local profile", "Lokální profil", "Profil lokalny")
+    val dataStorage get() = t("Data and storage", "Data a úložiště", "Dane i pamięć")
+    val clearHistory get() = t("Clear history", "Vymazat historii", "Wyczyść historię")
+    val restoreDefaults get() = t("Restore defaults", "Obnovit výchozí", "Przywróć domyślne")
+    val clearHistoryQuestion get() = t("Clear history?", "Vymazat historii?", "Wyczyścić historię?")
+    val restoreDefaultsQuestion get() = t("Restore default settings?", "Obnovit výchozí nastavení?", "Przywrócić ustawienia domyślne?")
+    val exportCrmCsv get() = t("Export CRM (CSV)", "Exportovat CRM (CSV)", "Eksportuj CRM (CSV)")
+    val importContactsFromPhone get() = t("Import contacts from phone", "Import kontaktů z telefonu", "Importuj kontakty z telefonu")
+    val onlyUkNumbers get() = t("UK numbers only (+44, 07, 01, 02)", "Pouze UK čísla (+44, 07, 01, 02)", "Tylko numery UK (+44, 07, 01, 02)")
+    val allNumbers get() = t("All numbers", "Všechna čísla", "Wszystkie numery")
+    val importContacts get() = t("Import contacts", "Importovat kontakty", "Importuj kontakty")
+    val syncStarted get() = t("Synchronization started...", "Synchronizace spuštěna...", "Synchronizacja uruchomiona...")
+    val importDatabase get() = t("Database import", "Import databáze", "Import bazy danych")
+    val csvPath get() = t("CSV path", "Cesta k CSV", "Ścieżka do CSV")
+    val table get() = t("Table", "Tabulka", "Tabela")
+    val startImport get() = t("Start import", "Spustit import", "Uruchom import")
+    val voiceImportHint get() = t("Voice: 'import client database'", "Hlasem: 'importuj databázi klientů'", "Głosowo: 'importuj bazę klientów'")
+    val companyProfile get() = t("Company profile", "Profil firmy", "Profil firmy")
+    val serviceRates get() = t("Service rates", "Sazby služeb", "Stawki usług")
+    val hourlyRatesByType get() = t("Hourly rates by work type", "Hodinové sazby podle typu práce", "Stawki godzinowe według typu pracy")
+    val otherRates get() = t("Other rates", "Ostatní sazby", "Pozostałe stawki")
+    val gardenMaintenanceRate get() = t("Garden Maintenance (£/h)", "Garden Maintenance (£/h)", "Garden Maintenance (£/h)")
+    val gardenMaintenanceHint get() = t("Cleaning, weeding, planting, grass strimming", "Úklid, pletí, sázení, strunová sekačka", "Czyszczenie, pielenie, sadzenie, podkaszanie")
+    val hedgeTrimmingRate get() = t("Hedge Trimming & Pruning (£/h)", "Stříhání živých plotů a prořez (£/h)", "Przycinanie żywopłotów i cięcie (£/h)")
+    val arboristWorksRate get() = t("Arboristic Works / Tree Surgeon (£/h)", "Arboristické práce / Tree Surgeon (£/h)", "Prace arborystyczne / Tree Surgeon (£/h)")
+    val wasteRemovalRate get() = t("Waste removal per bulk bag (£)", "Odvoz odpadu za bulk bag (£)", "Wywóz odpadów za bulk bag (£)")
+    val minimumJobPrice get() = t("Minimum job price (£)", "Minimální cena zakázky (£)", "Minimalna cena zlecenia (£)")
+    val notificationsLabel get() = t("Notifications", "Notifikace", "Powiadomienia")
+    val workProfileLabel get() = t("Work profile", "Pracovní profil", "Profil pracy")
+    val emailSignatures get() = t("Email signatures", "Emailové podpisy", "Podpisy email")
+    val activeSignature get() = t("Active signature", "Aktivní podpis", "Aktywny podpis")
+    val signatureName get() = t("Name", "Název", "Nazwa")
+    val signatureContent get() = t("Signature content", "Obsah podpisu", "Treść podpisu")
+    val newSignature get() = t("New", "Nový", "Nowy")
+    val crmTabLabel get() = t("Default tab", "Výchozí tab", "Domyślna karta")
+    val sorting get() = t("Sorting", "Řazení", "Sortowanie")
+    val persistentNotificationLabel get() = t("Persistent notification", "Trvalá notifikace", "Stałe powiadomienie")
+    val taskReminder get() = t("Task reminder", "Připomenutí úkolu", "Przypomnienie o zadaniu")
+    val workHours get() = t("Work hours", "Pracovní hodiny", "Godziny pracy")
+    val hotwordDuringWorkHours get() = t("Wake word only during work hours", "Hotword jen v pracovní době", "Słowo aktywujące tylko w godzinach pracy")
+    val startLabel get() = t("Start", "Začátek", "Początek")
+    val endLabel get() = t("End", "Konec", "Koniec")
+    val defaultPriorityLabel get() = t("Default priority", "Výchozí priorita", "Domyślny priorytet")
+    val workspaceMode get() = t("Workspace mode", "Režim", "Tryb pracy")
+    val internalLanguage get() = t("Internal language", "Interní jazyk", "Język wewnętrzny")
+    val customerLanguage get() = t("Customer language", "Zákaznický jazyk", "Język klienta")
+    val internalLanguageMode get() = t("Internal language mode", "Int. jazykový mód", "Tryb języka wewnętrznego")
+    val customerLanguageMode get() = t("Customer language mode", "Zák. jazykový mód", "Tryb języka klienta")
+    val limits get() = t("Limits", "Limity", "Limity")
+    val maxUsers get() = t("Max users", "Max uživatelů", "Maks. użytkowników")
+    val maxClients get() = t("Max clients", "Max klientů", "Maks. klientów")
+    val maxJobsPerMonth get() = t("Max jobs/month", "Max zakázek/měsíc", "Maks. zleceń/miesiąc")
+    val voiceMinutes get() = t("Voice minutes", "Hlasové minuty", "Minuty głosowe")
+    val aboutApp get() = t("About app", "O aplikaci", "O aplikacji")
+    val versionLabel get() = t("Version", "Verze", "Wersja")
+    val releaseDate get() = t("Release date", "Datum vydání", "Data wydania")
+    val packageLabel get() = t("Package", "Balíček", "Pakiet")
+    val ready get() = t("Ready", "Připravena", "Gotowe")
+    val waitingForYourCommand get() = t("Waiting for your command...", "Čekám na váš povel...", "Czekam na Twoje polecenie...")
+    val speechRecognitionUnavailable get() = t("Speech recognition not available", "Rozpoznávání řeči není k dispozici", "Rozpoznawanie mowy nie jest dostępne")
+    val connectionError get() = t("Connection error to server.", "Chyba spojení se serverem.", "Błąd połączenia z serwerem.")
+    val cantReachServer get() = t("I can't connect to the server.", "Nemůžu se spojit se serverem.", "Nie mogę połączyć się z serwerem.")
+    val settingsRestored get() = t("Settings restored", "Nastavení obnovena", "Ustawienia przywrócone")
+    val exportUnavailable get() = t("Export is not available in this version", "Export není v této verzi", "Eksport nie jest dostępny w tej wersji")
+    val pathNotSet get() = t("Path is not set", "Cesta není nastavena", "Ścieżka nie jest ustawiona")
+    val importStarted get() = t("Import started", "Import spuštěn", "Import uruchomiony")
+    val backgroundDisabled get() = t("Background disabled", "Pozadí vypnuto", "Działanie w tle wyłączone")
+    val backgroundListening get() = t("Listening in background", "Poslouchám na pozadí", "Nasłuchuję w tle")
+    val restarting get() = t("Restarting...", "Restartuji...", "Uruchamiam ponownie...")
+    val foundContacts get() = t("FOUND CONTACTS", "NALEZENÉ KONTAKTY", "ZNALEZIONE KONTAKTY")
+    val importTitle get() = t("Import contacts", "Import kontaktů", "Import kontaktów")
+    val skipWithoutPhone get() = t("Skip without phone", "Přeskočit bez telefonu", "Pomiń bez telefonu")
+    val skipWithoutName get() = t("Skip without name", "Přeskočit bez jména", "Pomiń bez imienia")
+    val removeDuplicates get() = t("Remove duplicates", "Odstranit duplicity", "Usuń duplikaty")
+    val includeEmail get() = t("Include email", "Zahrnout e-mail", "Uwzględnij email")
+    val workDate get() = t("Date", "Datum", "Data")
+    val totalHours get() = t("Total hours", "Celkem hodin", "Łącznie godzin")
+    val totalPrice get() = t("Total price", "Celkem", "Cena łączna")
+    val quote get() = t("Quote", "Nabídka", "Oferta")
+    val newQuote get() = t("New quote", "Nová nabídka", "Nowa oferta")
+    val addItem get() = t("Add item", "Přidat položku", "Dodaj pozycję")
+    val approve get() = t("Approve", "Schválit", "Zatwierdź")
+    val approveQuoteQuestion get() = t("Approve quote?", "Schválit nabídku?", "Zatwierdzić ofertę?")
+    val approveCreatesJob get() = t("Approval will create a new job.", "Schválení vytvoří novou zakázku.", "Zatwierdzenie utworzy nowe zlecenie.")
+    val approveAndCreateJob get() = t("Approve + create job", "Schválit + vytvořit zakázku", "Zatwierdź + utwórz zlecenie")
+    val quantity get() = t("Quantity", "Množství", "Ilość")
+    val unitPrice get() = t("Unit price", "Cena za jednotku", "Cena za jednostkę")
+    val displayName get() = t("Display name", "Zobrazované jméno", "Nazwa wyświetlana")
+    val messageLabel get() = t("Message", "Zpráva", "Wiadomość")
+    val directionLabel get() = t("Direction", "Směr", "Kierunek")
+    val typeLabel get() = t("Type", "Typ", "Typ")
+    val newCommunication get() = t("New communication", "Nová komunikace", "Nowa komunikacja")
+    val editJob get() = t("Edit job", "Upravit zakázku", "Edytuj zlecenie")
+    val addJobNote get() = t("Add job note", "Přidat poznámku k zakázce", "Dodaj notatkę do zlecenia")
+    val editLead get() = t("Edit lead", "Upravit lead", "Edytuj lead")
+    val newInvoice get() = t("New invoice", "Nová faktura", "Nowa faktura")
+    val changeInvoiceStatus get() = t("Change invoice status", "Změnit stav faktury", "Zmień status faktury")
+    val newWorkReport get() = t("New work report", "Nový výkaz práce", "Nowy raport pracy")
+    val loadingCalendar get() = t("Loading calendar...", "Načítám kalendář...", "Wczytuję kalendarz...")
+    val scheduledTasksLabel get() = t("Scheduled tasks", "Naplánované úkoly", "Zaplanowane zadania")
+    val calendarEventsLabel get() = t("Calendar events", "Události z kalendáře", "Wydarzenia z kalendarza")
+    val backgroundEnabledShort get() = t("Background ON", "Pozadí ZAP", "Tło WŁ")
+    val backgroundDisabledShort get() = t("Background OFF", "Pozadí VYP", "Tło WYŁ")
+    val restartShort get() = t("Restart", "Restart", "Restart")
+    val closeApp get() = t("Close", "Zavřít", "Zamknij")
+    val you get() = t("You", "Vy", "Ty")
+    val assistant get() = t("Assistant", "Sekretářka", "Asystent")
+    val noCrmData get() = t("No data in CRM", "Žádná data v CRM", "Brak danych w CRM")
+    val noTaskFound get() = t("Task not found", "Úkol nenalezen", "Nie znaleziono zadania")
+    val photoAction get() = t("Photo", "Foto", "Zdjęcie")
+    val addToCalendarAction get() = t("Add to calendar", "Do kalendáře", "Dodaj do kalendarza")
+    val ratesTitle get() = t("Rates", "Sazby", "Stawki")
+    val hourlyRateLabel get() = t("Hourly rate (£/h)", "Hodinová sazba (£/h)", "Stawka godzinowa (£/h)")
+    val noCommunications get() = t("No communications", "Žádná komunikace", "Brak komunikacji")
+    val logCommunicationAction get() = t("Log communication", "Zalogovat komunikaci", "Dodaj komunikację")
+    val noSubject get() = t("No subject", "Bez předmětu", "Bez tematu")
+    val selectAll get() = t("Select all", "Vybrat vše", "Zaznacz wszystko")
+    val leadFallback get() = t("Lead", "Lead", "Lead")
+    val versionHistory get() = t("Version history", "Historie verzí", "Historia wersji")
+    val authorAndCode get() = t("Author and code", "Autor a kód", "Autor i kod")
+    val structureAndCode get() = t("Structure and code", "Struktura a kód", "Struktura i kod")
+    val webLabel get() = t("Web", "Web", "WWW")
+    val companyLabel get() = t("Company", "Firma", "Firma")
+    val codingLabel get() = t("Coding", "Kódování", "Kodowanie")
+    val technologies get() = t("Technologies", "Technologie", "Technologie")
+    val platformLabel get() = t("Platform", "Platforma", "Platforma")
+    val architectureLabel get() = t("Architecture", "Architektura", "Architektura")
+    val databaseLabel get() = t("Database", "Databáze", "Baza danych")
+    val projectStructureLabel get() = t("Project structure", "Struktura projektu", "Struktura projektu")
+    val licenseTitle get() = t("License", "Licence", "Licencja")
+    val versioningRules get() = t("Versioning rules", "Pravidla verzování", "Zasady wersjonowania")
+    val mandatoryStepsOnChange get() = t("Mandatory steps when changing", "Povinné kroky při změně", "Obowiązkowe kroki przy zmianie")
+    val changelogTitle get() = t("Changelog", "Changelog", "Changelog")
+    val authorLabel get() = t("Author", "Autor", "Autor")
+    val knownIssuesLabel get() = t("Known issues:", "Známé problémy:", "Znane problemy:")
+    val back get() = t("Back", "Zpět", "Wstecz")
+    val next get() = t("Next", "Další", "Dalej")
+    val finish get() = t("Finish", "Dokončit", "Zakończ")
+    val companyNameRequired get() = t("Company name *", "Název firmy *", "Nazwa firmy *")
+    val legalForm get() = t("Legal form", "Právní forma", "Forma prawna")
+    val chooseIndustry get() = t("Choose business field *", "Vyberte obor podnikání *", "Wybierz branżę *")
+    val specialization get() = t("Specialization", "Specializace", "Specjalizacja")
+    val internalLanguageCompany get() = t("Internal language (inside company)", "Interní jazyk (ve firmě)", "Język wewnętrzny (w firmie)")
+    val internalLanguageQuestion get() = t("How do you communicate inside the company?", "Jak komunikujete uvnitř firmy?", "Jak komunikujecie się wewnątrz firmy?")
+    val singleLanguage get() = t("Single language", "Jeden jazyk", "Jeden język")
+    val multipleLanguages get() = t("Multiple languages", "Více jazyků", "Wiele języków")
+    val customerLanguageQuestion get() = t("What language do you use with customers?", "V jakém jazyce komunikujete se zákazníky?", "W jakim języku komunikujecie się z klientami?")
+    val primaryInternalLanguage get() = t("Primary internal language", "Hlavní interní jazyk", "Główny język wewnętrzny")
+    val primaryCustomerLanguage get() = t("Primary customer language", "Hlavní jazyk pro zákazníky", "Główny język dla klientów")
+    val companySize get() = t("Company size", "Velikost firmy", "Wielkość firmy")
+    val soleTrader get() = t("Sole trader", "Živnostník", "Jednoosobowa działalność")
+    val ltdCompany get() = t("Ltd (Company)", "Ltd (společnost)", "Spółka Ltd")
+    val partnership get() = t("Partnership", "Partnerství", "Partnerstwo")
+    val otherOption get() = t("Other", "Jiné", "Inne")
+    val workspaceSoloDesc get() = t("One user, ideal for sole traders", "Jeden uživatel, ideální pro živnostníky", "Jeden użytkownik, idealne dla jednoosobowej działalności")
+    val workspaceTeamDesc get() = t("2-5 users, small team", "2-5 uživatelů, malý tým", "2-5 użytkowników, mały zespół")
+    val workspaceBusinessDesc get() = t("6-30 users, larger company", "6-30 uživatelů, větší firma", "6-30 użytkowników, większa firma")
+    val enterCompanyNameError get() = t("Enter the company name", "Zadejte název firmy", "Wpisz nazwę firmy")
+    val selectIndustryError get() = t("Select an industry", "Vyberte obor", "Wybierz branżę")
 
     // === VOICE ===
     val listening get() = t("Listening", "Poslouchám", "Słucham")
@@ -186,13 +418,157 @@ object Strings {
     val backgroundInactive get() = t("Background inactive", "Na pozadí neaktivní", "Nieaktywne w tle")
 
     // === HELPER ===
-    private fun t(en: String, cs: String, pl: String): String = when (current) {
+    private fun t(en: String, cs: String, pl: String): String = when (activeLang) {
         Lang.EN -> en; Lang.CS -> cs; Lang.PL -> pl
     }
+
+    fun languageDisplayName(code: String): String = when (fromCode(code)) {
+        Lang.EN -> "English"
+        Lang.CS -> "Čeština"
+        Lang.PL -> "Polski"
+    }
+
+    fun biometricError(err: String): String = t("Biometric error: $err", "Chyba biometrie: $err", "Błąd biometrii: $err")
+    fun serverVersion(version: String): String = t("Server: $version", "Server: $version", "Serwer: $version")
+    fun addedToCalendar(taskTitle: String): String = t("Added to calendar: $taskTitle", "Přidáno do kalendáře: $taskTitle", "Dodano do kalendarza: $taskTitle")
+    fun serverError(code: Int): String = t("Server error $code", "Chyba serveru $code", "Błąd serwera $code")
+    fun noContactFound(query: String): String = t("I couldn't find anyone in contacts for '$query'.", "V kontaktech jsem nikoho pro '$query' nenašla.", "Nie znalazłam nikogo w kontaktach dla '$query'.")
+    fun backendPermissionDenied(): String = t(
+        "The current account is not allowed to manage users.",
+        "Aktuální účet nemá oprávnění spravovat uživatele.",
+        "Bieżące konto nie ma uprawnień do zarządzania użytkownikami."
+    )
+    fun backendUserAlreadyExists(): String = t(
+        "A user with this email already exists.",
+        "Uživatel s tímto e-mailem už existuje.",
+        "Użytkownik z tym adresem e-mail już istnieje."
+    )
+    fun backendCannotDeleteSelf(): String = t(
+        "You cannot delete the account you are currently using.",
+        "Nemůžete smazat účet, pod kterým jste právě přihlášený.",
+        "Nie możesz usunąć konta, z którego obecnie korzystasz."
+    )
+    fun backendUserNotFound(): String = t(
+        "The selected user was not found.",
+        "Vybraný uživatel nebyl nalezen.",
+        "Nie znaleziono wybranego użytkownika."
+    )
+    fun backendUnknownRole(): String = t(
+        "The selected role is not available on the server.",
+        "Vybraná role není na serveru dostupná.",
+        "Wybrana rola nie jest dostępna na serwerze."
+    )
+    fun backendNothingToUpdate(): String = t(
+        "There are no changes to save.",
+        "Nejsou žádné změny k uložení.",
+        "Brak zmian do zapisania."
+    )
+    fun onboardingTitle(step: Int, total: Int): String = t(
+        "Company setup — step $step/$total",
+        "Nastavení firmy — krok $step/$total",
+        "Konfiguracja firmy — krok $step/$total"
+    )
+    fun onboardingStepTitle(index: Int): String = when (index) {
+        0 -> t("Company", "Firma", "Firma")
+        1 -> t("Industry", "Obor", "Branża")
+        2 -> t("Languages", "Jazyky", "Języki")
+        3 -> t("Default languages", "Výchozí jazyky", "Domyślne języki")
+        4 -> t("Workspace", "Režim", "Tryb pracy")
+        else -> ""
+    }
+    fun historySpeaker(role: String): String = if (role == "user") you else assistant
+    fun backendActionFailed(actionLabel: String, code: Int): String = "$actionLabel (HTTP $code)"
+    fun invoiceDueDate(value: String?): String = t("Due: ${value ?: "?"}", "Splatnost: ${value ?: "?"}", "Termin: ${value ?: "?"}")
+    fun batchInvoiceLabel(count: Int): String = t("Invoice ${count}x", "Fakturovat ${count}×", "Fakturuj ${count}×")
+    fun invoicesCreatedSummary(created: Int, errors: Int): String = t(
+        "Created $created invoices" + if (errors > 0) ", $errors errors" else "",
+        "Vytvořeno $created faktur" + if (errors > 0) ", $errors chyb" else "",
+        "Utworzono $created faktur" + if (errors > 0) ", $errors błędów" else ""
+    )
+    fun workReportUnknownClient(clientId: Long?): String = t(
+        "Client #${clientId ?: "?"}",
+        "Klient #${clientId ?: "?"}",
+        "Klient #${clientId ?: "?"}"
+    )
+    fun wasteSummary(quantity: Int, total: String): String = t(
+        "Waste: $quantity bags · £$total",
+        "Odpad: $quantity pytlů · £$total",
+        "Odpad: $quantity worków · £$total"
+    )
+    fun invoiceCreatedSuccess(invoiceNumber: Any?, grandTotal: Any?, profit: Double, margin: Double): String = t(
+        "Invoice ${invoiceNumber ?: "-"}: £${"%.0f".format((grandTotal as? Number)?.toDouble() ?: 0.0)}, profit £${"%.0f".format(profit)} ($margin%)",
+        "Faktura ${invoiceNumber ?: "-"}: £${"%.0f".format((grandTotal as? Number)?.toDouble() ?: 0.0)}, zisk £${"%.0f".format(profit)} ($margin%)",
+        "Faktura ${invoiceNumber ?: "-"}: £${"%.0f".format((grandTotal as? Number)?.toDouble() ?: 0.0)}, zysk £${"%.0f".format(profit)} ($margin%)"
+    )
+    fun invoiceCreateError(): String = t(
+        "Error — has this work report already been invoiced?",
+        "Chyba — výkaz už byl fakturován?",
+        "Błąd — ten raport został już zafakturowany?"
+    )
+    fun showChanges(count: Int): String = t("Show changes ($count)", "Zobrazit změny ($count)", "Pokaż zmiany ($count)")
+    fun hideChanges(): String = t("Hide changes", "Skrýt změny", "Ukryj zmiany")
+    fun versionTypeLabel(type: ChangeType): String = when (type) {
+        ChangeType.PATCH -> t("FIX", "OPRAVA", "POPRAWKA")
+        ChangeType.MINOR -> t("FEATURE", "FUNKCE", "FUNKCJA")
+        ChangeType.MAJOR -> t("ARCHITECTURE", "ARCHITEKTURA", "ARCHITEKTURA")
+    }
+    fun localizeRole(role: String): String = when (role.lowercase()) {
+        "admin" -> t("Admin", "Správce", "Administrator")
+        "manager" -> t("Manager", "Manažer", "Menedżer")
+        "worker" -> t("Worker", "Pracovník", "Pracownik")
+        "assistant" -> t("Assistant", "Asistent", "Asystent")
+        else -> t("Viewer", "Náhled", "Podgląd")
+    }
+    fun localizeThemeMode(mode: String): String = when (mode) {
+        "system" -> accordingToSystem
+        "light" -> lightTheme
+        "dark" -> darkTheme
+        else -> mode
+    }
+    fun localizeDirection(direction: String): String = when (direction.lowercase()) {
+        "outbound", "outgoing" -> outgoing
+        "inbound", "incoming" -> incoming
+        else -> direction
+    }
+    fun localizeCommType(type: String): String = when (type.lowercase()) {
+        "telefon", "phone" -> call
+        "email" -> "Email"
+        "sms" -> "SMS"
+        "whatsapp" -> "WhatsApp"
+        "checkatrade" -> "Checkatrade"
+        "osobne", "in_person" -> visit
+        else -> type
+    }
+    fun localizeLeadSource(source: String): String = when (source.lowercase()) {
+        "telefon", "phone" -> call
+        "web" -> "Web"
+        "checkatrade" -> "Checkatrade"
+        "doporuceni", "referral" -> t("Referral", "Doporučení", "Polecenie")
+        "jiny", "other" -> t("Other", "Jiný", "Inne")
+        else -> source
+    }
+    fun localizeWorkspaceMode(mode: String): String = when (mode.lowercase()) {
+        "solo" -> t("Solo (1 user)", "Solo (1 uživatel)", "Solo (1 użytkownik)")
+        "team" -> t("Team (2-5)", "Tým (2-5)", "Zespół (2-5)")
+        "business" -> t("Business (6-30)", "Firma (6-30)", "Firma (6-30)")
+        else -> mode
+    }
+    fun matchesLogoutCommand(text: String): Boolean {
+        val normalized = text.lowercase().trim()
+        return normalized == "logout" ||
+            normalized == "log out" ||
+            normalized.contains("odhlasit") ||
+            normalized.contains("odhlásit") ||
+            normalized.contains("wyloguj")
+    }
+    fun loggingOutMessage(): String = t("Logging you out. Goodbye!", "Odhlašuji vás. Na shledanou!", "Wylogowuję Cię. Do widzenia!")
 
     // === STATUS LOCALIZATION ===
     fun localizeStatus(raw: String?): String = when (raw?.lowercase()?.replace(" ","_")) {
         "novy", "nova", "new" -> t("New", "Nový", "Nowy")
+        "active" -> t("Active", "Aktivní", "Aktywny")
+        "inactive" -> t("Inactive", "Neaktivní", "Nieaktywny")
+        "archived" -> t("Archived", "Archivovaný", "Zarchiwizowany")
         "v_reseni", "in_progress" -> t("In progress", "V řešení", "W trakcie")
         "ceka_na_klienta", "waiting_client" -> t("Waiting for client", "Čeká na klienta", "Czeka na klienta")
         "ceka_na_material", "waiting_material" -> t("Waiting for material", "Čeká na materiál", "Czeka na materiał")
@@ -222,6 +598,8 @@ object Strings {
         // Lead status
         "kvalifikovany", "qualified" -> t("Qualified", "Kvalifikovaný", "Kwalifikowany")
         "nabidka_odeslana", "quote_sent" -> t("Quote sent", "Nabídka odeslána", "Oferta wysłana")
+        "schvaleno", "approved" -> t("Approved", "Schváleno", "Zatwierdzono")
+        "stornovana", "stornována", "voided" -> t("Voided", "Stornována", "Anulowana")
         "preveden_na_klienta" -> t("Converted to client", "Převeden na klienta", "Przekonwertowany")
         "preveden_na_zakazku" -> t("Converted to job", "Převeden na zakázku", "Przekonwertowany")
         "zamitnuto", "rejected" -> t("Rejected", "Zamítnuto", "Odrzucone")

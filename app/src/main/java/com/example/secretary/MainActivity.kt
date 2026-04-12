@@ -251,6 +251,8 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                 LaunchedEffect(Unit) { 
                     viewModel.updateContext(null, null)
                     viewModel.loadSettings()
+                    viewModel.loadBackendRoles()
+                    viewModel.loadBackendUsers()
                 }
                 SettingsScreen(viewModel) 
             }
@@ -283,17 +285,17 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
 @Composable
 fun CalendarScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
-    val calendarText = remember { mutableStateOf("Načítám kalendář...") }
+    val calendarText = remember { mutableStateOf(Strings.loadingCalendar) }
     LaunchedEffect(Unit) {
         val ctx = viewModel.getCalendarText(7)
         calendarText.value = ctx
     }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Kalendář", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text(Strings.calendar, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         val scheduledTasks = state.tasks.filter { it.plannedDate != null || it.deadline != null }
         if (scheduledTasks.isNotEmpty()) {
-            Text("Naplánované úkoly", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+            Text(Strings.scheduledTasksLabel, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
             scheduledTasks.forEach { t ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Text(t.deadline ?: t.plannedDate ?: "", fontSize = 12.sp, modifier = Modifier.width(80.dp), color = MaterialTheme.colorScheme.primary)
@@ -302,7 +304,7 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
         }
-        Text("Události z kalendáře", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+        Text(Strings.calendarEventsLabel, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
         Text(calendarText.value)
     }
 }
@@ -408,7 +410,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
         
         if (state.contactResults.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            Text("NALEZENÉ KONTAKTY", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Gray)
+            Text(Strings.foundContacts, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Gray)
             Card(Modifier.fillMaxWidth()) {
                 Column {
                     state.contactResults.forEach { contact ->
@@ -447,12 +449,12 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             OutlinedButton(onClick = { viewModel.toggleBackground() }) {
                 Icon(Icons.Default.Notifications, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (state.isBackgroundActive) "Pozadi ZAP" else "Pozadi VYP", fontSize = 11.sp)
+                Text(if (state.isBackgroundActive) Strings.backgroundEnabledShort else Strings.backgroundDisabledShort, fontSize = 11.sp)
             }
             OutlinedButton(onClick = { viewModel.restartVoice() }) {
                 Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Restart", fontSize = 11.sp)
+                Text(Strings.restartShort, fontSize = 11.sp)
             }
         }
         // Ovladaci tlacitka - radek 2
@@ -464,7 +466,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             ) {
                 Icon(Icons.Default.Close, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Zavřít", fontSize = 11.sp)
+                Text(Strings.closeApp, fontSize = 11.sp)
             }
             OutlinedButton(
                 onClick = { viewModel.logout() },
@@ -472,7 +474,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             ) {
                 Icon(Icons.Default.ExitToApp, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Odhlásit", fontSize = 11.sp)
+                Text(Strings.logout, fontSize = 11.sp)
             }
         }
 
@@ -480,7 +482,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
         Text(Strings.history, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
         LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
             items(state.history.reversed()) { item -> 
-                Text("${if(item.role == "user") "Marek" else "Sekretářka"}: ${item.content}", Modifier.padding(6.dp))
+                Text("${Strings.historySpeaker(item.role)}: ${item.content}", Modifier.padding(6.dp))
                 HorizontalDivider() 
             }
         }
@@ -709,13 +711,13 @@ fun InvoicesListTab(invoices: List<Invoice>, navController: NavHostController? =
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(inv.invoice_number ?: "Bez čísla", fontWeight = FontWeight.Bold)
+                                Text(inv.invoice_number ?: "-", fontWeight = FontWeight.Bold)
                                 if (!inv.client_name.isNullOrBlank()) {
                                     Text("👤 ${inv.client_name}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.clickable { inv.client_id?.let { navController?.navigate("client/$it") } })
                                 }
                                 Text(Strings.localizeStatus(inv.status), fontSize = 12.sp, color = Color.Gray)
-                                Text("Splatnost: ${inv.due_date ?: "?"}", fontSize = 12.sp, color = if (inv.status == "po_splatnosti") Color.Red else Color.Gray)
+                                Text(Strings.invoiceDueDate(inv.due_date), fontSize = 12.sp, color = if (inv.status == "po_splatnosti") Color.Red else Color.Gray)
                             }
                             Text("£${inv.grand_total}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = if (inv.status == "po_splatnosti") Color.Red else MaterialTheme.colorScheme.primary)
                         }
@@ -744,18 +746,18 @@ fun WorkReportsTab(reports: List<WorkReport>, viewModel: SecretaryViewModel, nav
                     Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = selectedIds.size == reports.size, onCheckedChange = { if (it) selectedIds = reports.map { r -> r.id }.toSet() else selectedIds = emptySet() })
-                            Text("Vybrat vše", fontSize = 13.sp)
+                            Text(Strings.selectAll, fontSize = 13.sp)
                         }
                         if (selectedIds.isNotEmpty()) {
                             Button(onClick = {
                                 viewModel.batchInvoiceFromWorkReports(selectedIds.toList()) { res ->
                                     val created = (res?.get("total_created") as? Number)?.toInt() ?: 0
                                     val errors = (res?.get("total_errors") as? Number)?.toInt() ?: 0
-                                    invoiceResult = "Vytvořeno $created faktur" + if (errors > 0) ", $errors chyb" else ""
+                                    invoiceResult = Strings.invoicesCreatedSummary(created, errors)
                                     selectedIds = emptySet()
                                     viewModel.refreshCrmData()
                                 }
-                            }, modifier = Modifier.height(36.dp)) { Text("Fakturovat ${selectedIds.size}×", fontSize = 13.sp) }
+                            }, modifier = Modifier.height(36.dp)) { Text(Strings.batchInvoiceLabel(selectedIds.size), fontSize = 13.sp) }
                         }
                     }
                 }
@@ -768,7 +770,7 @@ fun WorkReportsTab(reports: List<WorkReport>, viewModel: SecretaryViewModel, nav
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(wr.client_name ?: "Klient #${wr.client_id}", fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                                Text(wr.client_name ?: Strings.workReportUnknownClient(wr.client_id), fontWeight = FontWeight.Bold, fontSize = 16.sp,
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.clickable { navController?.navigate("client/${wr.client_id}") })
                                 Text(wr.work_date ?: "", fontSize = 13.sp, color = Color.Gray)
@@ -795,7 +797,7 @@ fun WorkReportsTab(reports: List<WorkReport>, viewModel: SecretaryViewModel, nav
                         if (wr.waste.isNotEmpty() && wr.waste.any { (it["quantity"] as? Number)?.toDouble() ?: 0.0 > 0 }) {
                             val wq = (wr.waste[0]["quantity"] as? Number)?.toDouble() ?: 0.0
                             val wt = (wr.waste[0]["total_price"] as? Number)?.toDouble() ?: 0.0
-                            Text("🗑 Waste: ${wq.toInt()} bags · £${"%.2f".format(wt)}", fontSize = 12.sp, color = Color.Gray)
+                            Text("🗑 ${Strings.wasteSummary(wq.toInt(), "%.2f".format(wt))}", fontSize = 12.sp, color = Color.Gray)
                         }
                         if (!wr.notes.isNullOrBlank()) {
                             Text("📝 ${wr.notes}", fontSize = 12.sp, color = Color.Gray, maxLines = 2)
@@ -813,11 +815,11 @@ fun WorkReportsTab(reports: List<WorkReport>, viewModel: SecretaryViewModel, nav
                                     if (res != null) {
                                         val profit = (res["profit"] as? Number)?.toDouble() ?: 0.0
                                         val margin = (res["profit_margin"] as? Number)?.toDouble() ?: 0.0
-                                        invoiceResult = "✅ Faktura ${res["invoice_number"]}: £${"%.0f".format(res["grand_total"] as? Number ?: 0)}, zisk £${"%.0f".format(profit)} (${margin}%)"
-                                    } else invoiceResult = "❌ Chyba — výkaz již fakturován?"
+                                        invoiceResult = "✅ ${Strings.invoiceCreatedSuccess(res["invoice_number"], res["grand_total"], profit, margin)}"
+                                    } else invoiceResult = "❌ ${Strings.invoiceCreateError()}"
                                     viewModel.refreshCrmData()
                                 }
-                            }) { Text("📄 Faktura", fontSize = 12.sp) }
+                            }) { Text("📄 ${Strings.newInvoice}", fontSize = 12.sp) }
                         }
                     }
                 }
@@ -838,7 +840,7 @@ fun LeadsListTab(leads: List<Lead>, viewModel: SecretaryViewModel, onEditLead: (
         LazyRow(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(statuses) { s ->
                 FilterChip(selected = selectedStatus == s, onClick = { selectedStatus = s },
-                    label = { Text(if (s == "vše") "Vše (${leads.size})" else "${Strings.localizeStatus(s)} (${leads.count { it.status == s }})") })
+                    label = { Text(if (s == "vše") "${Strings.allTasks} (${leads.size})" else "${Strings.localizeStatus(s)} (${leads.count { it.status == s }})") })
             }
         }
         
@@ -861,7 +863,7 @@ fun LeadsListTab(leads: List<Lead>, viewModel: SecretaryViewModel, onEditLead: (
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(sourceEmoji, fontSize = 24.sp, modifier = Modifier.width(36.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(lead.contact_name ?: lead.lead_code ?: "Lead", fontWeight = FontWeight.SemiBold)
+                            Text(lead.contact_name ?: lead.lead_code ?: Strings.leadFallback, fontWeight = FontWeight.SemiBold)
                             Text("${lead.lead_source ?: "?"} · ${lead.received_at?.take(10) ?: ""}", fontSize = 12.sp, color = Color.Gray)
                             if (lead.contact_phone != null) Text("📞 ${lead.contact_phone}", fontSize = 12.sp)
                             if (lead.contact_email != null) Text("📧 ${lead.contact_email}", fontSize = 12.sp, color = Color.Gray)
@@ -872,7 +874,7 @@ fun LeadsListTab(leads: List<Lead>, viewModel: SecretaryViewModel, onEditLead: (
                                 Text(Strings.localizeStatus(lead.status), Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 11.sp, color = statusColor)
                             }
                             if (lead.status == "new" || lead.status == "kvalifikovany") {
-                                TextButton(onClick = { showConvertDialog = lead }) { Text("Převést →", fontSize = 11.sp) }
+                                TextButton(onClick = { showConvertDialog = lead }) { Text("${Strings.convert} →", fontSize = 11.sp) }
                             }
                         }
                     }
@@ -1026,7 +1028,7 @@ fun DashSection(title: String, count: Int) {
 @Composable
 fun <T> CrmDataList(items: List<T>, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: (T) -> Unit) {
     if (items.isEmpty()) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Žádná data v CRM", color = Color.Gray) }
+        Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noCrmData, color = Color.Gray) }
     } else {
         LazyColumn {
             items(items) { item ->
@@ -1133,7 +1135,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                 if (!c.phone_primary.isNullOrBlank()) {
                     Button(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.phone_primary}"))) },
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                    ) { Icon(Icons.Default.Phone, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Zavolat", fontSize = 12.sp) }
+                    ) { Icon(Icons.Default.Phone, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.call, fontSize = 12.sp) }
                     Button(onClick = {
                         val phone = c.phone_primary!!.replace("+","").replace(" ","").replace("-","")
                         val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$phone"))
@@ -1144,11 +1146,11 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                 if (!c.email_primary.isNullOrBlank()) {
                     Button(onClick = { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${c.email_primary}"))) },
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
-                    ) { Icon(Icons.Default.Email, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Email", fontSize = 12.sp) }
+                    ) { Icon(Icons.Default.Email, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.email, fontSize = 12.sp) }
                 }
                 Button(onClick = { showEditDialog = true },
                     modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-                ) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Upravit", fontSize = 12.sp) }
+                ) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.edit, fontSize = 12.sp) }
             }
         }
         item {
@@ -1169,7 +1171,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                     InfoRow(Strings.preferredContact, c.preferred_contact_method)
                     InfoRow(Strings.status, c.status)
                     InfoRow(Strings.commercial, if (c.is_commercial) Strings.yes else Strings.no)
-                    if ((c.default_hourly_rate ?: 0.0) > 0) InfoRow("Hodinová sazba", "£${c.default_hourly_rate}/h")
+                    if ((c.default_hourly_rate ?: 0.0) > 0) InfoRow(Strings.hourlyRateLabel, "£${c.default_hourly_rate}/h")
                 }
             }
         }
@@ -1236,7 +1238,7 @@ fun ClientJobsTab(detail: ClientDetail) {
                         Column(Modifier.weight(1f)) {
                             Text(job.job_title, fontWeight = FontWeight.SemiBold)
                             Text("${job.job_number ?: ""} · ${job.start_date_planned ?: Strings.noTermin}", fontSize = 12.sp, color = Color.Gray)
-                            if (job.start_date_planned != null) Text("Plán: ${job.start_date_planned}", fontSize = 12.sp)
+                            if (job.start_date_planned != null) Text("${Strings.plan}: ${job.start_date_planned}", fontSize = 12.sp)
                         }
                         val statusColor = when (job.job_status) {
                             "dokončeno", "uzavřeno" -> Color(0xFF4CAF50)
@@ -1268,13 +1270,13 @@ fun ClientCommsTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     var showLogDialog by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         if (detail.communications.isEmpty()) {
-            Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) { Text("Žádná komunikace", color = Color.Gray) }
+            Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) { Text(Strings.noCommunications, color = Color.Gray) }
         } else {
             LazyColumn(Modifier.weight(1f)) {
                 items(detail.communications) { c -> CommRow(c); HorizontalDivider() }
             }
         }
-        Button(onClick = { showLogDialog = true }, modifier = Modifier.fillMaxWidth().padding(8.dp)) { Text("+ Zalogovat komunikaci") }
+        Button(onClick = { showLogDialog = true }, modifier = Modifier.fillMaxWidth().padding(8.dp)) { Text("+ ${Strings.logCommunicationAction}") }
     }
     if (showLogDialog) {
         LogCommunicationDialog(clientId = detail.client.id, onDismiss = { showLogDialog = false },
@@ -1285,7 +1287,7 @@ fun ClientCommsTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
 @Composable
 fun CommRow(c: Communication, navController: NavHostController? = null) {
     val typeEmoji = when (c.comm_type) { "telefon" -> "📞"; "email" -> "📧"; "sms" -> "💬"; "whatsapp" -> "📱"; "checkatrade" -> "🏠"; "osobne" -> "🤝"; else -> "📋" }
-    val dirLabel = if (c.direction == "outbound") "→ Odchozí" else "← Příchozí"
+    val dirLabel = if (c.direction == "outbound") "→ ${Strings.outgoing}" else "← ${Strings.incoming}"
     val dirColor = if (c.direction == "outbound") Color(0xFF2196F3) else Color(0xFF4CAF50)
     Card(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
         Column(Modifier.padding(12.dp)) {
@@ -1293,7 +1295,7 @@ fun CommRow(c: Communication, navController: NavHostController? = null) {
                 Text(typeEmoji, fontSize = 20.sp)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(c.subject ?: "Bez předmětu", fontWeight = FontWeight.SemiBold)
+                    Text(c.subject ?: Strings.noSubject, fontWeight = FontWeight.SemiBold)
                     if (c.client_name != null) Text("👤 ${c.client_name}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.clickable { c.client_id?.let { navController?.navigate("client/$it") } })
                     if (c.job_title != null) Text("📋 ${c.job_title}", fontSize = 12.sp, color = Color.Gray)
@@ -1353,7 +1355,7 @@ fun ClientNotesTab(detail: ClientDetail) {
                 Card(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(n.note)
-                        Text("${n.created_by ?: "Marek"} · ${n.created_at ?: ""}", fontSize = 11.sp, color = Color.Gray)
+                        Text("${n.created_by ?: Strings.you} · ${n.created_at ?: ""}", fontSize = 11.sp, color = Color.Gray)
                     }
                 }
             }
@@ -1404,8 +1406,8 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
                     OutlinedTextField(value = phoneSecondary, onValueChange = { phoneSecondary = it }, label = { Text(Strings.phoneSecondary) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(value = website, onValueChange = { website = it }, label = { Text(Strings.website) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(Modifier.height(12.dp))
-                    Text("Sazby", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-                    OutlinedTextField(value = hourlyRate, onValueChange = { hourlyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Hodinová sazba (£/h)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Text(Strings.ratesTitle, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    OutlinedTextField(value = hourlyRate, onValueChange = { hourlyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(Strings.hourlyRateLabel) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(Modifier.height(12.dp))
                     Text(Strings.billingAddress, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
                     OutlinedTextField(value = billingAddr, onValueChange = { billingAddr = it }, label = { Text(Strings.billingAddress) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1541,7 +1543,7 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
                         Card(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
                             Column(Modifier.padding(12.dp)) {
                                 Text(n.note)
-                                Text("${n.created_by ?: "Marek"} · ${n.created_at ?: ""}", fontSize = 11.sp, color = Color.Gray)
+                                Text("${n.created_by ?: Strings.you} · ${n.created_at ?: ""}", fontSize = 11.sp, color = Color.Gray)
                             }
                         }
                     }
@@ -1596,13 +1598,13 @@ fun TaskDetailScreen(taskId: String, viewModel: SecretaryViewModel, navControlle
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(task?.title ?: "Úkol nenalezen") },
+                title = { Text(task?.title ?: Strings.noTaskFound) },
                 navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } }
             )
         }
     ) { padding ->
         if (task == null) {
-            Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { Text("Úkol nenalezen", color = Color.Gray) }
+            Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { Text(Strings.noTaskFound, color = Color.Gray) }
         } else {
             LazyColumn(Modifier.padding(padding).padding(12.dp)) {
                 // Info
@@ -1624,11 +1626,11 @@ fun TaskDetailScreen(taskId: String, viewModel: SecretaryViewModel, navControlle
                 item {
                     Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { showStatusDialog = true }, modifier = Modifier.weight(1f)) {
-                            Text("${Strings.status}: ${task.status.replace("_"," ")}")
+                            Text("${Strings.status}: ${Strings.localizeStatus(task.status)}")
                         }
                         OutlinedButton(onClick = { showPrioDialog = true }, modifier = Modifier.weight(1f)) {
                             val prioColor = when(task.priority) { "kriticka"->Color.Red; "urgentni"->Color(0xFFE65100); "vysoka"->Color(0xFFF57C00); else->Color.Unspecified }
-                            Text("${Strings.priority}: ${task.priority}", color = prioColor)
+                            Text("${Strings.priority}: ${Strings.localizeStatus(task.priority)}", color = prioColor)
                         }
                     }
                 }
@@ -1664,11 +1666,11 @@ fun TaskDetailScreen(taskId: String, viewModel: SecretaryViewModel, navControlle
                             try { context.startActivity(intent) } catch (_: Exception) {}
                             viewModel.savePhotoMetadata(taskId, "photo_${System.currentTimeMillis()}.jpg", "camera")
                         }, modifier = Modifier.weight(1f)) {
-                            Text("📷 Foto")
+                            Text("📷 ${Strings.photoAction}")
                         }
                         if (task.deadline != null || task.plannedDate != null) {
                             OutlinedButton(onClick = { viewModel.addTaskToCalendar(task) }, modifier = Modifier.weight(1f)) {
-                                Text("📅 Do kalendáře")
+                                Text("📅 ${Strings.addToCalendarAction}")
                             }
                         }
                     }
@@ -1691,14 +1693,14 @@ fun TaskDetailScreen(taskId: String, viewModel: SecretaryViewModel, navControlle
     if (showStatusDialog) {
         val statuses = listOf("novy","naplanovany","v_reseni","ceka_na_klienta","ceka_na_material","ceka_na_platbu","hotovo","zruseno","predano_dal")
         AlertDialog(onDismissRequest = { showStatusDialog = false }, title = { Text(Strings.changeStatus) },
-            text = { LazyColumn { items(statuses) { s -> ListItem(headlineContent = { Text(s.replace("_"," ")) }, modifier = Modifier.clickable { viewModel.updateTask(taskId, mapOf("status" to s)); showStatusDialog = false }) } } },
+            text = { LazyColumn { items(statuses) { s -> ListItem(headlineContent = { Text(Strings.localizeStatus(s)) }, modifier = Modifier.clickable { viewModel.updateTask(taskId, mapOf("status" to s)); showStatusDialog = false }) } } },
             confirmButton = { TextButton(onClick = { showStatusDialog = false }) { Text(Strings.close) } })
     }
     // Priority dialog
     if (showPrioDialog) {
         val prios = listOf("nizka","bezna","vysoka","urgentni","kriticka")
         AlertDialog(onDismissRequest = { showPrioDialog = false }, title = { Text(Strings.changePriority) },
-            text = { LazyColumn { items(prios) { p -> ListItem(headlineContent = { Text(p) }, modifier = Modifier.clickable { viewModel.updateTask(taskId, mapOf("priority" to p)); showPrioDialog = false }) } } },
+            text = { LazyColumn { items(prios) { p -> ListItem(headlineContent = { Text(Strings.localizeStatus(p)) }, modifier = Modifier.clickable { viewModel.updateTask(taskId, mapOf("priority" to p)); showPrioDialog = false }) } } },
             confirmButton = { TextButton(onClick = { showPrioDialog = false }) { Text(Strings.close) } })
     }
 }
@@ -1783,10 +1785,10 @@ fun TaskRow(task: Task, viewModel: SecretaryViewModel, navController: NavHostCon
         Text(typeEmoji, fontSize = 20.sp, modifier = Modifier.width(32.dp))
         Column(Modifier.weight(1f)) {
             Text(task.title, fontWeight = FontWeight.SemiBold, color = if (prioColor != Color.Unspecified) prioColor else Color.Unspecified)
-            if (task.clientName != null) Text("Klient: ${task.clientName}", fontSize = 12.sp, color = Color.Gray)
+            if (task.clientName != null) Text("${Strings.client}: ${task.clientName}", fontSize = 12.sp, color = Color.Gray)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(Strings.localizeStatus(task.status), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                if (task.deadline != null) Text("DL: ${task.deadline}", fontSize = 11.sp, color = Color.Gray)
+                if (task.deadline != null) Text("${Strings.deadline}: ${task.deadline}", fontSize = 11.sp, color = Color.Gray)
                 if (task.assignedTo != null) Text("→ ${task.assignedTo}", fontSize = 11.sp, color = Color.Gray)
             }
         }
@@ -1806,28 +1808,28 @@ fun TaskEditDialog(task: Task, onDismiss: () -> Unit, onSave: (Map<String, Strin
     var notes by remember { mutableStateOf(task.result ?: "") }
     val statuses = listOf("novy", "naplanovany", "v_reseni", "ceka_na_klienta", "ceka_na_material", "hotovo", "zruseno")
     val priorities = listOf("kriticka", "urgentni", "vysoka", "bezna", "nizka")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Upravit úkol") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.edit) },
         text = {
             Column {
                 Text(task.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                if (task.clientName != null) Text("Klient: ${task.clientName}", fontSize = 13.sp, color = Color.Gray)
+                if (task.clientName != null) Text("${Strings.client}: ${task.clientName}", fontSize = 13.sp, color = Color.Gray)
                 if (task.description != null) Text(task.description, fontSize = 13.sp, color = Color.Gray)
                 Spacer(Modifier.height(12.dp))
-                Text("Stav", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(Strings.status, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(statuses) { s -> FilterChip(selected = status == s, onClick = { status = s }, label = { Text(Strings.localizeStatus(s), fontSize = 10.sp) }) }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Priorita", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(Strings.priority, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(priorities) { p -> FilterChip(selected = priority == p, onClick = { priority = p }, label = { Text(Strings.localizeStatus(p), fontSize = 10.sp) }) }
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Poznámka / výsledek") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(Strings.taskResult) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(mapOf("status" to status, "priority" to priority, "result" to notes)) }) { Text("Uložit") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } }
+        confirmButton = { TextButton(onClick = { onSave(mapOf("status" to status, "priority" to priority, "result" to notes)) }) { Text(Strings.save) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
 
@@ -1837,7 +1839,7 @@ fun TasksTab(state: UiState, viewModel: SecretaryViewModel) {
     var editTask by remember { mutableStateOf<Task?>(null) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("aktivni" to "Aktivní", "ceka" to "Čeká", "hotovo" to "Hotové", "vse" to "Vše").forEach { (key, label) ->
+            listOf("aktivni" to Strings.activeTasks, "ceka" to Strings.waiting, "hotovo" to Strings.done, "vse" to Strings.allTasks).forEach { (key, label) ->
                 FilterChip(selected = filter == key, onClick = { filter = key }, label = { Text(label, fontSize = 11.sp) })
             }
         }
@@ -1848,7 +1850,7 @@ fun TasksTab(state: UiState, viewModel: SecretaryViewModel) {
             "hotovo" -> state.tasks.filter { it.isCompleted || it.status == "hotovo" }
             else -> state.tasks
         }
-        if (filtered.isEmpty()) { Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Žádné úkoly", color = Color.Gray) } }
+        if (filtered.isEmpty()) { Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noTasks, color = Color.Gray) } }
         else { LazyColumn { items(filtered) { t -> TaskRow(t, viewModel, onEdit = { editTask = it }); HorizontalDivider() } } }
     }
     if (editTask != null) {
@@ -2008,10 +2010,164 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun createBackendUser(
+        email: String,
+        password: String,
+        displayName: String,
+        role: String,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val res = api.registerUser(
+                    RegisterRequest(
+                        email = email.trim(),
+                        password = password,
+                        display_name = displayName.trim(),
+                        role = role
+                    )
+                )
+                if (res.isSuccessful) {
+                    loadBackendUsers()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, parseBackendAdminError(res.code(), rawError, Strings.createUserFailed))
+                }
+            } catch (e: Exception) {
+                onDone(false, e.message ?: Strings.createUserFailed)
+            }
+        }
+    }
+
+    fun loadBackendRoles() {
+        viewModelScope.launch {
+            try {
+                val res = api.getAuthRoles()
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(backendRoles = res.body() ?: emptyList())
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Backend roles load error", e)
+            }
+        }
+    }
+
+    fun loadBackendUsers() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(backendUsersLoading = true, backendUsersError = null)
+            try {
+                val res = api.getAuthUsers()
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        backendUsers = res.body() ?: emptyList(),
+                        backendUsersLoading = false,
+                        backendUsersError = null
+                    )
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    _uiState.value = _uiState.value.copy(
+                        backendUsers = emptyList(),
+                        backendUsersLoading = false,
+                        backendUsersError = parseBackendAdminError(res.code(), rawError, Strings.backendUsersLoadFailed)
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Backend users load error", e)
+                _uiState.value = _uiState.value.copy(
+                    backendUsers = emptyList(),
+                    backendUsersLoading = false,
+                    backendUsersError = e.message ?: Strings.backendUsersLoadFailed
+                )
+            }
+        }
+    }
+
+    fun updateBackendUser(
+        userId: Long,
+        displayName: String,
+        phone: String?,
+        role: String,
+        status: String,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val res = api.updateAuthUser(
+                    userId,
+                    mapOf(
+                        "display_name" to displayName.trim(),
+                        "phone" to phone?.trim().orEmpty(),
+                        "role" to role,
+                        "status" to status
+                    )
+                )
+                if (res.isSuccessful) {
+                    loadBackendUsers()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, parseBackendAdminError(res.code(), rawError, Strings.updateUserFailed))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Backend user update error", e)
+                onDone(false, e.message ?: Strings.updateUserFailed)
+            }
+        }
+    }
+
+    fun deleteBackendUser(userId: Long, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.deleteAuthUser(userId)
+                if (res.isSuccessful) {
+                    loadBackendUsers()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, parseBackendAdminError(res.code(), rawError, Strings.deleteUserFailed))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Backend user delete error", e)
+                onDone(false, e.message ?: Strings.deleteUserFailed)
+            }
+        }
+    }
+
+    private fun parseBackendAdminError(code: Int, rawError: String?, fallbackAction: String): String {
+        val detail = rawError?.let {
+            try {
+                org.json.JSONObject(it).optString("detail").ifBlank { it }
+            } catch (_: Exception) {
+                it
+            }
+        }?.trim()
+        val normalized = detail?.lowercase(Locale.ROOT)
+
+        return when {
+            code == 403 -> Strings.backendPermissionDenied()
+            code == 409 || normalized?.contains("already registered") == true -> Strings.backendUserAlreadyExists()
+            normalized?.contains("cannot delete yourself") == true -> Strings.backendCannotDeleteSelf()
+            normalized?.contains("user not found") == true -> Strings.backendUserNotFound()
+            normalized?.contains("unknown role") == true -> Strings.backendUnknownRole()
+            normalized?.contains("nothing to update") == true -> Strings.backendNothingToUpdate()
+            !detail.isNullOrBlank() -> detail
+            else -> Strings.backendActionFailed(fallbackAction, code)
+        }
+    }
+
     fun logout() {
         settingsManager?.accessToken = null
         settingsManager?.refreshToken = null
-        _uiState.value = _uiState.value.copy(loggedIn = false, onboardingComplete = null, tenantConfig = null)
+        _uiState.value = _uiState.value.copy(
+            loggedIn = false,
+            onboardingComplete = null,
+            tenantConfig = null,
+            backendUsers = emptyList(),
+            backendRoles = emptyList(),
+            backendUsersLoading = false,
+            backendUsersError = null
+        )
     }
 
     fun tryRefreshToken(): Boolean {
@@ -2023,7 +2179,7 @@ class SecretaryViewModel : ViewModel() {
             val response = okhttp3.OkHttpClient().newCall(request).execute()
             if (response.isSuccessful) {
                 val json = org.json.JSONObject(response.body?.string() ?: "{}")
-                settingsManager?.accessToken = json.optString("access_token", null)
+                settingsManager?.accessToken = json.optString("access_token").takeIf { it.isNotBlank() }
                 Log.d("ViewModel", "Token refreshed")
                 true
             } else false
@@ -2146,8 +2302,8 @@ class SecretaryViewModel : ViewModel() {
             val startMs = date.time + 9 * 3600000L // 9:00 rano
             val endMs = startMs + 3600000L // 1 hodina
             calendarManager?.addEvent(task.title, startMs, endMs)
-            setStatus("Přidáno do kalendáře: ${task.title}")
-        } catch (e: Exception) { Log.e("ViewModel", "Calendar add error", e); setStatus("Chyba při přidávání do kalendáře") }
+            setStatus(Strings.addedToCalendar(task.title))
+        } catch (e: Exception) { Log.e("ViewModel", "Calendar add error", e); setStatus(Strings.connectionError) }
     }
 
     fun resumeVoiceSession(sessionId: String) {
@@ -2302,33 +2458,33 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val res = api.getSettings()
-                if (res.isSuccessful) _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED, systemSettings = res.body() ?: emptyMap(), status = "Pripojeno")
-                else _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = "Server neodpovida")
-            } catch (e: Exception) { _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = "Odpojeno") }
+                if (res.isSuccessful) _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED, systemSettings = res.body() ?: emptyMap(), status = Strings.connected)
+                else _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = Strings.serverUnavailable)
+            } catch (e: Exception) { _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = Strings.disconnected) }
         }
     }
 
     fun testConnection() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.TESTING, status = "Testuji...")
+            _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.TESTING, status = Strings.testing)
             try {
                 val res = api.getSettings()
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
                         connectionStatus = ConnectionStatus.CONNECTED,
                         systemSettings = res.body() ?: emptyMap(),
-                        status = "Pripojeno"
+                        status = Strings.connected
                     )
                 } else {
                     _uiState.value = _uiState.value.copy(
                         connectionStatus = ConnectionStatus.DISCONNECTED,
-                        status = "Server neodpovida"
+                        status = Strings.serverUnavailable
                     )
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     connectionStatus = ConnectionStatus.DISCONNECTED,
-                    status = "Odpojeno"
+                    status = Strings.disconnected
                 )
             }
         }
@@ -2652,7 +2808,7 @@ class SecretaryViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("ViewModel", "Voice session input error", e)
-                voiceManager?.speak("Chyba spojení se serverem.", expectReply = true)
+                voiceManager?.speak(Strings.connectionError, expectReply = true)
             }
         }
     }
@@ -2685,13 +2841,14 @@ class SecretaryViewModel : ViewModel() {
     fun onVoiceInput(text: String) {
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
-        if (lower.contains("odhlásit") || lower.contains("odhlasit") || lower == "logout") {
-            val msg = ChatMessage("assistant", "Odhlašuji vás. Na shledanou!")
+        if (Strings.matchesLogoutCommand(lower)) {
+            val logoutMessage = Strings.loggingOutMessage()
+            val msg = ChatMessage("assistant", logoutMessage)
             _uiState.value = _uiState.value.copy(
                 history = (_uiState.value.history + ChatMessage("user", text) + msg).takeLast(30),
                 lastAiReply = msg.content
             )
-            voiceManager?.speak("Odhlašuji vás. Na shledanou!")
+            voiceManager?.speak(logoutMessage)
             viewModelScope.launch {
                 kotlinx.coroutines.delay(2500) // wait for TTS
                 logout()
@@ -2717,33 +2874,35 @@ class SecretaryViewModel : ViewModel() {
                     history = updatedHistory,
                     context_entity_id = currentState.contextEntityId,
                     context_type = currentState.contextType,
-                    internal_language = settingsManager?.recognitionLanguage ?: "cs-CZ",
+                    internal_language = settingsManager?.appLanguage ?: Strings.getLangCode(),
+                    external_language = settingsManager?.appLanguage ?: Strings.getLangCode(),
                     calendar_context = calendarManager?.getCalendarContext(),
                     current_datetime = nowStr
                 ))
                 if (res.isSuccessful) {
                     res.body()?.let { response ->
-                        val newAssistantMessage = ChatMessage("assistant", response.reply_cs)
+                        val assistantReply = response.reply_cs
+                        val newAssistantMessage = ChatMessage("assistant", assistantReply)
                         _uiState.value = _uiState.value.copy(
-                            lastAiReply = response.reply_cs,
+                            lastAiReply = assistantReply,
                             status = if (response.is_question) "${Strings.listening}..." else Strings.waitingForCommand,
                             history = _uiState.value.history + newAssistantMessage
                         )
                         handleAction(response)
                         if (response.action_type != "SEARCH_CONTACTS" && response.action_type != "LIST_CALENDAR_EVENTS" && response.action_type != "START_WORK_REPORT") {
-                            voiceManager?.speak(response.reply_cs, expectReply = response.is_question)
+                            voiceManager?.speak(assistantReply, expectReply = response.is_question)
                         }
                         // Refresh CRM data ale NEZNICIT lokalni tasky
                         refreshCrmDataKeepTasks()
                     }
                 } else {
                     Log.e("ViewModel", "API Error: ${res.code()}")
-                    _uiState.value = _uiState.value.copy(status = "Chyba serveru ${res.code()}")
+                    _uiState.value = _uiState.value.copy(status = Strings.serverError(res.code()))
                 }
             } catch (e: Exception) { 
                 Log.e("ViewModel", "Network Error", e)
-                _uiState.value = _uiState.value.copy(status = "Chyba sítě")
-                voiceManager?.speak("Marku, nemůžu se spojit se serverem.")
+                _uiState.value = _uiState.value.copy(status = Strings.connectionError)
+                voiceManager?.speak(Strings.cantReachServer)
             }
         }
     }
@@ -2759,7 +2918,7 @@ class SecretaryViewModel : ViewModel() {
                     val names = results.joinToString(", ") { it["name"] ?: "" }
                     onVoiceInput("SYSTÉM: Našla jsem tyto kontakty: $names. Přečti je uživateli a nabídni volání.")
                 } else {
-                    voiceManager?.speak("V kontaktech jsem nikoho pro '$query' nenašla.")
+                    voiceManager?.speak(Strings.noContactFound(query))
                 }
             }
             "ADD_CALENDAR_EVENT" -> {
@@ -2897,28 +3056,28 @@ class SecretaryViewModel : ViewModel() {
         Strings.setLanguage(langCode)
         // Update recognition language to match
         settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
-        _uiState.value = _uiState.value.copy(lastAiReply = Strings.waitingForCommand)
+        _uiState.value = _uiState.value.copy(status = Strings.ready, lastAiReply = Strings.waitingForCommand)
     }
-    fun resetSettings() { settingsManager?.resetAll(); setStatus("Nastaveni obnovena") }
-    fun exportCrmData() { viewModelScope.launch { setStatus("Export neni v teto verzi") } }
+    fun resetSettings() { settingsManager?.resetAll(); setStatus(Strings.settingsRestored) }
+    fun exportCrmData() { viewModelScope.launch { setStatus(Strings.exportUnavailable) } }
     fun triggerManualImport() {
         val path = settingsManager?.importFilePath ?: ""
         val table = settingsManager?.importTargetTable ?: "clients"
-        if (path.isBlank()) { setStatus("Cesta neni nastavena"); return }
+        if (path.isBlank()) { setStatus(Strings.pathNotSet); return }
         _uiState.value = _uiState.value.copy(pendingImport = mapOf("source" to path, "table" to table))
     }
     fun cancelImport() { _uiState.value = _uiState.value.copy(pendingImport = null) }
-    fun confirmImport() { _uiState.value = _uiState.value.copy(pendingImport = null); setStatus("Import spusten") }
+    fun confirmImport() { _uiState.value = _uiState.value.copy(pendingImport = null); setStatus(Strings.importStarted) }
 
     fun toggleBackground() {
         val current = _uiState.value.isBackgroundActive
         _uiState.value = _uiState.value.copy(isBackgroundActive = !current)
         if (current) {
             voiceManager?.stop()
-            setStatus("Pozadi vypnuto")
+            setStatus(Strings.backgroundDisabled)
         } else {
             voiceManager?.startHotwordLoop()
-            setStatus("Posloucham na pozadi")
+            setStatus(Strings.backgroundListening)
         }
     }
 
@@ -2926,9 +3085,9 @@ class SecretaryViewModel : ViewModel() {
         settingsManager?.pendingVoiceSessionId = null
         endVoiceSession()
         voiceManager?.stop()
-        setStatus("Restartuji...")
+        setStatus(Strings.restarting)
         voiceManager?.startHotwordLoop()
-        setStatus("Pripravena")
+        setStatus(Strings.ready)
     }
 
     private var onShutdown: (() -> Unit)? = null
@@ -2943,8 +3102,8 @@ class SecretaryViewModel : ViewModel() {
 
 data class UiState(
     val isListening: Boolean = false, 
-    val status: String = "Připravena", 
-    val lastAiReply: String = "Čekám na váš povel...",
+    val status: String = Strings.ready, 
+    val lastAiReply: String = Strings.waitingForYourCommand,
     val history: List<ChatMessage> = emptyList(),
     val contactResults: List<Map<String, String>> = emptyList(),
     val systemSettings: Map<String, Any> = emptyMap(),
@@ -2962,6 +3121,10 @@ data class UiState(
     val contextEntityId: Long? = null,
     val contextType: String? = null,
     val connectionStatus: ConnectionStatus = ConnectionStatus.UNKNOWN,
+    val backendUsers: List<BackendUser> = emptyList(),
+    val backendRoles: List<BackendRole> = emptyList(),
+    val backendUsersLoading: Boolean = false,
+    val backendUsersError: String? = null,
     val pendingImport: Map<String, String>? = null,
     val pendingCall: String? = null,
     val pendingPhotoTaskId: String? = null,

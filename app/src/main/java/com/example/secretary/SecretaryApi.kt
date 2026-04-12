@@ -3,6 +3,13 @@ package com.example.secretary
 import retrofit2.Response
 import retrofit2.http.*
 
+data class RegisterRequest(
+    val email: String,
+    val password: String,
+    val display_name: String,
+    val role: String
+)
+
 interface SecretaryApi {
     // === AI PROCESS ===
     @POST("process")
@@ -188,6 +195,24 @@ interface SecretaryApi {
 
     @POST("auth/refresh")
     suspend fun authRefresh(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("auth/register")
+    suspend fun registerUser(@Body request: RegisterRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("auth/roles")
+    suspend fun getAuthRoles(): Response<List<BackendRole>>
+
+    @GET("auth/users")
+    suspend fun getAuthUsers(): Response<List<BackendUser>>
+
+    @PUT("auth/users/{userId}")
+    suspend fun updateAuthUser(
+        @Path("userId") userId: Long,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @DELETE("auth/users/{userId}")
+    suspend fun deleteAuthUser(@Path("userId") userId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @GET("auth/me")
     suspend fun authMe(@retrofit2.http.Header("Authorization") token: String): Response<Map<String, @JvmSuppressWildcards Any?>>

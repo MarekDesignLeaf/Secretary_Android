@@ -57,10 +57,9 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
     }
 
     val totalSteps = 5
-    val stepTitles = listOf("Firma", "Obor", "Jazyky", "Výchozí jazyky", "Režim")
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Nastavení firmy — krok ${step+1}/$totalSteps") }) }
+        topBar = { TopAppBar(title = { Text(Strings.onboardingTitle(step + 1, totalSteps)) }) }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             // Progress
@@ -68,7 +67,7 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
                 progress = { (step + 1).toFloat() / totalSteps },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
             )
-            Text(stepTitles[step], fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text(Strings.onboardingStepTitle(step), fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Spacer(Modifier.height(16.dp))
 
             // Step content
@@ -99,15 +98,15 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
             // Navigation buttons
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 if (step > 0) {
-                    OutlinedButton(onClick = { step-- }) { Text("Zpět") }
+                    OutlinedButton(onClick = { step-- }) { Text(Strings.back) }
                 } else { Spacer(Modifier.width(1.dp)) }
 
                 if (step < totalSteps - 1) {
                     Button(onClick = {
-                        if (step == 0 && companyName.isBlank()) { error = "Zadejte název firmy"; return@Button }
-                        if (step == 1 && industryGroupId == null) { error = "Vyberte obor"; return@Button }
+                        if (step == 0 && companyName.isBlank()) { error = Strings.enterCompanyNameError; return@Button }
+                        if (step == 1 && industryGroupId == null) { error = Strings.selectIndustryError; return@Button }
                         error = null; step++
-                    }) { Text("Další") }
+                    }) { Text(Strings.next) }
                 } else {
                     Button(onClick = {
                         loading = true; error = null
@@ -127,7 +126,7 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
                         )
                     }, enabled = !loading) {
                         if (loading) CircularProgressIndicator(Modifier.size(20.dp))
-                        else Text("Dokončit")
+                        else Text(Strings.finish)
                     }
                 }
             }
@@ -137,11 +136,16 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
 
 @Composable
 private fun StepCompany(name: String, legalType: String, onNameChange: (String) -> Unit, onLegalChange: (String) -> Unit) {
-    val types = listOf("sole_trader" to "Živnostník (Sole Trader)", "ltd" to "Ltd (Company)", "partnership" to "Partnerství", "other" to "Jiné")
+    val types = listOf(
+        "sole_trader" to "${Strings.soleTrader} (Sole Trader)",
+        "ltd" to Strings.ltdCompany,
+        "partnership" to Strings.partnership,
+        "other" to Strings.otherOption
+    )
     Column {
-        OutlinedTextField(value = name, onValueChange = onNameChange, label = { Text("Název firmy *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(value = name, onValueChange = onNameChange, label = { Text(Strings.companyNameRequired) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Spacer(Modifier.height(16.dp))
-        Text("Právní forma", fontWeight = FontWeight.SemiBold)
+        Text(Strings.legalForm, fontWeight = FontWeight.SemiBold)
         types.forEach { (value, label) ->
             Row(Modifier.fillMaxWidth().selectable(selected = legalType == value, onClick = { onLegalChange(value) }).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = legalType == value, onClick = { onLegalChange(value) })
@@ -158,7 +162,7 @@ private fun StepIndustry(
     onGroupSelect: (Long, String) -> Unit, onSubtypeSelect: (Long, String) -> Unit
 ) {
     Column {
-        Text("Vyberte obor podnikání *", fontWeight = FontWeight.SemiBold)
+        Text(Strings.chooseIndustry, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
 
         LazyColumn(Modifier.weight(1f)) {
@@ -175,7 +179,7 @@ private fun StepIndustry(
         }
         if (selectedGroup != null && subtypes.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Text("Specializace", fontWeight = FontWeight.SemiBold)
+            Text(Strings.specialization, fontWeight = FontWeight.SemiBold)
             LazyColumn(Modifier.weight(1f)) {
                 items(subtypes) { s ->
                     val sid = (s["id"] as? Number)?.toLong() ?: return@items
@@ -195,20 +199,20 @@ private fun StepIndustry(
 @Composable
 private fun StepLanguageMode(internalMode: String, customerMode: String, onInternalChange: (String) -> Unit, onCustomerChange: (String) -> Unit) {
     Column {
-        Text("Interní jazyk (ve firmě)", fontWeight = FontWeight.SemiBold)
-        Text("Jak komunikujete uvnitř firmy?", fontSize = 13.sp, color = Color.Gray)
+        Text(Strings.internalLanguageCompany, fontWeight = FontWeight.SemiBold)
+        Text(Strings.internalLanguageQuestion, fontSize = 13.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = internalMode == "single", onClick = { onInternalChange("single") }, label = { Text("Jeden jazyk") })
-            FilterChip(selected = internalMode == "multi", onClick = { onInternalChange("multi") }, label = { Text("Více jazyků") })
+            FilterChip(selected = internalMode == "single", onClick = { onInternalChange("single") }, label = { Text(Strings.singleLanguage) })
+            FilterChip(selected = internalMode == "multi", onClick = { onInternalChange("multi") }, label = { Text(Strings.multipleLanguages) })
         }
         Spacer(Modifier.height(24.dp))
-        Text("Jazyk pro zákazníky", fontWeight = FontWeight.SemiBold)
-        Text("V jakém jazyce komunikujete se zákazníky?", fontSize = 13.sp, color = Color.Gray)
+        Text(Strings.customerLanguage, fontWeight = FontWeight.SemiBold)
+        Text(Strings.customerLanguageQuestion, fontSize = 13.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = customerMode == "single", onClick = { onCustomerChange("single") }, label = { Text("Jeden jazyk") })
-            FilterChip(selected = customerMode == "multi", onClick = { onCustomerChange("multi") }, label = { Text("Více jazyků") })
+            FilterChip(selected = customerMode == "single", onClick = { onCustomerChange("single") }, label = { Text(Strings.singleLanguage) })
+            FilterChip(selected = customerMode == "multi", onClick = { onCustomerChange("multi") }, label = { Text(Strings.multipleLanguages) })
         }
     }
 }
@@ -217,7 +221,7 @@ private fun StepLanguageMode(internalMode: String, customerMode: String, onInter
 private fun StepDefaultLanguages(internalLang: String, customerLang: String, onInternalChange: (String) -> Unit, onCustomerChange: (String) -> Unit) {
     val langs = listOf("en" to "English", "cs" to "Čeština", "pl" to "Polski", "de" to "Deutsch", "fr" to "Français", "es" to "Español", "sk" to "Slovenčina")
     Column {
-        Text("Hlavní interní jazyk", fontWeight = FontWeight.SemiBold)
+        Text(Strings.primaryInternalLanguage, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
 
         langs.forEach { (code, name) ->
@@ -227,7 +231,7 @@ private fun StepDefaultLanguages(internalLang: String, customerLang: String, onI
             }
         }
         Spacer(Modifier.height(20.dp))
-        Text("Hlavní jazyk pro zákazníky", fontWeight = FontWeight.SemiBold)
+        Text(Strings.primaryCustomerLanguage, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         langs.forEach { (code, name) ->
             Row(Modifier.fillMaxWidth().selectable(selected = customerLang == code, onClick = { onCustomerChange(code) }).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -241,12 +245,12 @@ private fun StepDefaultLanguages(internalLang: String, customerLang: String, onI
 @Composable
 private fun StepWorkspace(mode: String, onSelect: (String) -> Unit) {
     val modes = listOf(
-        Triple("solo", "Solo", "Jeden uživatel, ideální pro živnostníky"),
-        Triple("team", "Tým", "2-5 uživatelů, malý tým"),
-        Triple("business", "Firma", "6-30 uživatelů, větší firma")
+        Triple("solo", Strings.localizeWorkspaceMode("solo"), Strings.workspaceSoloDesc),
+        Triple("team", Strings.localizeWorkspaceMode("team"), Strings.workspaceTeamDesc),
+        Triple("business", Strings.localizeWorkspaceMode("business"), Strings.workspaceBusinessDesc)
     )
     Column {
-        Text("Velikost firmy", fontWeight = FontWeight.SemiBold)
+        Text(Strings.companySize, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
 
         modes.forEach { (value, title, desc) ->

@@ -15,9 +15,9 @@ sealed class Screen(val route: String, val titleKey: String, val icon: ImageVect
     object Calendar : Screen("calendar", "calendar", Icons.Default.DateRange)
     object Settings : Screen("settings", "settings", Icons.Default.Settings)
     
-    object ClientDetail : Screen("client/{clientId}", "Detail klienta", Icons.Default.Person)
-    object JobDetail : Screen("job/{jobId}", "Detail zakázky", Icons.Default.Star)
-    object TaskDetail : Screen("task/{taskId}", "Detail úkolu", Icons.Default.List)
+    object ClientDetail : Screen("client/{clientId}", Strings.editClient, Icons.Default.Person)
+    object JobDetail : Screen("job/{jobId}", Strings.job, Icons.Default.Star)
+    object TaskDetail : Screen("task/{taskId}", Strings.taskTitle, Icons.Default.List)
 }
 
 val navItems = listOf(

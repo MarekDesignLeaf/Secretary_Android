@@ -23,12 +23,12 @@ import androidx.compose.ui.unit.sp
 fun EditJobDialog(job: Job, onDismiss: () -> Unit, onSave: (Map<String, Any?>) -> Unit) {
     var title by remember { mutableStateOf(job.job_title) }
     var startDate by remember { mutableStateOf(job.start_date_planned ?: "") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Upravit zakázku") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editJob) },
         text = {
             Column {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Název zakázky") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(Strings.jobTitle) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("Plánované zahájení (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
         },
         confirmButton = { Button(onClick = { onSave(mapOf("job_title" to title, "start_date_planned" to startDate.ifBlank { null })) }) { Text(Strings.save) } },
@@ -40,8 +40,8 @@ fun EditJobDialog(job: Job, onDismiss: () -> Unit, onSave: (Map<String, Any?>) -
 @Composable
 fun AddJobNoteDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var note by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Přidat poznámku k zakázce") },
-        text = { TextField(value = note, onValueChange = { note = it }, label = { Text("Poznámka") }, modifier = Modifier.fillMaxWidth(), minLines = 3) },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.addJobNote) },
+        text = { TextField(value = note, onValueChange = { note = it }, label = { Text(Strings.noteLabel) }, modifier = Modifier.fillMaxWidth(), minLines = 3) },
         confirmButton = { Button(onClick = { if (note.isNotBlank()) onSave(note) }, enabled = note.isNotBlank()) { Text(Strings.save) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
@@ -62,32 +62,32 @@ fun EditLeadDialog(lead: Lead, onDismiss: () -> Unit, onSave: (Map<String, Any?>
     var statusExpanded by remember { mutableStateOf(false) }
     val sources = listOf("checkatrade","web","telefon","doporuceni","jiny")
     val statuses = listOf("new","kvalifikovany","nabidka_odeslana","schvaleno","zamitnuto","preveden_na_klienta","preveden_na_zakazku")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Upravit lead") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editLead) },
         text = {
             LazyColumn(Modifier.heightIn(max = 400.dp)) { item {
-                OutlinedTextField(value = contactName, onValueChange = { contactName = it }, label = { Text("Kontakt *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = contactName, onValueChange = { contactName = it }, label = { Text("${Strings.contactName} *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = contactEmail, onValueChange = { contactEmail = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = contactEmail, onValueChange = { contactEmail = it }, label = { Text(Strings.email) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = contactPhone, onValueChange = { contactPhone = it }, label = { Text("Telefon") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = contactPhone, onValueChange = { contactPhone = it }, label = { Text(Strings.phone) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
                 ExposedDropdownMenuBox(expanded = sourceExpanded, onExpandedChange = { sourceExpanded = it }) {
-                    OutlinedTextField(value = source, onValueChange = {}, readOnly = true, label = { Text("Zdroj") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(sourceExpanded) })
+                    OutlinedTextField(value = Strings.localizeLeadSource(source), onValueChange = {}, readOnly = true, label = { Text(Strings.source) }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(sourceExpanded) })
                     ExposedDropdownMenu(expanded = sourceExpanded, onDismissRequest = { sourceExpanded = false }) {
-                        sources.forEach { s -> DropdownMenuItem(text = { Text(s) }, onClick = { source = s; sourceExpanded = false }) }
+                        sources.forEach { s -> DropdownMenuItem(text = { Text(Strings.localizeLeadSource(s)) }, onClick = { source = s; sourceExpanded = false }) }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 ExposedDropdownMenuBox(expanded = statusExpanded, onExpandedChange = { statusExpanded = it }) {
-                    OutlinedTextField(value = status, onValueChange = {}, readOnly = true, label = { Text("Status") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) })
+                    OutlinedTextField(value = Strings.localizeStatus(status), onValueChange = {}, readOnly = true, label = { Text(Strings.status) }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(statusExpanded) })
                     ExposedDropdownMenu(expanded = statusExpanded, onDismissRequest = { statusExpanded = false }) {
-                        statuses.forEach { s -> DropdownMenuItem(text = { Text(s.replace("_"," ")) }, onClick = { status = s; statusExpanded = false }) }
+                        statuses.forEach { s -> DropdownMenuItem(text = { Text(Strings.localizeStatus(s)) }, onClick = { status = s; statusExpanded = false }) }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Popis") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text(Strings.description) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Poznámky") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(Strings.notes) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             } }
         },
         confirmButton = { Button(onClick = {
@@ -108,21 +108,21 @@ fun CreateInvoiceDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm:
     var clientExpanded by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf("") }
     var dueDate by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Nová faktura") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.newInvoice) },
         text = {
             Column {
                 if (clients.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = clientExpanded, onExpandedChange = { clientExpanded = it }) {
-                        OutlinedTextField(value = selectedClientName ?: "Vyberte klienta", onValueChange = {}, readOnly = true, label = { Text("Klient *") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
+                        OutlinedTextField(value = selectedClientName ?: Strings.selectClient, onValueChange = {}, readOnly = true, label = { Text("${Strings.client} *") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
                         ExposedDropdownMenu(expanded = clientExpanded, onDismissRequest = { clientExpanded = false }) {
                             clients.forEach { c -> DropdownMenuItem(text = { Text(c.display_name) }, onClick = { selectedClientId = c.id; selectedClientName = c.display_name; clientExpanded = false }) }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Částka (£)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("${Strings.amount} (£)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = dueDate, onValueChange = { dueDate = it }, label = { Text("Splatnost (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = dueDate, onValueChange = { dueDate = it }, label = { Text("${Strings.dueDate} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
         },
         confirmButton = { Button(onClick = {
@@ -137,10 +137,10 @@ fun CreateInvoiceDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm:
 @Composable
 fun InvoiceStatusDialog(currentStatus: String, onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     val statuses = listOf("draft","odeslaná","částečně_uhrazená","uhrazená","po_splatnosti","stornována")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Změnit stav faktury") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.changeInvoiceStatus) },
         text = { LazyColumn { items(statuses) { s ->
             val isCurrent = s == currentStatus
-            ListItem(headlineContent = { Text(s.replace("_"," "), fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal, color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.Unspecified) },
+            ListItem(headlineContent = { Text(Strings.localizeStatus(s), fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal, color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.Unspecified) },
                 modifier = Modifier.clickable { onSelect(s) })
         } } },
         confirmButton = { TextButton(onClick = onDismiss) { Text(Strings.close) } }
@@ -158,25 +158,25 @@ fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfi
     var totalHours by remember { mutableStateOf("") }
     var totalPrice by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Nový výkaz práce") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.newWorkReport) },
         text = {
             LazyColumn(Modifier.heightIn(max = 350.dp)) { item {
                 if (clients.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = clientExpanded, onExpandedChange = { clientExpanded = it }) {
-                        OutlinedTextField(value = selectedClientName ?: "Vyberte klienta", onValueChange = {}, readOnly = true, label = { Text("Klient *") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
+                        OutlinedTextField(value = selectedClientName ?: Strings.selectClient, onValueChange = {}, readOnly = true, label = { Text("${Strings.client} *") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
                         ExposedDropdownMenu(expanded = clientExpanded, onDismissRequest = { clientExpanded = false }) {
                             clients.forEach { c -> DropdownMenuItem(text = { Text(c.display_name) }, onClick = { selectedClientId = c.id; selectedClientName = c.display_name; clientExpanded = false }) }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                OutlinedTextField(value = workDate, onValueChange = { workDate = it }, label = { Text("Datum (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = workDate, onValueChange = { workDate = it }, label = { Text("${Strings.workDate} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = totalHours, onValueChange = { totalHours = it }, label = { Text("Celkem hodin") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = totalHours, onValueChange = { totalHours = it }, label = { Text(Strings.totalHours) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = totalPrice, onValueChange = { totalPrice = it }, label = { Text("Celkem £") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = totalPrice, onValueChange = { totalPrice = it }, label = { Text("${Strings.totalPrice} £") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Poznámky") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(Strings.notes) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             } }
         },
         confirmButton = { Button(onClick = {
@@ -201,12 +201,12 @@ fun GlobalLogCommDialog(clients: List<Client>, onDismiss: () -> Unit, onSave: (L
     var direction by remember { mutableStateOf("outbound") }
     var typeExpanded by remember { mutableStateOf(false) }
     val types = listOf("telefon","email","sms","whatsapp","checkatrade","osobne")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Zalogovat komunikaci") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.logCommunication) },
         text = {
             LazyColumn(Modifier.heightIn(max = 400.dp)) { item {
                 if (clients.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = clientExpanded, onExpandedChange = { clientExpanded = it }) {
-                        OutlinedTextField(value = selectedClientName ?: "Vyberte klienta", onValueChange = {}, readOnly = true, label = { Text("Klient") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
+                        OutlinedTextField(value = selectedClientName ?: Strings.selectClient, onValueChange = {}, readOnly = true, label = { Text(Strings.client) }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
                         ExposedDropdownMenu(expanded = clientExpanded, onDismissRequest = { clientExpanded = false }) {
                             clients.forEach { c -> DropdownMenuItem(text = { Text(c.display_name) }, onClick = { selectedClientId = c.id; selectedClientName = c.display_name; clientExpanded = false }) }
                         }
@@ -214,20 +214,20 @@ fun GlobalLogCommDialog(clients: List<Client>, onDismiss: () -> Unit, onSave: (L
                     Spacer(Modifier.height(8.dp))
                 }
                 ExposedDropdownMenuBox(expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
-                    OutlinedTextField(value = commType, onValueChange = {}, readOnly = true, label = { Text("Typ") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) })
+                    OutlinedTextField(value = Strings.localizeCommType(commType), onValueChange = {}, readOnly = true, label = { Text(Strings.typeLabel) }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(typeExpanded) })
                     ExposedDropdownMenu(expanded = typeExpanded, onDismissRequest = { typeExpanded = false }) {
-                        types.forEach { t -> DropdownMenuItem(text = { Text(t) }, onClick = { commType = t; typeExpanded = false }) }
+                        types.forEach { t -> DropdownMenuItem(text = { Text(Strings.localizeCommType(t)) }, onClick = { commType = t; typeExpanded = false }) }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = direction == "outbound", onClick = { direction = "outbound" }, label = { Text("Odchozí") })
-                    FilterChip(selected = direction == "inbound", onClick = { direction = "inbound" }, label = { Text("Příchozí") })
+                    FilterChip(selected = direction == "outbound", onClick = { direction = "outbound" }, label = { Text(Strings.outgoing) })
+                    FilterChip(selected = direction == "inbound", onClick = { direction = "inbound" }, label = { Text(Strings.incoming) })
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text("Předmět") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text(Strings.subject) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = message, onValueChange = { message = it }, label = { Text("Shrnutí") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                OutlinedTextField(value = message, onValueChange = { message = it }, label = { Text(Strings.summary) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             } }
         },
         confirmButton = { Button(onClick = { onSave(selectedClientId, commType, subject, message, direction) }) { Text(Strings.save) } },
@@ -251,20 +251,20 @@ fun QuotesListTab(quotes: List<Quote>, viewModel: SecretaryViewModel) {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(q.quote_title ?: q.quote_number ?: "Nabídka #${q.id}", fontWeight = FontWeight.Bold)
-                                Text(q.client_name ?: "Klient #${q.client_id}", fontSize = 13.sp, color = Color.Gray)
+                                Text(q.quote_title ?: q.quote_number ?: "${Strings.quote} #${q.id}", fontWeight = FontWeight.Bold)
+                                Text(q.client_name ?: "${Strings.client} #${q.client_id}", fontSize = 13.sp, color = Color.Gray)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("£${"%.2f".format(q.grand_total)}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                                 Surface(shape = RoundedCornerShape(8.dp), color = statusColor.copy(alpha = 0.15f)) {
-                                    Text(q.status, Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, color = statusColor)
+                                    Text(Strings.localizeStatus(q.status), Modifier.padding(horizontal = 8.dp, vertical = 2.dp), fontSize = 11.sp, color = statusColor)
                                 }
                             }
                         }
                         if (q.status == "draft" || q.status == "odeslano") {
                             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = { showAddItem = q }, modifier = Modifier.weight(1f)) { Text("+ Položka") }
-                                Button(onClick = { showApprove = q }, modifier = Modifier.weight(1f)) { Text("✅ Schválit") }
+                                OutlinedButton(onClick = { showAddItem = q }, modifier = Modifier.weight(1f)) { Text("+ ${Strings.addItem}") }
+                                Button(onClick = { showApprove = q }, modifier = Modifier.weight(1f)) { Text("✅ ${Strings.approve}") }
                             }
                         }
                     }
@@ -278,9 +278,9 @@ fun QuotesListTab(quotes: List<Quote>, viewModel: SecretaryViewModel) {
     }
     if (showApprove != null) {
         AlertDialog(onDismissRequest = { showApprove = null },
-            title = { Text("Schválit nabídku?") },
-            text = { Text("${showApprove!!.quote_title}\n£${"%.2f".format(showApprove!!.grand_total)}\n\nSchválení vytvoří novou zakázku.") },
-            confirmButton = { Button(onClick = { viewModel.approveQuote(showApprove!!.id); showApprove = null }) { Text("Schválit + vytvořit zakázku") } },
+            title = { Text(Strings.approveQuoteQuestion) },
+            text = { Text("${showApprove!!.quote_title}\n£${"%.2f".format(showApprove!!.grand_total)}\n\n${Strings.approveCreatesJob}") },
+            confirmButton = { Button(onClick = { viewModel.approveQuote(showApprove!!.id); showApprove = null }) { Text(Strings.approveAndCreateJob) } },
             dismissButton = { TextButton(onClick = { showApprove = null }) { Text(Strings.cancel) } }
         )
     }
@@ -294,22 +294,22 @@ fun CreateQuoteDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Nová nabídka") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.newQuote) },
         text = {
             Column {
                 if (clients.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = clientExpanded, onExpandedChange = { clientExpanded = it }) {
-                        OutlinedTextField(value = selectedClientName ?: "Vyberte klienta", onValueChange = {}, readOnly = true, label = { Text("Klient *") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
+                        OutlinedTextField(value = selectedClientName ?: Strings.selectClient, onValueChange = {}, readOnly = true, label = { Text("${Strings.client} *") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
                         ExposedDropdownMenu(expanded = clientExpanded, onDismissRequest = { clientExpanded = false }) {
                             clients.forEach { c -> DropdownMenuItem(text = { Text(c.display_name) }, onClick = { selectedClientId = c.id; selectedClientName = c.display_name; clientExpanded = false }) }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Název nabídky") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(Strings.quote) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
         },
-        confirmButton = { Button(onClick = { onConfirm(selectedClientId, title.ifBlank { "Nabídka" }) }, enabled = selectedClientId != null) { Text(Strings.create) } },
+        confirmButton = { Button(onClick = { onConfirm(selectedClientId, title.ifBlank { Strings.quote }) }, enabled = selectedClientId != null) { Text(Strings.create) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
@@ -320,14 +320,14 @@ fun AddQuoteItemDialog(onDismiss: () -> Unit, onSave: (String, Double, Double) -
     var description by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf("1") }
     var unitPrice by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Přidat položku") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.addItem) },
         text = {
             Column {
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Popis *") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("${Strings.description} *") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = quantity, onValueChange = { quantity = it }, label = { Text("Množství") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = quantity, onValueChange = { quantity = it }, label = { Text(Strings.quantity) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = unitPrice, onValueChange = { unitPrice = it }, label = { Text("Cena za jednotku (£)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(value = unitPrice, onValueChange = { unitPrice = it }, label = { Text("${Strings.unitPrice} (£)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
         },
         confirmButton = { Button(onClick = {
@@ -349,26 +349,26 @@ fun ClientEditDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
     var email by remember { mutableStateOf(client.email_primary ?: "") }
     var phone by remember { mutableStateOf(client.phone_primary ?: "") }
     var status by remember { mutableStateOf(client.status ?: "active") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Upravit klienta") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editClient) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                 item {
                     Column {
-                        OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Zobrazované jméno *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("${Strings.displayName} *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text("Jméno") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = firstName, onValueChange = { firstName = it }, label = { Text(Strings.firstName) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text("Příjmení") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = lastName, onValueChange = { lastName = it }, label = { Text(Strings.lastName) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text(Strings.email) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Telefon") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text(Strings.phone) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(8.dp))
-                        Text("Status:", fontWeight = FontWeight.Bold)
+                        Text("${Strings.status}:", fontWeight = FontWeight.Bold)
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             listOf("active", "inactive", "archived").forEach { s ->
                                 FilterChip(selected = status == s, onClick = { status = s },
-                                    label = { Text(s.replaceFirstChar { it.uppercase() }, fontSize = 12.sp) })
+                                    label = { Text(Strings.localizeStatus(s), fontSize = 12.sp) })
                             }
                         }
                     }
@@ -389,14 +389,14 @@ fun JobEditDialog(job: Job, onDismiss: () -> Unit, onSave: (Map<String, String>)
     var title by remember { mutableStateOf(job.job_title) }
     var status by remember { mutableStateOf(job.job_status) }
     var notes by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Upravit zakázku") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editJob) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                 item {
                     Column {
-                        OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Název zakázky") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(Strings.jobTitle) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(8.dp))
-                        Text("Status:", fontWeight = FontWeight.Bold)
+                        Text("${Strings.status}:", fontWeight = FontWeight.Bold)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             val statuses = listOf("new","in_progress","waiting_client","waiting_material","scheduled","active","completed","invoiced","closed","cancelled")
                             items(statuses.size) { i ->
@@ -405,7 +405,7 @@ fun JobEditDialog(job: Job, onDismiss: () -> Unit, onSave: (Map<String, String>)
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Poznámka") }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4)
+                        OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(Strings.noteLabel) }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4)
                     }
                 }
             }
@@ -429,38 +429,38 @@ fun CommunicationEditDialog(onDismiss: () -> Unit, clients: List<Client>, onSave
     var selectedClientId by remember { mutableStateOf<Long?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Nová komunikace") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.newCommunication) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                 item {
                     Column {
                         if (clients.isNotEmpty()) {
                             ExposedDropdownMenuBox(expanded = clientExpanded, onExpandedChange = { clientExpanded = it }) {
-                                OutlinedTextField(value = selectedClientName ?: "Vyberte klienta", onValueChange = {}, readOnly = true, label = { Text("Klient") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
+                                OutlinedTextField(value = selectedClientName ?: Strings.selectClient, onValueChange = {}, readOnly = true, label = { Text(Strings.client) }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
                                 ExposedDropdownMenu(expanded = clientExpanded, onDismissRequest = { clientExpanded = false }) {
                                     clients.forEach { c -> DropdownMenuItem(text = { Text(c.display_name) }, onClick = { selectedClientId = c.id; selectedClientName = c.display_name; clientExpanded = false }) }
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
                         }
-                        Text("Typ:", fontWeight = FontWeight.Bold)
+                        Text("${Strings.typeLabel}:", fontWeight = FontWeight.Bold)
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             val types = listOf("phone","email","sms","whatsapp","checkatrade","osobne")
                             items(types.size) { i ->
                                 FilterChip(selected = commType == types[i], onClick = { commType = types[i] },
-                                    label = { Text(types[i].replaceFirstChar { it.uppercase() }, fontSize = 12.sp) })
+                                    label = { Text(Strings.localizeCommType(types[i]), fontSize = 12.sp) })
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text("Směr:", fontWeight = FontWeight.Bold)
+                        Text("${Strings.directionLabel}:", fontWeight = FontWeight.Bold)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(selected = direction == "outbound", onClick = { direction = "outbound" }, label = { Text("Odchozí") })
-                            FilterChip(selected = direction == "inbound", onClick = { direction = "inbound" }, label = { Text("Příchozí") })
+                            FilterChip(selected = direction == "outbound", onClick = { direction = "outbound" }, label = { Text(Strings.outgoing) })
+                            FilterChip(selected = direction == "inbound", onClick = { direction = "inbound" }, label = { Text(Strings.incoming) })
                         }
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text("Předmět") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text(Strings.subject) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = message, onValueChange = { message = it }, label = { Text("Zpráva") }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 5)
+                        OutlinedTextField(value = message, onValueChange = { message = it }, label = { Text(Strings.messageLabel) }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 5)
                     }
                 }
             }
@@ -487,34 +487,34 @@ fun ImportContactsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Import kontaktů") },
+        title = { Text(Strings.importTitle) },
         text = {
             Column {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Pouze UK čísla (+44 nebo 0...)")
+                    Text(Strings.onlyUkNumbers)
                     Switch(checked = onlyUkNumbers, onCheckedChange = { onlyUkNumbers = it })
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Přeskočit bez telefonu")
+                    Text(Strings.skipWithoutPhone)
                     Switch(checked = skipWithoutPhone, onCheckedChange = { skipWithoutPhone = it })
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Přeskočit bez jména")
+                    Text(Strings.skipWithoutName)
                     Switch(checked = skipWithoutName, onCheckedChange = { skipWithoutName = it })
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Odstranit duplicity")
+                    Text(Strings.removeDuplicates)
                     Switch(checked = removeDuplicates, onCheckedChange = { removeDuplicates = it })
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Zahrnout e-mail")
+                    Text(Strings.includeEmail)
                     Switch(checked = includeEmail, onCheckedChange = { includeEmail = it })
                 }
             }
         },
         confirmButton = {
             Button(onClick = { onImport(onlyUkNumbers, skipWithoutPhone, skipWithoutName, removeDuplicates, includeEmail) }) {
-                Text("Importovat")
+                Text(Strings.importContacts)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }

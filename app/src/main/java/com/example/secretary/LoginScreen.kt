@@ -57,12 +57,12 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(16.dp))
-            Text("Přihlášení", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(Strings.login, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(24.dp))
 
             if (hasSavedCredentials && !showManualLogin) {
                 // Biometric login mode
-                Text("Přihlaste se otiskem prstu", fontSize = 14.sp, color = Color.Gray)
+                Text(Strings.signInWithFingerprint, fontSize = 14.sp, color = Color.Gray)
                 Spacer(Modifier.height(16.dp))
                 FilledTonalButton(
                     onClick = {
@@ -74,17 +74,17 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                 ) {
                     Text("🔓", fontSize = 24.sp)
                     Spacer(Modifier.width(12.dp))
-                    Text("Otisk prstu", fontSize = 16.sp)
+                    Text(Strings.fingerprint, fontSize = 16.sp)
                 }
                 Spacer(Modifier.height(12.dp))
                 TextButton(onClick = { showManualLogin = true }) {
-                    Text("Přihlásit se heslem")
+                    Text(Strings.loginWithPassword)
                 }
             } else {
                 // Manual email/password login
                 OutlinedTextField(
                     value = email, onValueChange = { email = it; error = null },
-                    label = { Text("Email") },
+                    label = { Text(Strings.email) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                     modifier = Modifier.fillMaxWidth()
@@ -92,7 +92,7 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = password, onValueChange = { password = it; error = null },
-                    label = { Text("Heslo") },
+                    label = { Text(Strings.password) },
                     singleLine = true,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
@@ -107,7 +107,7 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                     }),
                     trailingIcon = {
                         IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(if (showPassword) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Zobrazit heslo")
+                            Icon(if (showPassword) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = Strings.showPassword)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -115,7 +115,7 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                 Spacer(Modifier.height(24.dp))
                 Button(
                     onClick = {
-                        if (email.isBlank() || password.isBlank()) { error = "Vyplňte email a heslo"; return@Button }
+                        if (email.isBlank() || password.isBlank()) { error = Strings.fillEmailPassword; return@Button }
                         loading = true; error = null
                         viewModel.login(email.trim(), password) { msg ->
                             loading = false; error = msg
@@ -126,12 +126,12 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                     enabled = !loading
                 ) {
                     if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White)
-                    else Text("Přihlásit se", fontSize = 16.sp)
+                    else Text(Strings.login, fontSize = 16.sp)
                 }
                 if (hasSavedCredentials) {
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { showManualLogin = false }) {
-                        Text("Zpět na otisk prstu")
+                        Text(Strings.backToFingerprint)
                     }
                 }
             }
@@ -156,14 +156,14 @@ private fun tryBiometricLogin(
     val biometricManager = BiometricManager.from(activity)
     val canAuth = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
     if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
-        onError("Biometrie není k dispozici na tomto zařízení")
+        onError(Strings.biometricUnavailable)
         return
     }
 
     val email = prefs.getString("saved_email", null)
     val pass = prefs.getString("saved_pass", null)
     if (email == null || pass == null) {
-        onError("Nejdříve se přihlaste heslem")
+        onError(Strings.loginFirstWithPassword)
         return
     }
 
@@ -175,7 +175,7 @@ private fun tryBiometricLogin(
         }
         override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
             if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
-                onError("Chyba biometrie: $errString")
+                onError(Strings.biometricError(errString.toString()))
             }
         }
         override fun onAuthenticationFailed() { /* one attempt failed, prompt stays open */ }
@@ -183,8 +183,8 @@ private fun tryBiometricLogin(
 
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Secretary DesignLeaf")
-        .setSubtitle("Přihlaste se otiskem prstu")
-        .setNegativeButtonText("Použít heslo")
+        .setSubtitle(Strings.signInWithFingerprint)
+        .setNegativeButtonText(Strings.loginWithPassword)
         .build()
 
     prompt.authenticate(promptInfo)

@@ -24,6 +24,21 @@ data class AssistantResponse(
     val is_question: Boolean = false
 )
 
+data class BackendRole(
+    val role_name: String = "",
+    val description: String? = null
+)
+
+data class BackendUser(
+    val id: Long = 0,
+    val display_name: String = "",
+    val email: String = "",
+    val phone: String? = null,
+    val status: String = "active",
+    val role_name: String? = null,
+    val created_at: String? = null
+)
+
 // === CLIENT — matches DB: clients table (schema.sql) ===
 data class Client(
     val id: Long = 0,
