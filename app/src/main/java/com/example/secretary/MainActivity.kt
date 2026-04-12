@@ -893,7 +893,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
         
         if (state.contactResults.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            Text("NALEZENÉ KONTAKTY", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Gray)
+            Text(Strings.foundContacts, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Gray)
             Card(Modifier.fillMaxWidth()) {
                 Column {
                     state.contactResults.forEach { contact ->
@@ -934,12 +934,12 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             OutlinedButton(onClick = { viewModel.toggleBackground() }) {
                 Icon(Icons.Default.Notifications, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(if (state.isBackgroundActive) "Pozadi ZAP" else "Pozadi VYP", fontSize = 11.sp)
+                Text(if (state.isBackgroundActive) Strings.backgroundOn else Strings.backgroundOff, fontSize = 11.sp)
             }
             OutlinedButton(onClick = { viewModel.restartVoice() }) {
                 Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Restart", fontSize = 11.sp)
+                Text(Strings.restart, fontSize = 11.sp)
             }
         }
         // Ovladaci tlacitka - radek 2
@@ -951,7 +951,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             ) {
                 Icon(Icons.Default.Close, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Zavřít", fontSize = 11.sp)
+                Text(Strings.close, fontSize = 11.sp)
             }
             OutlinedButton(
                 onClick = { viewModel.logout() },
@@ -959,7 +959,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             ) {
                 Icon(Icons.Default.ExitToApp, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Odhlásit", fontSize = 11.sp)
+                Text(Strings.logout, fontSize = 11.sp)
             }
         }
 
@@ -967,7 +967,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
         Text(Strings.history, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Start))
         LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
             items(state.history.reversed()) { item -> 
-                Text("${if(item.role == "user") "Marek" else "Sekretářka"}: ${item.content}", Modifier.padding(6.dp))
+                Text("${if(item.role == "user") state.activeUserName else Strings.secretaryFemName}: ${item.content}", Modifier.padding(6.dp))
                 HorizontalDivider() 
             }
         }
@@ -1188,13 +1188,13 @@ fun InvoicesListTab(invoices: List<Invoice>, navController: NavHostController? =
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(inv.invoice_number ?: "Bez čísla", fontWeight = FontWeight.Bold)
+                                Text(inv.invoice_number ?: Strings.noNumber, fontWeight = FontWeight.Bold)
                                 if (!inv.client_name.isNullOrBlank()) {
                                     Text("👤 ${inv.client_name}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.clickable { inv.client_id?.let { navController?.navigate("client/$it") } })
                                 }
                                 Text(Strings.localizeStatus(inv.status), fontSize = 12.sp, color = Color.Gray)
-                                Text("Splatnost: ${inv.due_date ?: "?"}", fontSize = 12.sp, color = if (inv.status == "po_splatnosti") Color.Red else Color.Gray)
+                                Text("${Strings.dueDatePrefix}${inv.due_date ?: "?"}", fontSize = 12.sp, color = if (inv.status == "po_splatnosti") Color.Red else Color.Gray)
                             }
                             Text("£${inv.grand_total}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = if (inv.status == "po_splatnosti") Color.Red else MaterialTheme.colorScheme.primary)
                         }
@@ -1223,18 +1223,18 @@ fun WorkReportsTab(reports: List<WorkReport>, viewModel: SecretaryViewModel, nav
                     Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = selectedIds.size == reports.size, onCheckedChange = { if (it) selectedIds = reports.map { r -> r.id }.toSet() else selectedIds = emptySet() })
-                            Text("Vybrat vše", fontSize = 13.sp)
+                            Text(Strings.selectAll, fontSize = 13.sp)
                         }
                         if (selectedIds.isNotEmpty()) {
                             Button(onClick = {
                                 viewModel.batchInvoiceFromWorkReports(selectedIds.toList()) { res ->
                                     val created = (res?.get("total_created") as? Number)?.toInt() ?: 0
                                     val errors = (res?.get("total_errors") as? Number)?.toInt() ?: 0
-                                    invoiceResult = "Vytvořeno $created faktur" + if (errors > 0) ", $errors chyb" else ""
+                                    invoiceResult = Strings.createdInvoices(created, errors)
                                     selectedIds = emptySet()
                                     viewModel.refreshCrmData()
                                 }
-                            }, modifier = Modifier.height(36.dp)) { Text("Fakturovat ${selectedIds.size}×", fontSize = 13.sp) }
+                            }, modifier = Modifier.height(36.dp)) { Text(Strings.invoiceN(selectedIds.size), fontSize = 13.sp) }
                         }
                     }
                 }
@@ -1351,7 +1351,7 @@ fun LeadsListTab(leads: List<Lead>, viewModel: SecretaryViewModel, onEditLead: (
                                 Text(Strings.localizeStatus(lead.status), Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 11.sp, color = statusColor)
                             }
                             if (lead.status == "new" || lead.status == "kvalifikovany") {
-                                TextButton(onClick = { showConvertDialog = lead }) { Text("Převést →", fontSize = 11.sp) }
+                                TextButton(onClick = { showConvertDialog = lead }) { Text(Strings.convertArrow, fontSize = 11.sp) }
                             }
                         }
                     }
@@ -1505,7 +1505,7 @@ fun DashSection(title: String, count: Int) {
 @Composable
 fun <T> CrmDataList(items: List<T>, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: (T) -> Unit) {
     if (items.isEmpty()) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Žádná data v CRM", color = Color.Gray) }
+        Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noDataInCrm, color = Color.Gray) }
     } else {
         LazyColumn {
             items(items) { item ->
@@ -1615,7 +1615,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                 if (!c.phone_primary.isNullOrBlank()) {
                     Button(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.phone_primary}"))) },
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                    ) { Icon(Icons.Default.Phone, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Zavolat", fontSize = 12.sp) }
+                    ) { Icon(Icons.Default.Phone, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.call, fontSize = 12.sp) }
                     Button(onClick = {
                         val phone = c.phone_primary!!.replace("+","").replace(" ","").replace("-","")
                         val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$phone"))
@@ -1630,7 +1630,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                 }
                 if (canWrite) Button(onClick = { showEditDialog = true },
                     modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-                ) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Upravit", fontSize = 12.sp) }
+                ) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.edit, fontSize = 12.sp) }
             }
         }
         item {
@@ -1651,7 +1651,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                     InfoRow(Strings.preferredContact, c.preferred_contact_method)
                     InfoRow(Strings.status, c.status)
                     InfoRow(Strings.commercial, if (c.is_commercial) Strings.yes else Strings.no)
-                    if ((c.default_hourly_rate ?: 0.0) > 0) InfoRow("Hodinová sazba", "£${c.default_hourly_rate}/h")
+                    if ((c.default_hourly_rate ?: 0.0) > 0) InfoRow(Strings.hourlyRate, "£${c.default_hourly_rate}/h")
                 }
             }
         }
@@ -1718,7 +1718,7 @@ fun ClientJobsTab(detail: ClientDetail) {
                         Column(Modifier.weight(1f)) {
                             Text(job.job_title, fontWeight = FontWeight.SemiBold)
                             Text("${job.job_number ?: ""} · ${job.start_date_planned ?: Strings.noTermin}", fontSize = 12.sp, color = Color.Gray)
-                            if (job.start_date_planned != null) Text("Plán: ${job.start_date_planned}", fontSize = 12.sp)
+                            if (job.start_date_planned != null) Text("${Strings.planPrefix}${job.start_date_planned}", fontSize = 12.sp)
                         }
                         val statusColor = when (job.job_status) {
                             "dokončeno", "uzavřeno" -> Color(0xFF4CAF50)
@@ -1750,7 +1750,7 @@ fun ClientCommsTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     var showLogDialog by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         if (detail.communications.isEmpty()) {
-            Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) { Text("Žádná komunikace", color = Color.Gray) }
+            Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) { Text(Strings.noComms, color = Color.Gray) }
         } else {
             LazyColumn(Modifier.weight(1f)) {
                 items(detail.communications) { c -> CommRow(c); HorizontalDivider() }
@@ -1886,8 +1886,8 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
                     OutlinedTextField(value = phoneSecondary, onValueChange = { phoneSecondary = it }, label = { Text(Strings.phoneSecondary) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(value = website, onValueChange = { website = it }, label = { Text(Strings.website) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(Modifier.height(12.dp))
-                    Text("Sazby", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-                    OutlinedTextField(value = hourlyRate, onValueChange = { hourlyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("Hodinová sazba (£/h)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Text(Strings.serviceRates, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+                    OutlinedTextField(value = hourlyRate, onValueChange = { hourlyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(Strings.hourlyRate) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(Modifier.height(12.dp))
                     Text(Strings.billingAddress, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
                     OutlinedTextField(value = billingAddr, onValueChange = { billingAddr = it }, label = { Text(Strings.billingAddress) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -2078,13 +2078,13 @@ fun TaskDetailScreen(taskId: String, viewModel: SecretaryViewModel, navControlle
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(task?.title ?: "Úkol nenalezen") },
+                title = { Text(task?.title ?: Strings.taskNotFound) },
                 navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } }
             )
         }
     ) { padding ->
         if (task == null) {
-            Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { Text("Úkol nenalezen", color = Color.Gray) }
+            Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { Text(Strings.taskNotFound, color = Color.Gray) }
         } else {
             LazyColumn(Modifier.padding(padding).padding(12.dp)) {
                 // Info
@@ -2267,10 +2267,10 @@ fun TaskRow(task: Task, viewModel: SecretaryViewModel, navController: NavHostCon
         Text(typeEmoji, fontSize = 20.sp, modifier = Modifier.width(32.dp))
         Column(Modifier.weight(1f)) {
             Text(task.title, fontWeight = FontWeight.SemiBold, color = if (prioColor != Color.Unspecified) prioColor else Color.Unspecified)
-            if (task.clientName != null) Text("Klient: ${task.clientName}", fontSize = 12.sp, color = Color.Gray)
+            if (task.clientName != null) Text("${Strings.client}: ${task.clientName}", fontSize = 12.sp, color = Color.Gray)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(Strings.localizeStatus(task.status), fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
-                if (task.deadline != null) Text("DL: ${task.deadline}", fontSize = 11.sp, color = Color.Gray)
+                if (task.deadline != null) Text("${Strings.deadline}: ${task.deadline}", fontSize = 11.sp, color = Color.Gray)
                 if (task.assignedTo != null) Text("→ ${task.assignedTo}", fontSize = 11.sp, color = Color.Gray)
             }
         }
@@ -2290,28 +2290,28 @@ fun TaskEditDialog(task: Task, onDismiss: () -> Unit, onSave: (Map<String, Strin
     var notes by remember { mutableStateOf(task.result ?: "") }
     val statuses = listOf("novy", "naplanovany", "v_reseni", "ceka_na_klienta", "ceka_na_material", "hotovo", "zruseno")
     val priorities = listOf("kriticka", "urgentni", "vysoka", "bezna", "nizka")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Upravit úkol") },
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editTask) },
         text = {
             Column {
                 Text(task.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                if (task.clientName != null) Text("Klient: ${task.clientName}", fontSize = 13.sp, color = Color.Gray)
+                if (task.clientName != null) Text("${Strings.client}: ${task.clientName}", fontSize = 13.sp, color = Color.Gray)
                 if (task.description != null) Text(task.description, fontSize = 13.sp, color = Color.Gray)
                 Spacer(Modifier.height(12.dp))
-                Text("Stav", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(Strings.status, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(statuses) { s -> FilterChip(selected = status == s, onClick = { status = s }, label = { Text(Strings.localizeStatus(s), fontSize = 10.sp) }) }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("Priorita", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(Strings.priority, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(priorities) { p -> FilterChip(selected = priority == p, onClick = { priority = p }, label = { Text(Strings.localizeStatus(p), fontSize = 10.sp) }) }
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Poznámka / výsledek") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(Strings.noteResult) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(mapOf("status" to status, "priority" to priority, "result" to notes)) }) { Text("Uložit") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } }
+        confirmButton = { TextButton(onClick = { onSave(mapOf("status" to status, "priority" to priority, "result" to notes)) }) { Text(Strings.save) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
 
@@ -2332,7 +2332,7 @@ fun TasksTab(state: UiState, viewModel: SecretaryViewModel) {
             "hotovo" -> state.tasks.filter { it.isCompleted || it.status == "hotovo" }
             else -> state.tasks
         }
-        if (filtered.isEmpty()) { Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Žádné úkoly", color = Color.Gray) } }
+        if (filtered.isEmpty()) { Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noTasks, color = Color.Gray) } }
         else { LazyColumn { items(filtered) { t -> TaskRow(t, viewModel, onEdit = { editTask = it }); HorizontalDivider() } } }
     }
     if (editTask != null) {
@@ -2381,7 +2381,7 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("📭", fontSize = 48.sp)
                     Spacer(Modifier.height(8.dp))
-                    Text(if (selectedType == "vše") "Žádná komunikace" else "Žádná komunikace typu $selectedType", color = Color.Gray)
+                    Text(if (selectedType == "vše") Strings.noComms else "${Strings.noComms} ${selectedType}", color = Color.Gray)
                 }
             }
         } else {
