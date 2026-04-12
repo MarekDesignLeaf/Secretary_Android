@@ -38,7 +38,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         item { CrmSection(sm) }
         item { NotificationSection(sm) }
         item { WorkProfileSection(sm) }
-        item { UsersSection(sm) }
+        item { UsersSection(sm, viewModel) }
         item { DataSection(sm, viewModel) }
         item { AboutSection() }
         item { VersionHistorySection() }
@@ -280,7 +280,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 }
 
 // 6. UZIVATELE A PRAVA
-@Composable private fun UsersSection(sm: SettingsManager) {
+@Composable private fun UsersSection(sm: SettingsManager, viewModel: SecretaryViewModel) {
     var exp by remember { mutableStateOf(false) }
     var showPwd by remember { mutableStateOf(false) }
     var showUser by remember { mutableStateOf(false) }
@@ -306,7 +306,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Person, null, tint = if (u.role == "admin") Color(0xFFF57C00) else Color.Gray); Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) { Text(u.name, fontWeight = FontWeight.SemiBold); Text(rl, fontSize = 12.sp, color = Color.Gray) }
                         if (u.id == sm.activeUserId) Text("Aktivni", fontSize = 11.sp, color = Color(0xFF1976D2))
-                        else TextButton(onClick = { sm.activeUserId = u.id; profiles = sm.getUserProfiles() }) { Text("Prepnout", fontSize = 11.sp) }
+                        else TextButton(onClick = { viewModel.switchActiveUser(u.id); profiles = sm.getUserProfiles() }) { Text("Prepnout", fontSize = 11.sp) }
                     }
                 }; Spacer(Modifier.height(4.dp))
             }
@@ -342,39 +342,47 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 
 // 7. DATA
 @Composable private fun DataSection(sm: SettingsManager, vm: SecretaryViewModel) {
+    val state by vm.uiState.collectAsState()
+    val canExport = state.activeUserPermissions["export_data"] != false
+    val canImport = state.activeUserPermissions["import_data"] != false
     var exp by remember { mutableStateOf(false) }
     var showCl by remember { mutableStateOf(false) }; var showRs by remember { mutableStateOf(false) }
+    var syncResult by remember { mutableStateOf<String?>(null) }
+    var filterUk by remember { mutableStateOf(true) }
+    var path by remember { mutableStateOf(sm.importFilePath) }
+    var tE by remember { mutableStateOf(false) }
+    var ai by remember { mutableStateOf(sm.autoImportEnabled) }
     if (showCl) AlertDialog(onDismissRequest = { showCl = false }, title = { Text("Vymazat historii?") }, confirmButton = { Button(onClick = { vm.clearHistory(); showCl = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Smazat") } }, dismissButton = { TextButton(onClick = { showCl = false }) { Text("Zrusit") } })
     if (showRs) AlertDialog(onDismissRequest = { showRs = false }, title = { Text("Obnovit vychozi?") }, confirmButton = { Button(onClick = { vm.resetSettings(); showRs = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Obnovit") } }, dismissButton = { TextButton(onClick = { showRs = false }) { Text("Zrusit") } })
+    val ctx = LocalContext.current
+    val tbls = listOf("clients" to "Klienti", "properties" to "Nemovitosti", "jobs" to "Zakazky")
     SCard("Data a uloziste", Icons.Default.AccountBox, exp, { exp = !exp }) {
-        Button(onClick = { vm.exportCrmData() }, Modifier.fillMaxWidth()) { Text("Exportovat CRM (CSV)") }
-        Spacer(Modifier.height(8.dp))
-        val ctx = LocalContext.current
-        var syncResult by remember { mutableStateOf<String?>(null) }
-        var filterUk by remember { mutableStateOf(true) }
-        Text("Import kontaktů z telefonu", fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = filterUk, onCheckedChange = { filterUk = it })
-            Spacer(Modifier.width(8.dp))
-            Text(if (filterUk) "Pouze UK čísla (+44, 07, 01, 02)" else "Všechna čísla", fontSize = 13.sp)
+        if (canExport) {
+            Button(onClick = { vm.exportCrmData() }, Modifier.fillMaxWidth()) { Text("Exportovat CRM (CSV)") }
+            Spacer(Modifier.height(8.dp))
         }
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = {
-            vm.syncPhoneContacts(ctx, filterUk)
-            syncResult = "Synchronizace spuštěna..."
-        }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))) { Text("Importovat kontakty") }
-        if (syncResult != null) { Text(syncResult!!, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(top = 4.dp)) }
-        Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp)); Text("Import databaze", fontWeight = FontWeight.SemiBold)
-        var path by remember { mutableStateOf(sm.importFilePath) }
-        SField("Cesta k CSV", path, { path = it; sm.importFilePath = it })
-        var tE by remember { mutableStateOf(false) }; val tbls = listOf("clients" to "Klienti", "properties" to "Nemovitosti", "jobs" to "Zakazky")
-        SDrop("Tabulka", tbls.first { it.first == sm.importTargetTable }.second, tE, { tE = it }, tbls.map { it.second }) { sm.importTargetTable = tbls[it].first; tE = false }
-        var ai by remember { mutableStateOf(sm.autoImportEnabled) }
-        SSwitch("Auto import pri spusteni", null, ai) { ai = it; sm.autoImportEnabled = it }
-        Button(onClick = { vm.triggerManualImport() }, Modifier.fillMaxWidth(), enabled = path.isNotBlank()) { Text("Spustit import") }
-        Text("Hlasem: 'importuj databazi klientu'", fontSize = 11.sp, color = Color.Gray)
-        Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
+        if (canImport) {
+            Text("Import kontaktů z telefonu", fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = filterUk, onCheckedChange = { filterUk = it })
+                Spacer(Modifier.width(8.dp))
+                Text(if (filterUk) "Pouze UK čísla (+44, 07, 01, 02)" else "Všechna čísla", fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = {
+                vm.syncPhoneContacts(ctx, filterUk)
+                syncResult = "Synchronizace spuštěna..."
+            }, Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))) { Text("Importovat kontakty") }
+            if (syncResult != null) { Text(syncResult!!, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(top = 4.dp)) }
+            Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp)); Text("Import databaze", fontWeight = FontWeight.SemiBold)
+            SField("Cesta k CSV", path, { path = it; sm.importFilePath = it })
+            SDrop("Tabulka", tbls.first { it.first == sm.importTargetTable }.second, tE, { tE = it }, tbls.map { it.second }) { sm.importTargetTable = tbls[it].first; tE = false }
+            SSwitch("Auto import pri spusteni", null, ai) { ai = it; sm.autoImportEnabled = it }
+            Button(onClick = { vm.triggerManualImport() }, Modifier.fillMaxWidth(), enabled = path.isNotBlank()) { Text("Spustit import") }
+            Text("Hlasem: 'importuj databazi klientu'", fontSize = 11.sp, color = Color.Gray)
+            Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
+        }
         OutlinedButton(onClick = { showCl = true }, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)) { Text("Vymazat historii") }
         Spacer(Modifier.height(4.dp))
         OutlinedButton(onClick = { showRs = true }, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)) { Text("Obnovit vychozi nastaveni") }

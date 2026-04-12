@@ -212,14 +212,17 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
     Scaffold(
         bottomBar = {
             if (currentRoute in navItems.map { it.route }) {
+                val state by viewModel.uiState.collectAsState()
                 NavigationBar {
                     navItems.forEach { screen ->
+                        val canAccess = screen != Screen.Settings || state.activeUserPermissions["settings_access"] != false
                         NavigationBarItem(
                             icon = { Icon(screen.icon, null) },
                             label = { Text(screen.title, fontSize = 10.sp) },
                             selected = currentRoute == screen.route,
+                            enabled = canAccess,
                             onClick = {
-                                navController.navigate(screen.route) {
+                                if (canAccess) navController.navigate(screen.route) {
                                     popUpTo(navController.graph.startDestinationId)
                                     launchSingleTop = true
                                 }
@@ -399,7 +402,10 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(state.status.uppercase(), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (state.isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.height(48.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(state.status.uppercase(), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (state.isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).height(48.dp))
+            Text("👤 ${state.activeUserName}", fontSize = 11.sp, color = Color.Gray)
+        }
         Card(Modifier.fillMaxWidth().height(120.dp), colors = CardDefaults.cardColors(containerColor = if (state.isListening) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant)) {
             Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
                 Text(state.lastAiReply, fontSize = 18.sp, textAlign = TextAlign.Center)
@@ -429,10 +435,12 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
         }
 
         Spacer(Modifier.height(24.dp))
+        val canVoice = state.activeUserPermissions["voice_commands"] != false
         Button(
-            onClick = { viewModel.startListening() },
+            onClick = { if (canVoice) viewModel.startListening() },
             modifier = Modifier.size(120.dp),
             shape = CircleShape,
+            enabled = canVoice,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
@@ -506,15 +514,17 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
 
     Scaffold(
         floatingActionButton = {
-            when (selectedTab) {
-                1 -> FloatingActionButton(onClick = { showAddClient = true }) { Icon(Icons.Default.Add, "Klient") }
-                2 -> FloatingActionButton(onClick = { showAddJob = true }) { Icon(Icons.Default.Add, "Zakázka") }
-                4 -> FloatingActionButton(onClick = { showAddLead = true }) { Icon(Icons.Default.Add, "Lead") }
-                5 -> FloatingActionButton(onClick = { showAddQuote = true }) { Icon(Icons.Default.Add, "Nabídka") }
-                6 -> FloatingActionButton(onClick = { showAddInvoice = true }) { Icon(Icons.Default.Add, "Faktura") }
-                7 -> FloatingActionButton(onClick = { showAddWorkReport = true }) { Icon(Icons.Default.Add, "Výkaz") }
-                8 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(Icons.Default.Add, "Komunikace") }
-                else -> {}
+            if (state.activeUserPermissions["crm_write"] != false) {
+                when (selectedTab) {
+                    1 -> FloatingActionButton(onClick = { showAddClient = true }) { Icon(Icons.Default.Add, "Klient") }
+                    2 -> FloatingActionButton(onClick = { showAddJob = true }) { Icon(Icons.Default.Add, "Zakázka") }
+                    4 -> FloatingActionButton(onClick = { showAddLead = true }) { Icon(Icons.Default.Add, "Lead") }
+                    5 -> FloatingActionButton(onClick = { showAddQuote = true }) { Icon(Icons.Default.Add, "Nabídka") }
+                    6 -> FloatingActionButton(onClick = { showAddInvoice = true }) { Icon(Icons.Default.Add, "Faktura") }
+                    7 -> FloatingActionButton(onClick = { showAddWorkReport = true }) { Icon(Icons.Default.Add, "Výkaz") }
+                    8 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(Icons.Default.Add, "Komunikace") }
+                    else -> {}
+                }
             }
         }
     ) { padding ->
@@ -1051,6 +1061,7 @@ fun ClientDetailScreen(clientId: Long, viewModel: SecretaryViewModel, navControl
     LaunchedEffect(clientId) { viewModel.loadClientDetail(clientId) }
     val detail = state.selectedClientDetail
     val tabs = listOf(Strings.overview, Strings.jobs, Strings.tasks, Strings.communications, Strings.notes)
+    val canWrite = state.activeUserPermissions["crm_write"] != false
 
     Scaffold(
         topBar = {
@@ -1058,12 +1069,12 @@ fun ClientDetailScreen(clientId: Long, viewModel: SecretaryViewModel, navControl
                 title = { Text(detail?.client?.display_name ?: "Načítám...") },
                 navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
                 actions = {
-                    IconButton(onClick = { showEditDialog = true }) { Icon(Icons.Default.Edit, "Upravit") }
+                    if (canWrite) IconButton(onClick = { showEditDialog = true }) { Icon(Icons.Default.Edit, "Upravit") }
                 }
             )
         },
         floatingActionButton = {
-            when (selectedTab) {
+            if (canWrite) when (selectedTab) {
                 2 -> FloatingActionButton(onClick = { showAddTaskDialog = true }) { Icon(Icons.Default.Add, "Úkol") }
                 4 -> FloatingActionButton(onClick = { showNoteDialog = true }) { Icon(Icons.Default.Add, "Poznámka") }
                 else -> {}
@@ -1111,6 +1122,8 @@ fun ClientDetailScreen(clientId: Long, viewModel: SecretaryViewModel, navControl
 fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     val c = detail.client
     val ctx = LocalContext.current
+    val state by viewModel.uiState.collectAsState()
+    val canWrite = state.activeUserPermissions["crm_write"] != false
     var showEditDialog by remember { mutableStateOf(false) }
     if (showEditDialog) {
         ClientEditDialog(client = c, onDismiss = { showEditDialog = false },
@@ -1136,7 +1149,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
                     ) { Icon(Icons.Default.Email, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Email", fontSize = 12.sp) }
                 }
-                Button(onClick = { showEditDialog = true },
+                if (canWrite) Button(onClick = { showEditDialog = true },
                     modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
                 ) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Upravit", fontSize = 12.sp) }
             }
@@ -1704,8 +1717,10 @@ fun TasksScreen(viewModel: SecretaryViewModel) {
     
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, Strings.newTask)
+            if (state.activeUserPermissions["crm_write"] != false) {
+                FloatingActionButton(onClick = { showAddDialog = true }) {
+                    Icon(Icons.Default.Add, Strings.newTask)
+                }
             }
         }
     ) { padding ->
@@ -1946,6 +1961,8 @@ class SecretaryViewModel : ViewModel() {
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
+        // Load active user permissions into state
+        refreshActiveUserPermissions()
         // Auto-login then check onboarding
         autoLogin()
     }
@@ -2025,6 +2042,24 @@ class SecretaryViewModel : ViewModel() {
     
     fun getSettingsManager() = settingsManager
     fun getCalendarText(days: Int = 7): String = calendarManager?.getCalendarContext(days) ?: "Kalendář není dostupný"
+
+    fun hasPermission(p: String): Boolean = _uiState.value.activeUserPermissions[p] ?: false
+
+    fun refreshActiveUserPermissions() {
+        val sm = settingsManager ?: return
+        val profile = sm.getActiveProfile()
+        _uiState.value = _uiState.value.copy(
+            activeUserPermissions = profile.permissions,
+            activeUserRole = profile.role,
+            activeUserName = profile.name
+        )
+    }
+
+    fun switchActiveUser(userId: String) {
+        val sm = settingsManager ?: return
+        sm.activeUserId = userId
+        refreshActiveUserPermissions()
+    }
 
     fun checkOnboardingStatus() {
         viewModelScope.launch {
@@ -2647,6 +2682,8 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun onVoiceInput(text: String) {
+        // Block voice commands if user lacks permission
+        if (_uiState.value.activeUserPermissions["voice_commands"] == false) return
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
         if (lower.contains("odhlásit") || lower.contains("odhlasit") || lower == "logout") {
@@ -2910,6 +2947,9 @@ data class UiState(
     val isListening: Boolean = false, 
     val status: String = "Připravena", 
     val lastAiReply: String = "Čekám na váš povel...",
+    val activeUserPermissions: Map<String, Boolean> = UserProfile.defaultPermissions("admin"),
+    val activeUserRole: String = "admin",
+    val activeUserName: String = "Marek Sima",
     val history: List<ChatMessage> = emptyList(),
     val contactResults: List<Map<String, String>> = emptyList(),
     val systemSettings: Map<String, Any> = emptyMap(),
