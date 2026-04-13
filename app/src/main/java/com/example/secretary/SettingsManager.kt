@@ -163,9 +163,48 @@ class SettingsManager(context: Context) {
         set(v) = prefs.edit { putString("theme_mode", v) }
 
     // 9. Jazyk / Language
+    var currentBackendUserId: Long
+        get() = prefs.getLong("current_backend_user_id", -1L)
+        set(v) = prefs.edit {
+            if (v <= 0L) remove("current_backend_user_id") else putLong("current_backend_user_id", v)
+        }
+    var currentBackendUserRole: String
+        get() = prefs.getString("current_backend_user_role", "") ?: ""
+        set(v) = prefs.edit {
+            if (v.isBlank()) remove("current_backend_user_role") else putString("current_backend_user_role", v)
+        }
     var appLanguage: String
         get() = prefs.getString("app_language", "cs") ?: "cs"
         set(v) = prefs.edit { putString("app_language", v) }
+    fun setCurrentBackendUser(userId: Long?, role: String?) {
+        currentBackendUserId = if ((userId ?: 0L) > 0L) userId!! else -1L
+        currentBackendUserRole = role.orEmpty()
+    }
+    fun clearCurrentBackendUser() {
+        currentBackendUserId = -1L
+        currentBackendUserRole = ""
+    }
+    fun getCurrentAppLanguage(): String {
+        val userId = currentBackendUserId
+        if (userId > 0L) {
+            return prefs.getString("app_language_user_$userId", appLanguage) ?: appLanguage
+        }
+        return appLanguage
+    }
+    fun setCurrentAppLanguage(lang: String) {
+        val userId = currentBackendUserId
+        if (userId > 0L) {
+            prefs.edit { putString("app_language_user_$userId", lang) }
+        }
+        appLanguage = lang
+    }
+    fun getAppLanguageForUser(userId: Long?, fallback: String = appLanguage): String {
+        val resolved = userId ?: currentBackendUserId
+        if (resolved > 0L) {
+            return prefs.getString("app_language_user_$resolved", fallback) ?: fallback
+        }
+        return fallback
+    }
 
     // Utility
     fun resetAll() = prefs.edit { clear() }

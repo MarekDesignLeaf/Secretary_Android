@@ -24,9 +24,18 @@ data class AssistantResponse(
     val is_question: Boolean = false
 )
 
+data class BackendPermission(
+    val permission_code: String = "",
+    val module_name: String = "",
+    val name: String = "",
+    val description: String? = null
+)
+
 data class BackendRole(
     val role_name: String = "",
-    val description: String? = null
+    val description: String? = null,
+    val permissions: Map<String, Boolean> = emptyMap(),
+    val permission_details: List<BackendPermission> = emptyList()
 )
 
 data class BackendUser(
@@ -36,7 +45,10 @@ data class BackendUser(
     val phone: String? = null,
     val status: String = "active",
     val role_name: String? = null,
-    val created_at: String? = null
+    val created_at: String? = null,
+    val permissions: Map<String, Boolean> = emptyMap(),
+    val role_permissions: Map<String, Boolean> = emptyMap(),
+    val user_permission_overrides: Map<String, Boolean> = emptyMap()
 )
 
 // === CLIENT — matches DB: clients table (schema.sql) ===
@@ -75,7 +87,10 @@ data class ClientDetail(
     val recent_jobs: List<Job> = emptyList(),
     val communications: List<Communication> = emptyList(),
     val tasks: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList(),
-    val notes: List<ClientNote> = emptyList()
+    val notes: List<ClientNote> = emptyList(),
+    val service_rates: Map<String, Double> = emptyMap(),
+    val service_rate_overrides: Map<String, Double> = emptyMap(),
+    val has_individual_service_rates: Boolean = false
 )
 
 data class ClientNote(
@@ -83,6 +98,59 @@ data class ClientNote(
     val note: String = "",
     val created_by: String? = null,
     val created_at: String? = null
+)
+
+data class SyncedContactCandidate(
+    val contact_key: String = "",
+    val name: String = "",
+    val phone: String? = null,
+    val email: String? = null,
+    val selected_as_client: Boolean = false,
+    val linked_client_id: Long? = null,
+    val linked_client_name: String? = null
+)
+
+data class ContactSyncResponse(
+    val total_contacts: Int = 0,
+    val selected_clients: Int = 0,
+    val contacts: List<SyncedContactCandidate> = emptyList(),
+    val errors: List<String> = emptyList()
+)
+
+data class ContactSection(
+    val section_code: String = "",
+    val display_name: String = "",
+    val is_default: Boolean = false,
+    val sort_order: Int = 0
+)
+
+data class SharedContact(
+    val id: Long = 0,
+    val section_code: String = "",
+    val section_name: String? = null,
+    val display_name: String = "",
+    val company_name: String? = null,
+    val phone_primary: String? = null,
+    val email_primary: String? = null,
+    val notes: String? = null,
+    val source: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
+)
+
+data class SharedContactImportResult(
+    val imported: Int = 0,
+    val merged: Int = 0,
+    val errors: List<String> = emptyList()
+)
+
+data class ImportableSharedContact(
+    val contact_key: String = "",
+    val name: String = "",
+    val phone: String? = null,
+    val email: String? = null,
+    val selected: Boolean = false,
+    val section_code: String = ""
 )
 
 // === PROPERTY — matches DB: properties table ===
@@ -111,6 +179,14 @@ data class Job(
     val job_title: String = "",
     val job_status: String = "nova",
     val start_date_planned: String? = null,
+    val planned_start_at: String? = null,
+    val planned_end_at: String? = null,
+    val assigned_user_id: Long? = null,
+    val assigned_to: String? = null,
+    val handover_note: String? = null,
+    val handed_over_by: String? = null,
+    val handed_over_at: String? = null,
+    val calendar_sync_enabled: Boolean = true,
     val created_at: String? = null,
     val updated_at: String? = null
 )
@@ -118,7 +194,38 @@ data class Job(
 data class JobDetail(
     val job: Job = Job(),
     val tasks: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList(),
-    val notes: List<ClientNote> = emptyList()
+    val notes: List<JobNote> = emptyList(),
+    val photos: List<JobPhoto> = emptyList(),
+    val audit_log: List<JobAuditEntry> = emptyList()
+)
+
+data class JobNote(
+    val id: Long = 0,
+    val job_id: Long = 0,
+    val note: String = "",
+    val note_type: String = "general", // general, complication, handover
+    val created_by: String? = null,
+    val created_at: String? = null,
+    val updated_at: String? = null
+)
+
+data class JobPhoto(
+    val id: Long = 0,
+    val job_id: Long = 0,
+    val url: String = "",
+    val description: String? = null,
+    val photo_type: String = "general", // start, process, end, complication
+    val uploaded_by: String? = null,
+    val uploaded_at: String? = null
+)
+
+data class JobAuditEntry(
+    val id: Long = 0,
+    val job_id: Long = 0,
+    val action_type: String = "",
+    val description: String = "",
+    val user_name: String? = null,
+    val created_at: String = ""
 )
 
 // === LEAD — matches DB: leads table + ALTER columns ===
@@ -177,12 +284,17 @@ data class Task(
     val createdAt: String? = null,
     val deadline: String? = null,
     val plannedDate: String? = null,
+    val plannedStartAt: String? = null,
+    val plannedEndAt: String? = null,
     val timeWindowStart: String? = null,
     val timeWindowEnd: String? = null,
     val estimatedMinutes: Int? = null,
     val actualMinutes: Int? = null,
     val createdBy: String? = null,
+    val assignedUserId: Long? = null,
     val assignedTo: String? = null,
+    val planningNote: String? = null,
+    val reminderForAssigneeOnly: Boolean = true,
     val delegatedBy: String? = null,
     val clientId: Long? = null,
     val clientName: String? = null,
@@ -199,7 +311,28 @@ data class Task(
     val hasCost: Boolean = false,
     val waitingForPayment: Boolean = false,
     val checklist: List<ChecklistItem> = emptyList(),
+    val calendarSyncEnabled: Boolean = true,
     val isCompleted: Boolean = false
+)
+
+data class CalendarFeedEntry(
+    val entry_key: String = "",
+    val entry_type: String = "",
+    val source_id: String? = null,
+    val title: String = "",
+    val client_name: String? = null,
+    val job_title: String? = null,
+    val assigned_user_id: Long? = null,
+    val assigned_to: String? = null,
+    val is_assigned_to_current: Boolean = false,
+    val display_mode: String = "shared",
+    val planned_start_at: String? = null,
+    val planned_end_at: String? = null,
+    val planned_date: String? = null,
+    val description: String? = null,
+    val calendar_sync_enabled: Boolean = true,
+    val reminder_for_assignee_only: Boolean = true,
+    val status: String? = null
 )
 
 data class ChecklistItem(

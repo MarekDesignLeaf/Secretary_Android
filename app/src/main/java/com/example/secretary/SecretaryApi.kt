@@ -1,5 +1,7 @@
 package com.example.secretary
 
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -38,7 +40,31 @@ interface SecretaryApi {
     suspend fun addClientNote(@Path("id") id: Long, @Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @POST("crm/clients/sync-contacts")
-    suspend fun syncContacts(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun syncContacts(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<ContactSyncResponse>
+
+    @GET("crm/contact-sections")
+    suspend fun getContactSections(): Response<List<ContactSection>>
+
+    @POST("crm/contact-sections")
+    suspend fun createContactSection(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<ContactSection>
+
+    @GET("crm/contacts")
+    suspend fun getSharedContacts(): Response<List<SharedContact>>
+
+    @POST("crm/contacts")
+    suspend fun createSharedContact(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<SharedContact>
+
+    @PUT("crm/contacts/{contactId}")
+    suspend fun updateSharedContact(
+        @Path("contactId") contactId: Long,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<SharedContact>
+
+    @DELETE("crm/contacts/{contactId}")
+    suspend fun deleteSharedContact(@Path("contactId") contactId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("crm/contacts/import")
+    suspend fun importSharedContacts(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<SharedContactImportResult>
 
     // === JOBS ===
     @GET("crm/jobs")
@@ -46,6 +72,27 @@ interface SecretaryApi {
 
     @GET("crm/jobs/{id}")
     suspend fun getJobDetail(@Path("id") id: Long): Response<JobDetail>
+
+    @Multipart
+    @POST("crm/jobs/{id}/photos")
+    suspend fun uploadJobPhoto(
+        @Path("id") jobId: Long,
+        @Part photo: MultipartBody.Part,
+        @Part("description") description: RequestBody?,
+        @Part("photo_type") photoType: RequestBody?
+    ): Response<JobPhoto>
+
+    @GET("crm/jobs/{id}/photos")
+    suspend fun getJobPhotos(@Path("id") jobId: Long): Response<List<JobPhoto>>
+
+    @POST("crm/jobs/{id}/notes")
+    suspend fun addJobNote(@Path("id") jobId: Long, @Body data: Map<String, String>): Response<JobNote>
+
+    @POST("crm/jobs/{id}/audit")
+    suspend fun addJobAuditEntry(@Path("id") jobId: Long, @Body data: Map<String, String>): Response<JobAuditEntry>
+
+    @GET("crm/jobs/{id}/audit")
+    suspend fun getJobAuditLog(@Path("id") jobId: Long): Response<List<JobAuditEntry>>
 
     @POST("crm/jobs")
     suspend fun createJob(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
@@ -65,6 +112,9 @@ interface SecretaryApi {
 
     @DELETE("crm/tasks/{id}")
     suspend fun deleteTask(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any>>
+
+    @GET("crm/calendar-feed")
+    suspend fun getCalendarFeed(@Query("days") days: Int = 30): Response<List<CalendarFeedEntry>>
 
     // === LEADS ===
     @GET("crm/leads")
@@ -189,6 +239,12 @@ interface SecretaryApi {
     @GET("tenant/config/{tenantId}")
     suspend fun getTenantConfig(@Path("tenantId") tenantId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    @PUT("tenant/config/{tenantId}/languages")
+    suspend fun updateTenantLanguages(
+        @Path("tenantId") tenantId: Int,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === AUTH ===
     @POST("auth/login")
     suspend fun authLogin(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -258,6 +314,12 @@ interface SecretaryApi {
     // === CLIENT RATE ===
     @PUT("crm/clients/{clientId}/rate")
     suspend fun updateClientRate(@Path("clientId") clientId: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("crm/clients/{clientId}/service-rates")
+    suspend fun getClientServiceRates(@Path("clientId") clientId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @PUT("crm/clients/{clientId}/service-rates")
+    suspend fun updateClientServiceRates(@Path("clientId") clientId: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === INVOICE FROM WORK REPORT ===
     @POST("crm/invoices/from-work-report")

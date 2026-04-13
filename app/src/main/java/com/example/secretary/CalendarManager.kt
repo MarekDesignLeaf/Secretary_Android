@@ -13,13 +13,14 @@ import java.util.*
 class CalendarManager(context: Context) {
     private val TAG = "CalendarManager"
     private val appContext = context.applicationContext
-    
+    private val planningMarkerPrefix = "SECRETARY_KEY:"
+
     private val MY_EMAILS = listOf("hutrat05@gmail.com", "marek@designleaf.co.uk", "hutrat@seznam.cz")
 
     private fun hasReadPermission() = ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     private fun hasWritePermission() = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
 
-    fun addEvent(summary: String, startTimeMillis: Long, endTimeMillis: Long): Boolean {
+    fun addEvent(summary: String, startTimeMillis: Long, endTimeMillis: Long, description: String? = null): Boolean {
         if (!hasWritePermission()) {
             Log.e(TAG, "ERR: Chybí právo zápisu")
             return false
@@ -32,6 +33,7 @@ class CalendarManager(context: Context) {
                 put(CalendarContract.Events.TITLE, summary)
                 put(CalendarContract.Events.CALENDAR_ID, calendarId)
                 put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                description?.let { put(CalendarContract.Events.DESCRIPTION, it) }
             }
             val uri = appContext.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
             Log.d(TAG, "OK: Událost zapsána do kalendáře $calendarId (URI: $uri)")
@@ -79,13 +81,14 @@ class CalendarManager(context: Context) {
         }
     }
 
-    fun updateEvent(eventId: Long, title: String?, start: Long?, end: Long?): Boolean {
+    fun updateEvent(eventId: Long, title: String?, start: Long?, end: Long?, description: String? = null): Boolean {
         if (!hasWritePermission()) return false
         return try {
             val values = ContentValues()
             title?.let { values.put(CalendarContract.Events.TITLE, it) }
             start?.let { values.put(CalendarContract.Events.DTSTART, it) }
             end?.let { values.put(CalendarContract.Events.DTEND, it) }
+            description?.let { values.put(CalendarContract.Events.DESCRIPTION, it) }
             
             val updateUri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
             val rows = appContext.contentResolver.update(updateUri, values, null, null)
@@ -94,6 +97,99 @@ class CalendarManager(context: Context) {
             Log.e(TAG, "ERR: Update failed", e)
             false
         }
+    }
+
+    fun syncPlanningEntries(entries: List<CalendarFeedEntry>): Boolean {
+        if (!hasReadPermission() || !hasWritePermission()) return false
+        val calendarId = getDefaultCalendarId() ?: return false
+        return try {
+            val activeKeys = entries
+                .filter { it.calendar_sync_enabled && !it.planned_start_at.isNullOrBlank() }
+                .map { it.entry_key }
+                .toSet()
+
+            val existing = mutableMapOf<String, Long>()
+            appContext.contentResolver.query(
+                CalendarContract.Events.CONTENT_URI,
+                arrayOf(CalendarContract.Events._ID, CalendarContract.Events.DESCRIPTION),
+                "${CalendarContract.Events.CALENDAR_ID} = ? AND ${CalendarContract.Events.DESCRIPTION} LIKE ?",
+                arrayOf(calendarId.toString(), "$planningMarkerPrefix%"),
+                null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    val eventId = cursor.getLong(0)
+                    val description = cursor.getString(1).orEmpty()
+                    val key = description.lineSequence()
+                        .firstOrNull { it.startsWith(planningMarkerPrefix) }
+                        ?.removePrefix(planningMarkerPrefix)
+                        ?.trim()
+                    if (!key.isNullOrBlank()) existing[key] = eventId
+                }
+            }
+
+            existing
+                .filterKeys { it !in activeKeys }
+                .values
+                .forEach { deleteEvent(it) }
+
+            entries.forEach { entry ->
+                val start = parseCalendarDateTime(entry.planned_start_at, entry.planned_date) ?: return@forEach
+                val end = parseCalendarDateTime(entry.planned_end_at, null) ?: (start + 60 * 60 * 1000L)
+                val title = buildPlanningTitle(entry)
+                val description = buildPlanningDescription(entry)
+                val existingId = existing[entry.entry_key]
+                if (existingId != null) {
+                    updateEvent(existingId, title, start, end, description)
+                } else {
+                    addEvent(title, start, end, description)
+                }
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "ERR: Planning sync failed", e)
+            false
+        }
+    }
+
+    private fun parseCalendarDateTime(dateTime: String?, fallbackDate: String?): Long? {
+        val candidates = listOfNotNull(dateTime, fallbackDate)
+        for (candidate in candidates) {
+            val trimmed = candidate.trim()
+            val patterns = listOf(
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss",
+                "yyyy-MM-dd HH:mm",
+                "yyyy-MM-dd"
+            )
+            for (pattern in patterns) {
+                try {
+                    val sdf = java.text.SimpleDateFormat(pattern, Locale.getDefault())
+                    val parsed = sdf.parse(trimmed) ?: continue
+                    return if (pattern == "yyyy-MM-dd") parsed.time + 9 * 3600000L else parsed.time
+                } catch (_: Exception) {
+                }
+            }
+        }
+        return null
+    }
+
+    private fun buildPlanningTitle(entry: CalendarFeedEntry): String {
+        val assignee = entry.assigned_to?.takeIf { it.isNotBlank() }
+        return when {
+            entry.entry_type == "task" && entry.is_assigned_to_current -> "Reminder: ${entry.title}"
+            entry.entry_type == "task" && assignee != null -> "${entry.title} [$assignee]"
+            entry.entry_type == "job" && assignee != null -> "${entry.title} -> $assignee"
+            else -> entry.title
+        }
+    }
+
+    private fun buildPlanningDescription(entry: CalendarFeedEntry): String {
+        val lines = mutableListOf("$planningMarkerPrefix${entry.entry_key}")
+        entry.client_name?.takeIf { it.isNotBlank() }?.let { lines += "Client: $it" }
+        entry.job_title?.takeIf { it.isNotBlank() && it != entry.title }?.let { lines += "Job: $it" }
+        entry.assigned_to?.takeIf { it.isNotBlank() }?.let { lines += "Assigned to: $it" }
+        entry.description?.takeIf { it.isNotBlank() }?.let { lines += it }
+        return lines.joinToString("\n")
     }
 
     fun getCalendarContext(days: Int = 7): String {

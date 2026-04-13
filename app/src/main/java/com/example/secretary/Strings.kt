@@ -37,6 +37,46 @@ object Strings {
     // === CRM TABS ===
     val today get() = t("Today", "Dnes", "Dziś")
     val clients get() = t("Clients", "Klienti", "Klienci")
+    val contactsDirectory get() = t("Contacts", "Kontakty", "Kontakty")
+    val employeesSection get() = t("Employees", "Zaměstnanci", "Pracownicy")
+    val subcontractorsSection get() = t("Subcontractors", "Subkontraktoři", "Podwykonawcy")
+    val materialSuppliersSection get() = t("Material suppliers", "Dodavatelé materiálu", "Dostawcy materiałów")
+    val rentalsSection get() = t("Tool and vehicle rentals", "Půjčovny nářadí a aut", "Wypożyczalnie narzędzi i aut")
+    val customSection get() = t("Custom section", "Vlastní oddíl", "Własna sekcja")
+    val addSection get() = t("Add section", "Přidat oddíl", "Dodaj sekcję")
+    val createSection get() = t("Create section", "Vytvořit oddíl", "Utwórz sekcję")
+    val sectionName get() = t("Section name", "Název oddílu", "Nazwa sekcji")
+    val addContact get() = t("Add contact", "Přidat kontakt", "Dodaj kontakt")
+    val editContact get() = t("Edit contact", "Upravit kontakt", "Edytuj kontakt")
+    val importToContacts get() = t("Import contacts", "Importovat kontakty", "Importuj kontakty")
+    val saveImportedContacts get() = t("Save imported contacts", "Uložit importované kontakty", "Zapisz importowane kontakty")
+    val noSharedContacts get() = t("No shared contacts yet", "Zatím žádné sdílené kontakty", "Brak wspólnych kontaktów")
+    val companyNameLabel get() = t("Company", "Firma", "Firma")
+    val sectionLabel get() = t("Section", "Oddíl", "Sekcja")
+    val notesLabel get() = t("Notes", "Poznámky", "Notatki")
+    val importContactsHint get() = t(
+        "Select contacts from your phone and assign them to a shared section.",
+        "Vyber kontakty z telefonu a přiřaď je do sdíleného oddílu.",
+        "Wybierz kontakty z telefonu i przypisz je do wspólnej sekcji."
+    )
+    val sharedContactsHint get() = t(
+        "These contacts are shared on the server and every user can use or extend them.",
+        "Tyto kontakty jsou sdílené na serveru a každý uživatel je může používat a doplňovat.",
+        "Te kontakty są współdzielone na serwerze i każdy użytkownik może ich używać oraz je uzupełniać."
+    )
+    val noSectionsAvailable get() = t("No contact sections available", "Nejsou dostupné žádné oddíly", "Brak dostępnych sekcji")
+    val setClients get() = t("Set clients", "Nastavit klienty", "Ustaw klientów")
+    val closeClientSetup get() = t("Close setup", "Zavřít nastavení", "Zamknij ustawianie")
+    val saveClientSelection get() = t("Save client selection", "Uložit výběr klientů", "Zapisz wybór klientów")
+    val clientSetupHint get() = t(
+        "Contacts checked here become shared server clients. Unchecked contacts are not kept as synced clients on the server.",
+        "Zaškrtnuté kontakty se stanou sdílenými klienty na serveru. Nezaškrtnuté kontakty se jako synchronizovaní klienti na serveru neudrží.",
+        "Zaznaczone kontakty stają się współdzielonymi klientami na serwerze. Niezaznaczone kontakty nie są utrzymywane jako zsynchronizowani klienci na serwerze."
+    )
+    val clientSetupLoading get() = t("Loading contacts from phone...", "Načítám kontakty z telefonu...", "Wczytuję kontakty z telefonu...")
+    val noPhoneContacts get() = t("No phone contacts found", "V telefonu nejsou žádné kontakty", "Brak kontaktów w telefonie")
+    val selectedAsClient get() = t("Client", "Klient", "Klient")
+    val syncedToClient get() = t("Synced to", "Synchronizováno pod", "Zsynchronizowano do")
     val jobs get() = t("Jobs", "Zakázky", "Zlecenia")
     val leads get() = t("Leads", "Leady", "Leady")
     val invoices get() = t("Invoices", "Faktury", "Faktury")
@@ -103,7 +143,10 @@ object Strings {
     val jobNumber get() = t("Job number", "Číslo zakázky", "Numer zlecenia")
     val job get() = t("Job", "Zakázka", "Zlecenie")
     val plannedStart get() = t("Planned start", "Plánovaný začátek", "Planowany start")
+    val plannedEnd get() = t("Planned end", "Plánovaný konec", "Planowany koniec")
     val plan get() = t("Plan", "Plán", "Plan")
+    val planningNote get() = t("Planning note", "Plánovací poznámka", "Notatka planowania")
+    val handoverNote get() = t("Handover note", "Poznámka k předání", "Notatka przekazania")
     val noTermin get() = t("no date", "bez termínu", "bez terminu")
     val changeStatus get() = t("Change status", "Změnit stav", "Zmień status")
 
@@ -178,6 +221,10 @@ object Strings {
 
     // === SETTINGS ===
     val language get() = t("Language", "Jazyk", "Język")
+    val systemLanguage get() = t("System language", "Jazyk systému", "Język systemu")
+    val systemLanguageHint get() = t("Saved locally for the currently signed-in user.", "Ukládá se lokálně pro právě přihlášeného uživatele.", "Zapisywany lokalnie dla aktualnie zalogowanego użytkownika.")
+    val customerLanguageHint get() = t("Default language used for customers and outgoing communication.", "Výchozí jazyk pro zákazníky a odchozí komunikaci.", "Domyślny język dla klientów i komunikacji wychodzącej.")
+    val adminOnlyLanguageHint get() = t("Only an administrator can change customer language.", "Zákaznický jazyk může změnit jen administrátor.", "Język klienta może zmienić tylko administrator.")
     val changeLanguage get() = t("Change language", "Změnit jazyk", "Zmień język")
     val languageChangeConfirm get() = t("Change app language to", "Změnit jazyk aplikace na", "Zmienić język aplikacji na")
     val logout get() = t("Log out", "Odhlásit se", "Wyloguj się")
@@ -228,18 +275,26 @@ object Strings {
     val backendUserCreated get() = t("Backend user created", "Backendový uživatel byl vytvořen", "Użytkownik backendu został utworzony")
     val backendUserUpdated get() = t("Backend user updated", "Backendový uživatel byl upraven", "Użytkownik backendu został zaktualizowany")
     val backendUserDeleted get() = t("Backend user deleted", "Backendový uživatel byl smazán", "Użytkownik backendu został usunięty")
-    val backendUserHint get() = t("This creates a backend login. Local profiles below are only for this device.", "Tento krok vytvoří přihlášení do backendu. Lokální profily níže jsou jen pro toto zařízení.", "Ten krok tworzy konto backendowe. Lokalne profile poniżej działają tylko na tym urządzeniu.")
+    val backendUserHint get() = t("These are real server accounts used for login and permissions.", "Tohle jsou skutečné serverové účty pro přihlášení a oprávnění.", "To są prawdziwe konta serwerowe używane do logowania i uprawnień.")
     val backendUsersLabel get() = t("Backend users", "Backendoví uživatelé", "Użytkownicy backendu")
     val backendUsersEmpty get() = t("No backend users found", "Nebyli nalezeni žádní backendoví uživatelé", "Nie znaleziono użytkowników backendu")
     val backendUsersLoadFailed get() = t("Failed to load backend users", "Nepodařilo se načíst backendové uživatele", "Nie udało się wczytać użytkowników backendu")
+    val presetProfilesLabel get() = t("Preset role profiles", "Přednastavené profily rolí", "Gotowe profile ról")
+    val presetProfilesHint get() = t("These presets define the default rights for each role.", "Tyto profily určují výchozí práva pro každou roli.", "Te profile określają domyślne uprawnienia dla każdej roli.")
     val localProfilesLabel get() = t("Local profiles on this device", "Lokální profily v tomto zařízení", "Profile lokalne na tym urządzeniu")
     val localProfilesHint get() = t("These profiles only affect this phone and do not change server permissions.", "Tyto profily ovlivňují jen tento telefon a nemění serverová oprávnění.", "Te profile wpływają tylko na ten telefon i nie zmieniają uprawnień na serwerze.")
-    val roleControlsPermissionsHint get() = t("Permissions are controlled by the selected server role.", "Oprávnění řídí zvolená serverová role.", "Uprawnienia są sterowane przez wybraną rolę serwerową.")
+    val roleControlsPermissionsHint get() = t("Pick a role, then you can fine-tune permissions for this user below.", "Vyberte roli a níže můžete práva tohoto uživatele doladit individuálně.", "Wybierz rolę, a poniżej możesz indywidualnie dopracować uprawnienia użytkownika.")
     val currentPassword get() = t("Current password", "Současné heslo", "Obecne hasło")
     val newPassword get() = t("New password", "Nové heslo", "Nowe hasło")
     val confirmPassword get() = t("Confirm password", "Potvrdit heslo", "Potwierdź hasło")
     val passwordsDoNotMatch get() = t("Passwords do not match", "Neshodují se", "Hasła nie są zgodne")
     val permissions get() = t("Permissions", "Oprávnění", "Uprawnienia")
+    val includedPermissions get() = t("Included permissions", "Obsažená práva", "Zawarte uprawnienia")
+    val permissionOverrides get() = t("Individual overrides", "Individuální override", "Indywidualne nadpisania")
+    val resetToRoleDefaults get() = t("Reset to role defaults", "Vrátit na výchozí práva role", "Przywróć domyślne uprawnienia roli")
+    val noPermissionsAssigned get() = t("No permissions assigned", "Žádná práva nepřiřazena", "Brak przypisanych uprawnień")
+    val customPermissionsActive get() = t("Custom rights active", "Aktivní vlastní práva", "Aktywne własne uprawnienia")
+    val roleDescription get() = t("Role description", "Popis role", "Opis roli")
     val nameField get() = t("Name", "Jméno", "Nazwa")
     val users get() = t("Users", "Uživatelé", "Użytkownicy")
     val createUserFailed get() = t("User creation failed", "Vytvoření uživatele selhalo", "Tworzenie użytkownika nie powiodło się")
@@ -268,6 +323,23 @@ object Strings {
     val voiceImportHint get() = t("Voice: 'import client database'", "Hlasem: 'importuj databázi klientů'", "Głosowo: 'importuj bazę klientów'")
     val companyProfile get() = t("Company profile", "Profil firmy", "Profil firmy")
     val serviceRates get() = t("Service rates", "Sazby služeb", "Stawki usług")
+    val individualServiceRates get() = t("Individual service rates", "Individuální sazby služeb", "Indywidualne stawki usług")
+    val individualServiceRatesHint get() = t(
+        "These rates belong only to this client and override company service rates.",
+        "Tyto sazby patří jen tomuto klientovi a mají prioritu před firemními sazbami služeb.",
+        "Te stawki dotyczą tylko tego klienta i mają priorytet przed firmowymi stawkami usług."
+    )
+    val individualServiceRatesNotSet get() = t(
+        "No client-specific rates yet. Company service rates are used.",
+        "Klient zatím nemá vlastní sazby. Používají se firemní sazby služeb.",
+        "Klient nie ma jeszcze własnych stawek. Używane są firmowe stawki usług."
+    )
+    val individualServiceRatesActive get() = t(
+        "Client-specific service rates are active.",
+        "Aktivní jsou individuální sazby služeb tohoto klienta.",
+        "Aktywne są indywidualne stawki usług dla tego klienta."
+    )
+    val resetToCompanyRates get() = t("Reset to company rates", "Obnovit firemní sazby", "Przywróć stawki firmowe")
     val hourlyRatesByType get() = t("Hourly rates by work type", "Hodinové sazby podle typu práce", "Stawki godzinowe według typu pracy")
     val otherRates get() = t("Other rates", "Ostatní sazby", "Pozostałe stawki")
     val gardenMaintenanceRate get() = t("Garden Maintenance (£/h)", "Garden Maintenance (£/h)", "Garden Maintenance (£/h)")
@@ -349,7 +421,13 @@ object Strings {
     val newWorkReport get() = t("New work report", "Nový výkaz práce", "Nowy raport pracy")
     val loadingCalendar get() = t("Loading calendar...", "Načítám kalendář...", "Wczytuję kalendarz...")
     val scheduledTasksLabel get() = t("Scheduled tasks", "Naplánované úkoly", "Zaplanowane zadania")
+    val sharedPlanningLabel get() = t("Shared planning", "Sdílené plánování", "Plan współdzielony")
     val calendarEventsLabel get() = t("Calendar events", "Události z kalendáře", "Wydarzenia z kalendarza")
+    val noCalendarEntries get() = t("No planned items yet", "Zatím nejsou žádné plánované položky", "Brak zaplanowanych pozycji")
+    val syncCalendar get() = t("Sync calendar", "Synchronizovat kalendář", "Synchronizuj kalendarz")
+    val reminderEntry get() = t("Reminder", "Připomínka", "Przypomnienie")
+    val infoEntry get() = t("Info", "Informace", "Informacja")
+    val sharedEntry get() = t("Shared", "Sdílené", "Wspólne")
     val backgroundEnabledShort get() = t("Background ON", "Pozadí ZAP", "Tło WŁ")
     val backgroundDisabledShort get() = t("Background OFF", "Pozadí VYP", "Tło WYŁ")
     val restartShort get() = t("Restart", "Restart", "Restart")
@@ -431,6 +509,8 @@ object Strings {
     fun biometricError(err: String): String = t("Biometric error: $err", "Chyba biometrie: $err", "Błąd biometrii: $err")
     fun serverVersion(version: String): String = t("Server: $version", "Server: $version", "Serwer: $version")
     fun addedToCalendar(taskTitle: String): String = t("Added to calendar: $taskTitle", "Přidáno do kalendáře: $taskTitle", "Dodano do kalendarza: $taskTitle")
+    fun planningCalendarSynced(count: Int): String = t("Planning synced: $count entries", "Plánování synchronizováno: $count položek", "Plan zsynchronizowany: $count pozycji")
+    val planningCalendarSyncFailed get() = t("Planning calendar sync failed", "Synchronizace plánovacího kalendáře selhala", "Synchronizacja kalendarza planowania nie powiodła się")
     fun serverError(code: Int): String = t("Server error $code", "Chyba serveru $code", "Błąd serwera $code")
     fun noContactFound(query: String): String = t("I couldn't find anyone in contacts for '$query'.", "V kontaktech jsem nikoho pro '$query' nenašla.", "Nie znalazłam nikogo w kontaktach dla '$query'.")
     fun backendPermissionDenied(): String = t(
@@ -478,6 +558,11 @@ object Strings {
     }
     fun historySpeaker(role: String): String = if (role == "user") you else assistant
     fun backendActionFailed(actionLabel: String, code: Int): String = "$actionLabel (HTTP $code)"
+    fun clientServiceRatesSummary(active: Int): String = t(
+        "$active client-specific rates set",
+        "Nastaveno $active individuálních sazeb",
+        "Ustawiono $active indywidualnych stawek"
+    )
     fun invoiceDueDate(value: String?): String = t("Due: ${value ?: "?"}", "Splatnost: ${value ?: "?"}", "Termin: ${value ?: "?"}")
     fun batchInvoiceLabel(count: Int): String = t("Invoice ${count}x", "Fakturovat ${count}×", "Fakturuj ${count}×")
     fun invoicesCreatedSummary(created: Int, errors: Int): String = t(
@@ -552,6 +637,51 @@ object Strings {
         "team" -> t("Team (2-5)", "Tým (2-5)", "Zespół (2-5)")
         "business" -> t("Business (6-30)", "Firma (6-30)", "Firma (6-30)")
         else -> mode
+    }
+    fun localizeServiceRateKey(key: String): String = when (key.lowercase()) {
+        "garden_maintenance", "hourly_rate" -> gardenMaintenanceRate
+        "hedge_trimming" -> hedgeTrimmingRate
+        "arborist_works" -> arboristWorksRate
+        "garden_waste_bulkbag" -> wasteRemovalRate
+        "minimum_charge" -> minimumJobPrice
+        else -> key
+    }
+    fun localizeContactSection(sectionCode: String, fallback: String? = null): String = when (sectionCode.lowercase()) {
+        "employee" -> employeesSection
+        "subcontractor" -> subcontractorsSection
+        "material_supplier" -> materialSuppliersSection
+        "equipment_vehicle_rental" -> rentalsSection
+        else -> fallback ?: sectionCode
+    }
+    fun localizePermission(code: String, fallback: String = code): String = when (code.lowercase()) {
+        "crm_read" -> t("View CRM", "Čtení CRM", "Podgląd CRM")
+        "crm_write" -> t("Edit CRM", "Úpravy CRM", "Edycja CRM")
+        "crm_delete" -> t("Delete CRM", "Mazání CRM", "Usuwanie CRM")
+        "calendar_read" -> t("View calendar", "Čtení kalendáře", "Podgląd kalendarza")
+        "calendar_write" -> t("Edit calendar", "Úpravy kalendáře", "Edycja kalendarza")
+        "contacts_read" -> t("View contacts", "Čtení kontaktů", "Podgląd kontaktów")
+        "contacts_write" -> t("Edit contacts", "Úpravy kontaktů", "Edycja kontaktów")
+        "voice_commands" -> t("Voice commands", "Hlasové příkazy", "Polecenia głosowe")
+        "settings_access" -> t("Settings access", "Přístup do nastavení", "Dostęp do ustawień")
+        "import_data" -> t("Import data", "Import dat", "Import danych")
+        "export_data" -> t("Export data", "Export dat", "Eksport danych")
+        "manage_users" -> t("Manage users", "Správa uživatelů", "Zarządzanie użytkownikami")
+        else -> fallback
+    }
+    fun localizePermissionDescription(code: String, fallback: String? = null): String = when (code.lowercase()) {
+        "crm_read" -> t("Read clients, jobs, leads and invoices.", "Zobrazí klienty, zakázky, leady i faktury.", "Pozwala czytać klientów, zlecenia, leady i faktury.")
+        "crm_write" -> t("Create and update CRM records.", "Umožní vytvářet a upravovat CRM záznamy.", "Pozwala tworzyć i edytować rekordy CRM.")
+        "crm_delete" -> t("Delete CRM records.", "Umožní mazat CRM záznamy.", "Pozwala usuwać rekordy CRM.")
+        "calendar_read" -> t("Read calendar data and availability.", "Umožní číst kalendář a dostupnost.", "Pozwala czytać kalendarz i dostępność.")
+        "calendar_write" -> t("Create and update calendar entries.", "Umožní vytvářet a upravovat události v kalendáři.", "Pozwala tworzyć i edytować wpisy kalendarza.")
+        "contacts_read" -> t("Read synced contacts and client contact details.", "Umožní číst synchronizované kontakty a kontaktní údaje klientů.", "Pozwala czytać zsynchronizowane kontakty i dane klientów.")
+        "contacts_write" -> t("Create and update contact records.", "Umožní vytvářet a upravovat kontakty.", "Pozwala tworzyć i edytować kontakty.")
+        "voice_commands" -> t("Use voice commands and guided voice workflows.", "Umožní používat hlasové příkazy a hlasové workflow.", "Pozwala używać poleceń głosowych i procesów głosowych.")
+        "settings_access" -> t("Open and change application settings.", "Umožní otevřít a měnit nastavení aplikace.", "Pozwala otwierać i zmieniać ustawienia aplikacji.")
+        "import_data" -> t("Run imports and ingest external data.", "Umožní spouštět importy a nahrávat externí data.", "Pozwala uruchamiać import i wczytywać dane zewnętrzne.")
+        "export_data" -> t("Export CRM and operational data.", "Umožní exportovat CRM a provozní data.", "Pozwala eksportować CRM i dane operacyjne.")
+        "manage_users" -> t("Create users, edit rights and remove users.", "Umožní vytvářet uživatele, měnit jejich práva a mazat je.", "Pozwala tworzyć użytkowników, zmieniać prawa i usuwać ich.")
+        else -> fallback ?: ""
     }
     fun matchesLogoutCommand(text: String): Boolean {
         val normalized = text.lowercase().trim()

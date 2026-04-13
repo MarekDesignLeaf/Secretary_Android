@@ -13,6 +13,12 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.core.content.FileProvider
+import com.skydoves.landscapist.coil.CoilImage
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -97,7 +103,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         contactManager = ContactManager(this)
         mailManager = MailManager(this)
         settingsManager = SettingsManager(this)
-        Strings.setLanguage(settingsManager!!.appLanguage)
+        Strings.setLanguage(settingsManager.getCurrentAppLanguage())
         viewModel = androidx.lifecycle.ViewModelProvider(this)[SecretaryViewModel::class.java]
 
         val perms = mutableListOf(
@@ -287,19 +293,47 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     val calendarText = remember { mutableStateOf(Strings.loadingCalendar) }
     LaunchedEffect(Unit) {
+        viewModel.loadCalendarFeed()
         val ctx = viewModel.getCalendarText(7)
         calendarText.value = ctx
     }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(Strings.calendar, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        val scheduledTasks = state.tasks.filter { it.plannedDate != null || it.deadline != null }
-        if (scheduledTasks.isNotEmpty()) {
-            Text(Strings.scheduledTasksLabel, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-            scheduledTasks.forEach { t ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(t.deadline ?: t.plannedDate ?: "", fontSize = 12.sp, modifier = Modifier.width(80.dp), color = MaterialTheme.colorScheme.primary)
-                    Text(t.title, fontSize = 14.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(Strings.sharedPlanningLabel, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
+            TextButton(onClick = { viewModel.syncPlanningCalendar() }) { Text(Strings.syncCalendar) }
+        }
+        if (state.calendarFeed.isEmpty()) {
+            Text(Strings.noCalendarEntries, color = Color.Gray)
+        } else {
+            state.calendarFeed.forEach { entry ->
+                val label = when (entry.display_mode) {
+                    "reminder" -> Strings.reminderEntry
+                    "info" -> Strings.infoEntry
+                    else -> Strings.sharedEntry
+                }
+                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(entry.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Text(
+                            (entry.planned_start_at ?: entry.planned_date ?: entry.planned_end_at).orEmpty(),
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                        entry.client_name?.takeIf { it.isNotBlank() }?.let {
+                            Text("${Strings.client}: $it", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        entry.assigned_to?.takeIf { it.isNotBlank() }?.let {
+                            Text("${Strings.assigned}: $it", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        entry.description?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, fontSize = 12.sp)
+                        }
+                    }
                 }
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -500,9 +534,10 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
     var showAddWorkReport by remember { mutableStateOf(false) }
     var showAddQuote by remember { mutableStateOf(false) }
     var showLogComm by remember { mutableStateOf(false) }
+    var showAddSharedContact by remember { mutableStateOf(false) }
     var showEditLead by remember { mutableStateOf<Lead?>(null) }
     var showInvoiceStatus by remember { mutableStateOf<Invoice?>(null) }
-    val tabs = listOf(Strings.today, Strings.clients, Strings.jobs, Strings.tasks, Strings.leads, Strings.quotes, Strings.invoices, Strings.workReports, Strings.communications)
+    val tabs = listOf(Strings.today, Strings.clients, Strings.jobs, Strings.tasks, Strings.leads, Strings.quotes, Strings.invoices, Strings.workReports, Strings.contactsDirectory, Strings.communications)
 
     LaunchedEffect(Unit) { viewModel.refreshCrmData() }
 
@@ -515,7 +550,8 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
                 5 -> FloatingActionButton(onClick = { showAddQuote = true }) { Icon(Icons.Default.Add, "Nabídka") }
                 6 -> FloatingActionButton(onClick = { showAddInvoice = true }) { Icon(Icons.Default.Add, "Faktura") }
                 7 -> FloatingActionButton(onClick = { showAddWorkReport = true }) { Icon(Icons.Default.Add, "Výkaz") }
-                8 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(Icons.Default.Add, "Komunikace") }
+                8 -> FloatingActionButton(onClick = { showAddSharedContact = true }) { Icon(Icons.Default.Add, "Kontakt") }
+                9 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(Icons.Default.Add, "Komunikace") }
                 else -> {}
             }
         }
@@ -545,7 +581,8 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
                         })
                     }
                     7 -> WorkReportsTab(state.workReports, viewModel, navController)
-                    8 -> CommunicationTab(state, viewModel, navController)
+                    8 -> ContactsDirectoryTab(state, viewModel)
+                    9 -> CommunicationTab(state, viewModel, navController)
                 }
             }
         }
@@ -579,6 +616,18 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
         GlobalLogCommDialog(clients = state.clients, onDismiss = { showLogComm = false },
             onSave = { clientId, type, subj, msg, dir -> viewModel.logCommunication(clientId, null, type, subj, msg, dir); showLogComm = false })
     }
+    if (showAddSharedContact) {
+        SharedContactDialog(
+            sections = state.contactSections,
+            onDismiss = { showAddSharedContact = false },
+            onSave = { payload, _, onDone ->
+                viewModel.saveSharedContact(payload) { ok, msg ->
+                    if (ok) showAddSharedContact = false
+                    onDone(ok, msg)
+                }
+            }
+        )
+    }
     if (showEditLead != null) {
         EditLeadDialog(lead = showEditLead!!, onDismiss = { showEditLead = null },
             onSave = { data -> viewModel.updateLead(showEditLead!!.id, data); showEditLead = null })
@@ -592,17 +641,12 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
 @Composable
 fun ClientsListTab(clients: List<Client>, navController: NavHostController, viewModel: SecretaryViewModel) {
     var searchQuery by remember { mutableStateOf("") }
-    var showImportDialog by remember { mutableStateOf(false) }
+    var clientSetupMode by remember { mutableStateOf(false) }
+    var contactsLoading by remember { mutableStateOf(false) }
+    var contactsSaving by remember { mutableStateOf(false) }
+    var contactsError by remember { mutableStateOf<String?>(null) }
+    var phoneContacts by remember { mutableStateOf<List<SyncedContactCandidate>>(emptyList()) }
     val ctx = LocalContext.current
-    if (showImportDialog) {
-        ImportContactsDialog(
-            onDismiss = { showImportDialog = false },
-            onImport = { onlyUk, skipNoPhone, skipNoName, removeDups, withEmail ->
-                showImportDialog = false
-                viewModel.syncPhoneContacts(ctx, onlyUk, skipNoPhone, skipNoName, removeDups, withEmail)
-            }
-        )
-    }
     val filtered = if (searchQuery.isBlank()) clients
         else clients.filter {
             it.display_name.contains(searchQuery, ignoreCase = true) ||
@@ -621,11 +665,91 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                 singleLine = true
             )
             Spacer(Modifier.width(8.dp))
-            IconButton(onClick = { showImportDialog = true }) {
-                Icon(Icons.Default.Refresh, "Import kontaktů", tint = MaterialTheme.colorScheme.primary)
+            TextButton(
+                onClick = {
+                    contactsError = null
+                    if (clientSetupMode) {
+                        clientSetupMode = false
+                    } else {
+                        contactsLoading = true
+                        viewModel.loadClientSelectionContacts(ctx) { contacts, error ->
+                            contactsLoading = false
+                            contactsError = error
+                            phoneContacts = contacts
+                            clientSetupMode = error == null
+                        }
+                    }
+                }
+            ) {
+                Text(if (clientSetupMode) Strings.closeClientSetup else Strings.setClients)
             }
         }
-        if (filtered.isEmpty()) {
+        if (clientSetupMode) {
+            Column(Modifier.fillMaxSize()) {
+                Text(
+                    Strings.clientSetupHint,
+                    fontSize = 12.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+                contactsError?.let {
+                    Text(it, color = Color.Red, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                }
+                if (contactsLoading) {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.clientSetupLoading, color = Color.Gray) }
+                } else if (phoneContacts.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noPhoneContacts, color = Color.Gray) }
+                } else {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Button(
+                            onClick = {
+                                contactsSaving = true
+                                contactsError = null
+                                viewModel.saveClientSelectionContacts(phoneContacts) { ok, message ->
+                                    contactsSaving = false
+                                    contactsError = message
+                                    if (ok) clientSetupMode = false
+                                }
+                            },
+                            enabled = !contactsSaving
+                        ) {
+                            Text(if (contactsSaving) Strings.processing else Strings.saveClientSelection)
+                        }
+                    }
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        items(phoneContacts, key = { it.contact_key }) { contact ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            ) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = contact.selected_as_client,
+                                        onCheckedChange = { checked ->
+                                            phoneContacts = phoneContacts.map {
+                                                if (it.contact_key == contact.contact_key) it.copy(selected_as_client = checked) else it
+                                            }
+                                        }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(contact.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        contact.phone?.takeIf { it.isNotBlank() }?.let { Text("\u260E $it", fontSize = 13.sp) }
+                                        contact.email?.takeIf { it.isNotBlank() }?.let { Text("\u2709 $it", fontSize = 13.sp, color = Color.Gray) }
+                                        if (contact.linked_client_name != null) {
+                                            Text("${Strings.syncedToClient}: ${contact.linked_client_name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (filtered.isEmpty()) {
             Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noClients, color = Color.Gray) }
         } else {
             LazyColumn(Modifier.fillMaxSize()) {
@@ -681,7 +805,10 @@ fun JobsListTab(jobs: List<Job>, navController: NavHostController, viewModel: Se
                                 Text("👤 ${job.client_name}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.clickable { job.client_id?.let { navController.navigate("client/$it") } })
                             }
-                            Text("${job.job_number ?: ""} · ${job.start_date_planned ?: "bez termínu"}", fontSize = 12.sp, color = Color.Gray)
+                            Text("${job.job_number ?: ""} · ${job.planned_start_at ?: job.start_date_planned ?: "bez termínu"}", fontSize = 12.sp, color = Color.Gray)
+                            if (!job.assigned_to.isNullOrBlank()) {
+                                Text("${Strings.assigned}: ${job.assigned_to}", fontSize = 12.sp, color = Color.Gray)
+                            }
                         }
                         val statusColor = when {
                             job.job_status.contains("dokonceno") || job.job_status.contains("uzavren") -> Color(0xFF4CAF50)
@@ -1124,9 +1251,18 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     val c = detail.client
     val ctx = LocalContext.current
     var showEditDialog by remember { mutableStateOf(false) }
+    var showServiceRatesDialog by remember { mutableStateOf(false) }
     if (showEditDialog) {
         ClientEditDialog(client = c, onDismiss = { showEditDialog = false },
             onSave = { data -> viewModel.updateClient(c.id, data); showEditDialog = false })
+    }
+    if (showServiceRatesDialog) {
+        ClientServiceRatesDialog(
+            client = c,
+            detail = detail,
+            viewModel = viewModel,
+            onDismiss = { showServiceRatesDialog = false }
+        )
     }
     LazyColumn {
         // === ACTION BUTTONS ===
@@ -1171,7 +1307,26 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                     InfoRow(Strings.preferredContact, c.preferred_contact_method)
                     InfoRow(Strings.status, c.status)
                     InfoRow(Strings.commercial, if (c.is_commercial) Strings.yes else Strings.no)
-                    if ((c.default_hourly_rate ?: 0.0) > 0) InfoRow(Strings.hourlyRateLabel, "£${c.default_hourly_rate}/h")
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(Strings.individualServiceRates, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        AssistChip(
+                            onClick = { showServiceRatesDialog = true },
+                            label = { Text(Strings.edit, fontSize = 12.sp) }
+                        )
+                    }
+                    Text(
+                        if (detail.has_individual_service_rates) Strings.individualServiceRatesActive else Strings.individualServiceRatesNotSet,
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                    Text(Strings.individualServiceRatesHint, fontSize = 12.sp, color = Color.Gray)
+                    ClientServiceRatesSummary(detail)
                 }
             }
         }
@@ -1379,7 +1534,6 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
     var billingCity by remember { mutableStateOf(client.billing_city ?: "") }
     var billingPostcode by remember { mutableStateOf(client.billing_postcode ?: "") }
     var isCommercial by remember { mutableStateOf(client.is_commercial) }
-    var hourlyRate by remember { mutableStateOf((client.default_hourly_rate ?: 0.0).let { if (it > 0) it.toString() else "" }) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editClient) },
         text = {
             LazyColumn(Modifier.heightIn(max = 400.dp)) {
@@ -1406,9 +1560,6 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
                     OutlinedTextField(value = phoneSecondary, onValueChange = { phoneSecondary = it }, label = { Text(Strings.phoneSecondary) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(value = website, onValueChange = { website = it }, label = { Text(Strings.website) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Spacer(Modifier.height(12.dp))
-                    Text(Strings.ratesTitle, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-                    OutlinedTextField(value = hourlyRate, onValueChange = { hourlyRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(Strings.hourlyRateLabel) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    Spacer(Modifier.height(12.dp))
                     Text(Strings.billingAddress, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
                     OutlinedTextField(value = billingAddr, onValueChange = { billingAddr = it }, label = { Text(Strings.billingAddress) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1427,8 +1578,7 @@ fun EditClientDialog(client: Client, onDismiss: () -> Unit, onSave: (Map<String,
                 "phone_primary" to phonePrimary.ifBlank { null }, "phone_secondary" to phoneSecondary.ifBlank { null },
                 "website" to website.ifBlank { null },
                 "billing_address_line1" to billingAddr.ifBlank { null },
-                "billing_city" to billingCity.ifBlank { null }, "billing_postcode" to billingPostcode.ifBlank { null },
-                "default_hourly_rate" to (hourlyRate.toDoubleOrNull() ?: 0.0)
+                "billing_city" to billingCity.ifBlank { null }, "billing_postcode" to billingPostcode.ifBlank { null }
             ))
         }) { Text(Strings.save) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
@@ -1480,9 +1630,56 @@ fun AddJobDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (Strin
 @Composable
 fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: NavHostController) {
     val state by viewModel.uiState.collectAsState()
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabs = listOf(Strings.startLabel, Strings.progressLabel, Strings.endLabel, Strings.complicationsLabel, Strings.auditLog)
+
     var showStatusDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showNoteDialog by remember { mutableStateOf(false) }
+    var noteTypeForDialog by remember { mutableStateOf("general") }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val photoFile = remember { mutableStateOf<java.io.File?>(null) }
+    
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            photoFile.value?.let { file ->
+                val type = when(selectedTab) {
+                    0 -> "start"
+                    1 -> "process"
+                    2 -> "end"
+                    3 -> "complication"
+                    else -> "general"
+                }
+                viewModel.uploadJobPhoto(jobId, type, file)
+            }
+        }
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            val file = java.io.File(context.cacheDir, "gallery_photo_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(it)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            }
+            val type = when(selectedTab) {
+                0 -> "start"
+                1 -> "process"
+                2 -> "end"
+                3 -> "complication"
+                else -> "general"
+            }
+            viewModel.uploadJobPhoto(jobId, type, file)
+        }
+    }
+
+    fun launchCamera() {
+        val file = java.io.File(context.cacheDir, "job_photo_${System.currentTimeMillis()}.jpg")
+        photoFile.value = file
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+        cameraLauncher.launch(uri)
+    }
+
     LaunchedEffect(jobId) { viewModel.loadJobDetail(jobId) }
     val detail = state.selectedJobDetail
 
@@ -1498,71 +1695,50 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showNoteDialog = true }) { Icon(Icons.Default.Add, "Poznámka") }
+            Column(horizontalAlignment = Alignment.End) {
+                SmallFloatingActionButton(
+                    onClick = { launchCamera() },
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) { Icon(Icons.Default.AddAPhoto, null) }
+                
+                FloatingActionButton(onClick = { 
+                    noteTypeForDialog = if (selectedTab == 3) "complication" else "general"
+                    showNoteDialog = true 
+                }) { Icon(Icons.Default.Add, "Poznámka") }
+            }
         }
     ) { padding ->
         if (detail == null) {
             Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) { CircularProgressIndicator() }
         } else {
-            LazyColumn(Modifier.padding(padding).padding(12.dp)) {
-                // Info karta
-                item {
-                    Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(Strings.job, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text("${Strings.jobNumber}: ${detail.job.job_number ?: "-"}")
-                            Text("${Strings.status}: ${Strings.localizeStatus(detail.job.job_status)}")
-                            Text("${Strings.plan}: ${detail.job.start_date_planned ?: Strings.noTermin}")
-                        }
+            Column(Modifier.padding(padding)) {
+                ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 16.dp) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(selected = selectedTab == index, onClick = { selectedTab = index }, text = { Text(title) })
                     }
                 }
-                // Ukoly zakazky
-                val tasks = detail.tasks
-                item { Text("${Strings.tasks} (${tasks.size})", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
-                if (tasks.isEmpty()) {
-                    item { Text(Strings.noTasks, color = Color.Gray, modifier = Modifier.padding(8.dp)) }
-                } else {
-                    items(tasks) { m ->
-                        val title = m["title"]?.toString() ?: ""
-                        val status = m["status"]?.toString() ?: ""
-                        val prio = m["priority"]?.toString() ?: ""
-                        ListItem(
-                            headlineContent = { Text(title) },
-                            supportingContent = { Text("$status · $prio") },
-                            leadingContent = { Text(when(m["task_type"]?.toString()) { "volat"->"📞"; "email"->"📧"; "schuzka"->"📅"; "realizace"->"🔨"; else->"📋" }) }
-                        )
-                        HorizontalDivider()
-                    }
-                }
-                // Poznamky
-                val notes = detail.notes
-                if (notes.isNotEmpty()) {
-                    item { Text("${Strings.notes} (${notes.size})", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
-                    items(notes) { n ->
-                        Card(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(n.note)
-                                Text("${n.created_by ?: Strings.you} · ${n.created_at ?: ""}", fontSize = 11.sp, color = Color.Gray)
-                            }
-                        }
+
+                LazyColumn(Modifier.weight(1f).padding(12.dp)) {
+                    when (selectedTab) {
+                        0 -> jobStageContent(detail, "start", viewModel)
+                        1 -> jobStageContent(detail, "process", viewModel)
+                        2 -> jobStageContent(detail, "end", viewModel)
+                        3 -> jobStageContent(detail, "complication", viewModel)
+                        4 -> auditLogContent(detail)
                     }
                 }
             }
         }
     }
 
-    // Dialog pro editaci zakazky
     if (showEditDialog && detail != null) {
         EditJobDialog(job = detail.job, onDismiss = { showEditDialog = false },
             onSave = { data -> viewModel.updateJob(jobId, data); showEditDialog = false })
     }
-    // Dialog pro poznamku
     if (showNoteDialog) {
         AddJobNoteDialog(onDismiss = { showNoteDialog = false },
-            onSave = { note -> viewModel.addJobNote(jobId, note); showNoteDialog = false })
+            onSave = { note -> viewModel.addJobNote(jobId, note, noteTypeForDialog); showNoteDialog = false })
     }
-    // Dialog pro zmenu stavu zakazky
     if (showStatusDialog && detail != null) {
         val statuses = listOf("nova","v_reseni","ceka_na_klienta","ceka_na_material","naplanovano","v_realizaci","dokonceno","vyfakturovano","uzavreno","pozastaveno","zruseno")
         AlertDialog(
@@ -1574,13 +1750,93 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
                         val isCurrent = s == detail.job.job_status
                         ListItem(
                             headlineContent = { Text(Strings.localizeStatus(s), fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal, color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.Unspecified) },
-                            modifier = Modifier.clickable { viewModel.updateJob(jobId, mapOf("job_status" to s)); showStatusDialog = false }
+                            modifier = Modifier.clickable { 
+                                viewModel.updateJob(jobId, mapOf("job_status" to s))
+                                viewModel.addJobAuditEntry(jobId, "status_change", "Status changed to $s")
+                                showStatusDialog = false 
+                            }
                         )
                     }
                 }
             },
             confirmButton = { TextButton(onClick = { showStatusDialog = false }) { Text(Strings.close) } }
         )
+    }
+}
+
+private fun LazyListScope.jobStageContent(detail: JobDetail, stage: String, viewModel: SecretaryViewModel) {
+    item {
+        Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                val stageTitle = when(stage) {
+                    "start" -> Strings.startLabel
+                    "process" -> Strings.progressLabel
+                    "end" -> Strings.endLabel
+                    "complication" -> Strings.complicationsLabel
+                    else -> stage
+                }
+                Text(stageTitle, fontWeight = FontWeight.Bold)
+                if (stage == "start") {
+                    Text("${Strings.jobNumber}: ${detail.job.job_number ?: "-"}")
+                    Text("${Strings.plan}: ${detail.job.start_date_planned ?: Strings.noTermin}")
+                }
+                detail.job.assigned_to?.let { Text("${Strings.assigned}: $it") }
+            }
+        }
+    }
+
+    val stageNotes = detail.notes.filter { 
+        if (stage == "complication") it.note_type == "complication" 
+        else it.note_type == stage || (stage == "process" && it.note_type == "general")
+    }
+    if (stageNotes.isNotEmpty()) {
+        item { Text(Strings.notes, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp)) }
+        items(stageNotes) { n ->
+            Card(Modifier.fillMaxWidth().padding(bottom = 4.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(n.note)
+                    Text("${n.created_by ?: ""} · ${n.created_at ?: ""}", fontSize = 11.sp, color = Color.Gray)
+                }
+            }
+        }
+    }
+
+    val stagePhotos = detail.photos.filter { it.photo_type == stage }
+    if (stagePhotos.isNotEmpty()) {
+        item { Text(Strings.photoAction, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp)) }
+        items(stagePhotos.chunked(2)) { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { photo ->
+                    Box(Modifier.weight(1f).aspectRatio(1f).padding(4.dp)) {
+                        CoilImage(
+                            imageModel = photo.url,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
+                        )
+                    }
+                }
+                if (row.size < 2) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+private fun LazyListScope.auditLogContent(detail: JobDetail) {
+    item {
+        Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(Strings.timestampLabel, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.2f))
+            Text(Strings.userLabel, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(Strings.actionLabel, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+        }
+        HorizontalDivider()
+    }
+    items(detail.audit_log.reversed()) { entry ->
+        Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(entry.created_at.split("T").lastOrNull()?.take(5) ?: "", fontSize = 12.sp, modifier = Modifier.weight(1.2f))
+            Text(entry.user_name ?: "-", fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text(entry.description, fontSize = 12.sp, modifier = Modifier.weight(2f))
+        }
+        HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray)
     }
 }
 
@@ -1643,6 +1899,9 @@ fun TaskDetailScreen(taskId: String, viewModel: SecretaryViewModel, navControlle
                             if (task.assignedTo != null) Text("${Strings.assigned}: ${task.assignedTo}")
                             if (task.deadline != null) Text("${Strings.deadline}: ${task.deadline}")
                             if (task.plannedDate != null) Text("${Strings.plan}: ${task.plannedDate}")
+                            if (task.plannedStartAt != null) Text("${Strings.plannedStart}: ${task.plannedStartAt}")
+                            if (task.plannedEndAt != null) Text("${Strings.plannedEnd}: ${task.plannedEndAt}")
+                            if (task.planningNote != null) Text("${Strings.planningNote}: ${task.planningNote}")
                             if (task.createdBy != null) Text("${Strings.createdBy}: ${task.createdBy}")
                             if (task.createdAt != null) Text("${Strings.created}: ${task.createdAt}", fontSize = 12.sp, color = Color.Gray)
                             Text("${Strings.sourceLabel}: ${task.source ?: "manual"}", fontSize = 12.sp, color = Color.Gray)
@@ -1802,15 +2061,21 @@ fun TaskRow(task: Task, viewModel: SecretaryViewModel, navController: NavHostCon
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TaskEditDialog(task: Task, onDismiss: () -> Unit, onSave: (Map<String, String>) -> Unit) {
+fun TaskEditDialog(task: Task, onDismiss: () -> Unit, onSave: (Map<String, Any?>) -> Unit) {
     var status by remember { mutableStateOf(task.status) }
     var priority by remember { mutableStateOf(task.priority) }
     var notes by remember { mutableStateOf(task.result ?: "") }
+    var assignedTo by remember { mutableStateOf(task.assignedTo ?: "") }
+    var plannedDate by remember { mutableStateOf(task.plannedDate ?: "") }
+    var plannedStart by remember { mutableStateOf(task.plannedStartAt ?: "") }
+    var plannedEnd by remember { mutableStateOf(task.plannedEndAt ?: "") }
+    var planningNote by remember { mutableStateOf(task.planningNote ?: "") }
+    var calendarSync by remember { mutableStateOf(task.calendarSyncEnabled) }
     val statuses = listOf("novy", "naplanovany", "v_reseni", "ceka_na_klienta", "ceka_na_material", "hotovo", "zruseno")
     val priorities = listOf("kriticka", "urgentni", "vysoka", "bezna", "nizka")
     AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.edit) },
         text = {
-            Column {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) { item {
                 Text(task.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 if (task.clientName != null) Text("${Strings.client}: ${task.clientName}", fontSize = 13.sp, color = Color.Gray)
                 if (task.description != null) Text(task.description, fontSize = 13.sp, color = Color.Gray)
@@ -1825,10 +2090,39 @@ fun TaskEditDialog(task: Task, onDismiss: () -> Unit, onSave: (Map<String, Strin
                     items(priorities) { p -> FilterChip(selected = priority == p, onClick = { priority = p }, label = { Text(Strings.localizeStatus(p), fontSize = 10.sp) }) }
                 }
                 Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = assignedTo, onValueChange = { assignedTo = it }, label = { Text(Strings.assigned) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = plannedDate, onValueChange = { plannedDate = it }, label = { Text("${Strings.plan} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = plannedStart, onValueChange = { plannedStart = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = plannedEnd, onValueChange = { plannedEnd = it }, label = { Text("${Strings.plannedEnd} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = planningNote, onValueChange = { planningNote = it }, label = { Text(Strings.planningNote) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(Strings.taskResult) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-            }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = calendarSync, onCheckedChange = { calendarSync = it })
+                    Text(Strings.syncCalendar)
+                }
+            } }
         },
-        confirmButton = { TextButton(onClick = { onSave(mapOf("status" to status, "priority" to priority, "result" to notes)) }) { Text(Strings.save) } },
+        confirmButton = { TextButton(onClick = {
+            onSave(
+                mapOf(
+                    "status" to status,
+                    "priority" to priority,
+                    "result" to notes,
+                    "assigned_to" to assignedTo.ifBlank { null },
+                    "planned_date" to plannedDate.ifBlank { null },
+                    "planned_start_at" to plannedStart.ifBlank { null },
+                    "planned_end_at" to plannedEnd.ifBlank { null },
+                    "planning_note" to planningNote.ifBlank { null },
+                    "calendar_sync_enabled" to calendarSync
+                )
+            )
+        }) { Text(Strings.save) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
@@ -1953,6 +2247,50 @@ class SecretaryViewModel : ViewModel() {
         .build()
         .create(SecretaryApi::class.java) }
 
+    private fun extractPermissionMap(raw: Any?): Map<String, Boolean> {
+        val map = raw as? Map<*, *> ?: return emptyMap()
+        return map.entries.mapNotNull { (key, value) ->
+            val code = key?.toString() ?: return@mapNotNull null
+            code to when (value) {
+                is Boolean -> value
+                is Number -> value.toInt() != 0
+                is String -> value.equals("true", ignoreCase = true) || value == "1"
+                else -> false
+            }
+        }.toMap()
+    }
+
+    private fun applyCurrentUserData(raw: Map<String, @JvmSuppressWildcards Any?>?) {
+        val user = raw ?: emptyMap()
+        val nestedUser = user["user"] as? Map<*, *>
+        val source = if (nestedUser != null) {
+            nestedUser.entries.associate { (k, v) -> k.toString() to v }
+        } else {
+            user
+        }
+        val userId = when (val value = source["id"]) {
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull()
+            else -> null
+        }
+        val role = source["role"]?.toString()
+            ?: source["role_name"]?.toString()
+        val permissions = extractPermissionMap(source["permissions"])
+        settingsManager?.setCurrentBackendUser(userId, role)
+        val preferredLang = source["preferred_language_code"]?.toString()?.takeIf { it.isNotBlank() }
+        val resolvedLang = settingsManager?.getAppLanguageForUser(userId, preferredLang ?: settingsManager?.appLanguage ?: "cs")
+            ?: preferredLang
+            ?: "cs"
+        settingsManager?.setCurrentAppLanguage(resolvedLang)
+        Strings.setLanguage(resolvedLang)
+        settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
+        _uiState.value = _uiState.value.copy(
+            currentUserId = userId,
+            currentUserRole = role,
+            currentUserPermissions = permissions
+        )
+    }
+
     fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager) {
         voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
         // Clear any stale voice session on startup
@@ -1973,20 +2311,35 @@ class SecretaryViewModel : ViewModel() {
                 try {
                     val res = api.authMe("Bearer $token")
                     if (res.isSuccessful) {
+                        applyCurrentUserData(res.body())
                         _uiState.value = _uiState.value.copy(loggedIn = true)
+                        loadTenantConfig()
                         checkOnboardingStatus()
                         return@launch
                     }
                 } catch (_: Exception) {}
                 // Token invalid — try refresh
                 if (tryRefreshToken()) {
-                    _uiState.value = _uiState.value.copy(loggedIn = true)
-                    checkOnboardingStatus()
-                    return@launch
+                    try {
+                        val refreshed = api.authMe("Bearer ${settingsManager?.accessToken}")
+                        if (refreshed.isSuccessful) {
+                            applyCurrentUserData(refreshed.body())
+                            _uiState.value = _uiState.value.copy(loggedIn = true)
+                            loadTenantConfig()
+                            checkOnboardingStatus()
+                            return@launch
+                        }
+                    } catch (_: Exception) {}
                 }
             }
             // No valid token — show login screen
-            _uiState.value = _uiState.value.copy(loggedIn = false)
+            settingsManager?.clearCurrentBackendUser()
+            _uiState.value = _uiState.value.copy(
+                loggedIn = false,
+                currentUserId = null,
+                currentUserRole = null,
+                currentUserPermissions = emptyMap()
+            )
         }
     }
 
@@ -1998,8 +2351,10 @@ class SecretaryViewModel : ViewModel() {
                     val body = res.body()
                     settingsManager?.accessToken = body?.get("access_token")?.toString()
                     settingsManager?.refreshToken = body?.get("refresh_token")?.toString()
+                    applyCurrentUserData(body)
                     _uiState.value = _uiState.value.copy(loggedIn = true)
                     onError(null) // signal success to caller
+                    loadTenantConfig()
                     checkOnboardingStatus()
                 } else {
                     onError("Neplatné přihlašovací údaje")
@@ -2089,6 +2444,7 @@ class SecretaryViewModel : ViewModel() {
         phone: String?,
         role: String,
         status: String,
+        permissions: Map<String, Boolean>,
         onDone: (Boolean, String?) -> Unit
     ) {
         viewModelScope.launch {
@@ -2099,7 +2455,8 @@ class SecretaryViewModel : ViewModel() {
                         "display_name" to displayName.trim(),
                         "phone" to phone?.trim().orEmpty(),
                         "role" to role,
-                        "status" to status
+                        "status" to status,
+                        "permissions" to permissions
                     )
                 )
                 if (res.isSuccessful) {
@@ -2159,6 +2516,7 @@ class SecretaryViewModel : ViewModel() {
     fun logout() {
         settingsManager?.accessToken = null
         settingsManager?.refreshToken = null
+        settingsManager?.clearCurrentBackendUser()
         _uiState.value = _uiState.value.copy(
             loggedIn = false,
             onboardingComplete = null,
@@ -2166,7 +2524,11 @@ class SecretaryViewModel : ViewModel() {
             backendUsers = emptyList(),
             backendRoles = emptyList(),
             backendUsersLoading = false,
-            backendUsersError = null
+            backendUsersError = null,
+            calendarFeed = emptyList(),
+            currentUserId = null,
+            currentUserRole = null,
+            currentUserPermissions = emptyMap()
         )
     }
 
@@ -2217,17 +2579,33 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     val config = res.body()
                     _uiState.value = _uiState.value.copy(tenantConfig = config)
-                    // Sync default internal language to voice recognition if not manually overridden
-                    val defaultLang = config?.get("default_internal_lang")?.toString()
-                    if (defaultLang != null && settingsManager != null) {
-                        val langMap = mapOf("cs" to "cs-CZ", "en" to "en-GB", "pl" to "pl-PL", "de" to "de-DE", "fr" to "fr-FR", "es" to "es-ES", "sk" to "sk-SK")
-                        langMap[defaultLang]?.let { locale ->
-                            settingsManager!!.recognitionLanguage = locale
-                        }
-                    }
                 }
             } catch (e: Exception) {
                 Log.e("ViewModel", "Tenant config load error", e)
+            }
+        }
+    }
+
+    fun updateCustomerLanguage(customerLang: String, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
+                    _uiState.value.currentUserRole == "admin"
+                if (!canManage) {
+                    onDone(false, Strings.backendPermissionDenied())
+                    return@launch
+                }
+                val res = api.updateTenantLanguages(1, mapOf("default_customer_language_code" to customerLang))
+                if (res.isSuccessful) {
+                    loadTenantConfig()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, parseBackendAdminError(res.code(), rawError, Strings.save))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Customer language update error", e)
+                onDone(false, e.message ?: Strings.connectionError)
             }
         }
     }
@@ -2295,15 +2673,43 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun addTaskToCalendar(task: Task) {
-        val dateStr = task.deadline ?: task.plannedDate ?: return
+        val dateStr = task.plannedStartAt ?: task.deadline ?: task.plannedDate ?: return
         try {
-            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-            val date = sdf.parse(dateStr) ?: return
-            val startMs = date.time + 9 * 3600000L // 9:00 rano
-            val endMs = startMs + 3600000L // 1 hodina
-            calendarManager?.addEvent(task.title, startMs, endMs)
+            val startMs = parseCalendarDate(dateStr) ?: return
+            val endMs = parseCalendarDate(task.plannedEndAt, defaultEnd = startMs + 3600000L) ?: (startMs + 3600000L)
+            val description = buildString {
+                append("SECRETARY_KEY:task:${task.id}")
+                if (!task.assignedTo.isNullOrBlank()) append("\n${Strings.assigned}: ${task.assignedTo}")
+                if (!task.clientName.isNullOrBlank()) append("\n${Strings.client}: ${task.clientName}")
+                if (!task.planningNote.isNullOrBlank()) append("\n${task.planningNote}")
+            }
+            calendarManager?.addEvent(task.title, startMs, endMs, description)
             setStatus(Strings.addedToCalendar(task.title))
         } catch (e: Exception) { Log.e("ViewModel", "Calendar add error", e); setStatus(Strings.connectionError) }
+    }
+
+    fun syncPlanningCalendar() {
+        val entries = _uiState.value.calendarFeed
+        if (entries.isEmpty()) {
+            setStatus(Strings.noCalendarEntries)
+            return
+        }
+        val synced = calendarManager?.syncPlanningEntries(entries) == true
+        setStatus(if (synced) Strings.planningCalendarSynced(entries.size) else Strings.planningCalendarSyncFailed)
+    }
+
+    private fun parseCalendarDate(raw: String?, defaultEnd: Long? = null): Long? {
+        if (raw.isNullOrBlank()) return defaultEnd
+        val patterns = listOf("yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd")
+        for (pattern in patterns) {
+            try {
+                val sdf = SimpleDateFormat(pattern, Locale.getDefault())
+                val parsed = sdf.parse(raw) ?: continue
+                return if (pattern == "yyyy-MM-dd") parsed.time + 9 * 3600000L else parsed.time
+            } catch (_: Exception) {
+            }
+        }
+        return defaultEnd
     }
 
     fun resumeVoiceSession(sessionId: String) {
@@ -2365,10 +2771,42 @@ class SecretaryViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(contextEntityId = id, contextType = type)
     }
 
+    fun addJobAuditEntry(jobId: Long, actionType: String, description: String) {
+        viewModelScope.launch {
+            try {
+                val entry = JobAuditEntry(job_id = jobId, action_type = actionType, description = description)
+                api.addJobAuditEntry(jobId, entry)
+                loadJobDetail(jobId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun uploadJobPhoto(jobId: Long, photoType: String, file: java.io.File, description: String? = null) {
+        viewModelScope.launch {
+            try {
+                val requestFile = okhttp3.RequestBody.create(okhttp3.MediaType.parse("image/*"), file)
+                val body = okhttp3.MultipartBody.Part.createFormData("file", file.name, requestFile)
+                val descPart = description?.let { okhttp3.RequestBody.create(okhttp3.MediaType.parse("text/plain"), it) }
+                val typePart = okhttp3.RequestBody.create(okhttp3.MediaType.parse("text/plain"), photoType)
+
+                val response = api.uploadJobPhoto(jobId, body, typePart, descPart)
+                if (response.isSuccessful) {
+                    addJobAuditEntry(jobId, "photo_upload", "Uploaded $photoType photo: ${file.name}")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     fun refreshCrmData() {
         viewModelScope.launch {
             try {
                 val cl = api.getClients(); if (cl.isSuccessful) _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList())
+                val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
+                val sc = api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
                 val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
                 val jb = api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
                 val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
@@ -2376,6 +2814,7 @@ class SecretaryViewModel : ViewModel() {
                 val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
+                loadCalendarFeedFromServer()
             } catch (e: Exception) { Log.e("ViewModel", "Refresh Error", e) }
         }
     }
@@ -2384,6 +2823,8 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val cl = api.getClients(); if (cl.isSuccessful) _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList())
+                val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
+                val sc = api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
                 val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
                 val jb = api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
                 val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
@@ -2391,7 +2832,29 @@ class SecretaryViewModel : ViewModel() {
                 val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
+                loadCalendarFeedFromServer()
             } catch (e: Exception) { Log.e("ViewModel", "Refresh Error", e) }
+        }
+    }
+
+    fun loadCalendarFeed(days: Int = 30) {
+        viewModelScope.launch {
+            loadCalendarFeedFromServer(days)
+        }
+    }
+
+    private suspend fun loadCalendarFeedFromServer(days: Int = 30) {
+        try {
+            val res = api.getCalendarFeed(days)
+            if (res.isSuccessful) {
+                val entries = res.body() ?: emptyList()
+                _uiState.value = _uiState.value.copy(calendarFeed = entries)
+                if (entries.isNotEmpty()) {
+                    calendarManager?.syncPlanningEntries(entries)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ViewModel", "Calendar feed load error", e)
         }
     }
 
@@ -2438,11 +2901,17 @@ class SecretaryViewModel : ViewModel() {
                         createdAt = m["created_at"]?.toString(),
                         deadline = m["deadline"]?.toString(),
                         plannedDate = m["planned_date"]?.toString(),
+                        plannedStartAt = m["planned_start_at"]?.toString(),
+                        plannedEndAt = m["planned_end_at"]?.toString(),
+                        assignedUserId = (m["assigned_user_id"] as? Number)?.toLong(),
                         assignedTo = m["assigned_to"]?.toString(),
+                        planningNote = m["planning_note"]?.toString(),
+                        reminderForAssigneeOnly = m["reminder_for_assignee_only"] as? Boolean ?: true,
                         clientName = m["client_name"]?.toString(),
                         clientId = (m["client_id"] as? Number)?.toLong(),
                         createdBy = m["created_by"]?.toString(),
                         result = m["result"]?.toString(),
+                        calendarSyncEnabled = m["calendar_sync_enabled"] as? Boolean ?: true,
                         isCompleted = m["is_completed"] as? Boolean ?: false
                     )
                 }
@@ -2521,12 +2990,268 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun updateClientServiceRates(clientId: Long, rates: Map<String, Any?>, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.updateClientServiceRates(clientId, rates)
+                if (res.isSuccessful) {
+                    loadClientDetail(clientId)
+                    refreshCrmData()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    val detail = rawError?.let {
+                        try {
+                            org.json.JSONObject(it).optString("detail").ifBlank { it }
+                        } catch (_: Exception) {
+                            it
+                        }
+                    }?.trim()
+                    onDone(false, detail ?: Strings.backendActionFailed(Strings.individualServiceRates, res.code()))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Update client service rates error", e)
+                onDone(false, e.message ?: Strings.backendActionFailed(Strings.individualServiceRates, 0))
+            }
+        }
+    }
+
     fun addClientNote(clientId: Long, note: String) {
         viewModelScope.launch {
             try {
                 val res = api.addClientNote(clientId, mapOf("note" to note))
                 if (res.isSuccessful) loadClientDetail(clientId)
             } catch (e: Exception) { Log.e("ViewModel", "Add note error", e) }
+        }
+    }
+
+    private fun preparePhoneContacts(
+        context: Context,
+        onlyUkNumbers: Boolean = true,
+        skipWithoutPhone: Boolean = true,
+        skipWithoutName: Boolean = true,
+        removeDuplicates: Boolean = true,
+        includeEmail: Boolean = true
+    ): List<Map<String, String>> {
+        val cm = ContactManager(context)
+        var contacts = if (includeEmail) cm.getContactsWithEmail() else cm.getAllContacts()
+
+        if (skipWithoutPhone) contacts = contacts.filter { it["phone"].orEmpty().isNotBlank() }
+        if (skipWithoutName) contacts = contacts.filter { it["name"].orEmpty().isNotBlank() }
+
+        contacts = contacts.map { c ->
+            val cleanedPhone = c["phone"].orEmpty()
+                .replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+            val cleanedEmail = c["email"].orEmpty().trim().lowercase(Locale.ROOT)
+            val normalizedName = c["name"].orEmpty().trim()
+            val contactKey = cleanedPhone.filter { it.isDigit() }
+                .ifBlank { cleanedEmail.ifBlank { normalizedName.lowercase(Locale.ROOT) } }
+            mapOf(
+                "contact_key" to contactKey,
+                "name" to normalizedName,
+                "phone" to cleanedPhone,
+                "email" to cleanedEmail
+            )
+        }.filter { it["contact_key"].orEmpty().isNotBlank() }
+
+        if (onlyUkNumbers) {
+            contacts = contacts.filter { c ->
+                val p = c["phone"].orEmpty()
+                p.startsWith("+44") || p.startsWith("0")
+            }
+        }
+
+        if (removeDuplicates) {
+            contacts = contacts.distinctBy { it["contact_key"] }
+        }
+        return contacts
+    }
+
+    fun loadClientSelectionContacts(
+        context: Context,
+        onDone: (List<SyncedContactCandidate>, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val localContacts = preparePhoneContacts(context)
+                val res = api.syncContacts(mapOf("contacts" to localContacts, "filter_uk" to true))
+                if (res.isSuccessful) {
+                    val remoteMap = (res.body()?.contacts ?: emptyList()).associateBy { it.contact_key }
+                    val merged = localContacts.map { local ->
+                        val key = local["contact_key"].orEmpty()
+                        val remote = remoteMap[key]
+                        SyncedContactCandidate(
+                            contact_key = key,
+                            name = local["name"].orEmpty(),
+                            phone = local["phone"],
+                            email = local["email"]?.ifBlank { null },
+                            selected_as_client = remote?.selected_as_client == true,
+                            linked_client_id = remote?.linked_client_id,
+                            linked_client_name = remote?.linked_client_name
+                        )
+                    }
+                    onDone(merged, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    val detail = rawError?.let {
+                        try {
+                            org.json.JSONObject(it).optString("detail").ifBlank { it }
+                        } catch (_: Exception) {
+                            it
+                        }
+                    }
+                    onDone(emptyList(), detail ?: Strings.serverError(res.code()))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Load client selection contacts error", e)
+                onDone(emptyList(), e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun saveClientSelectionContacts(
+        contacts: List<SyncedContactCandidate>,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val payload = contacts.map { contact ->
+                    mapOf(
+                        "contact_key" to contact.contact_key,
+                        "name" to contact.name,
+                        "phone" to contact.phone,
+                        "email" to contact.email,
+                        "selected_as_client" to contact.selected_as_client
+                    )
+                }
+                val res = api.syncContacts(mapOf("contacts" to payload, "filter_uk" to true))
+                if (res.isSuccessful) {
+                    refreshCrmData()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    val detail = rawError?.let {
+                        try {
+                            org.json.JSONObject(it).optString("detail").ifBlank { it }
+                        } catch (_: Exception) {
+                            it
+                        }
+                    }
+                    onDone(false, detail ?: Strings.serverError(res.code()))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Save client selection contacts error", e)
+                onDone(false, e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun loadImportableSharedContacts(
+        context: Context,
+        availableSections: List<ContactSection>,
+        onDone: (List<ImportableSharedContact>, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val defaultSection = availableSections.firstOrNull()?.section_code.orEmpty()
+                val localContacts = preparePhoneContacts(context)
+                val contacts = localContacts.map {
+                    ImportableSharedContact(
+                        contact_key = it["contact_key"].orEmpty(),
+                        name = it["name"].orEmpty(),
+                        phone = it["phone"]?.ifBlank { null },
+                        email = it["email"]?.ifBlank { null },
+                        selected = false,
+                        section_code = defaultSection
+                    )
+                }
+                onDone(contacts, null)
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Load importable shared contacts error", e)
+                onDone(emptyList(), e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun createContactSection(displayName: String, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.createContactSection(mapOf("display_name" to displayName))
+                if (res.isSuccessful) {
+                    refreshCrmData()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, rawError ?: Strings.serverError(res.code()))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Create contact section error", e)
+                onDone(false, e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun saveSharedContact(data: Map<String, Any?>, contactId: Long? = null, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = if (contactId == null) api.createSharedContact(data) else api.updateSharedContact(contactId, data)
+                if (res.isSuccessful) {
+                    refreshCrmData()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, rawError ?: Strings.serverError(res.code()))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Save shared contact error", e)
+                onDone(false, e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun deleteSharedContact(contactId: Long, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.deleteSharedContact(contactId)
+                if (res.isSuccessful) {
+                    refreshCrmData()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, rawError ?: Strings.serverError(res.code()))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Delete shared contact error", e)
+                onDone(false, e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun importSharedContacts(contacts: List<ImportableSharedContact>, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val payload = contacts.filter { it.selected }.map {
+                    mapOf(
+                        "contact_key" to it.contact_key,
+                        "display_name" to it.name,
+                        "phone_primary" to it.phone,
+                        "email_primary" to it.email,
+                        "section_code" to it.section_code,
+                        "selected" to it.selected
+                    )
+                }
+                val res = api.importSharedContacts(mapOf("contacts" to payload))
+                if (res.isSuccessful) {
+                    refreshCrmData()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, rawError ?: Strings.serverError(res.code()))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Import shared contacts error", e)
+                onDone(false, e.message ?: Strings.connectionError)
+            }
         }
     }
 
@@ -2540,34 +3265,9 @@ class SecretaryViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             try {
-                val cm = ContactManager(context)
-                var contacts = if (includeEmail) cm.getContactsWithEmail() else cm.getAllContacts()
-
-                if (skipWithoutPhone) contacts = contacts.filter { it["phone"].orEmpty().isNotBlank() }
-                if (skipWithoutName) contacts = contacts.filter { it["name"].orEmpty().isNotBlank() }
-
-                contacts = contacts.map { c ->
-                    val cleaned = c["phone"].orEmpty()
-                        .replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-                    c.toMutableMap().also { it["phone"] = cleaned }
-                }
-
-                if (onlyUkNumbers) {
-                    contacts = contacts.filter { c ->
-                        val p = c["phone"].orEmpty()
-                        p.startsWith("+44") || p.startsWith("0")
-                    }
-                }
-
-                if (removeDuplicates) {
-                    contacts = contacts.distinctBy { it["phone"] }
-                }
-
-                Log.d("ViewModel", "Syncing ${contacts.size} contacts (onlyUk=$onlyUkNumbers)")
+                val contacts = preparePhoneContacts(context, onlyUkNumbers, skipWithoutPhone, skipWithoutName, removeDuplicates, includeEmail)
                 val res = api.syncContacts(mapOf("contacts" to contacts, "filter_uk" to onlyUkNumbers))
                 if (res.isSuccessful) {
-                    val body = res.body()
-                    Log.d("ViewModel", "Sync done: created=${body?.get("created")}, skipped=${body?.get("skipped")}")
                     refreshCrmData()
                 }
             } catch (e: Exception) { Log.e("ViewModel", "Sync contacts error", e) }
@@ -2614,12 +3314,14 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun addJobNote(jobId: Long, note: String) {
+    fun addJobNote(jobId: Long, note: String, noteType: String = "general") {
         viewModelScope.launch {
             try {
-                val data = mapOf<String, Any?>("note" to note, "created_by" to "Marek")
-                api.addJobNote(jobId, data)
-                loadJobDetail(jobId)
+                val response = api.addJobNote(jobId, JobNote(job_id = jobId, note = note, note_type = noteType))
+                if (response.isSuccessful) {
+                    addJobAuditEntry(jobId, "note_added", "Added $noteType note: $note")
+                    loadJobDetail(jobId)
+                }
             } catch (e: Exception) { Log.e("ViewModel", "Add job note error", e) }
         }
     }
@@ -2695,7 +3397,14 @@ class SecretaryViewModel : ViewModel() {
                                 status = data["status"]?.toString() ?: t.status,
                                 priority = data["priority"]?.toString() ?: t.priority,
                                 result = data["result"]?.toString() ?: t.result,
+                                plannedDate = data["planned_date"]?.toString() ?: t.plannedDate,
+                                plannedStartAt = data["planned_start_at"]?.toString() ?: t.plannedStartAt,
+                                plannedEndAt = data["planned_end_at"]?.toString() ?: t.plannedEndAt,
+                                assignedUserId = (data["assigned_user_id"] as? Number)?.toLong() ?: t.assignedUserId,
                                 assignedTo = data["assigned_to"]?.toString() ?: t.assignedTo,
+                                planningNote = data["planning_note"]?.toString() ?: t.planningNote,
+                                reminderForAssigneeOnly = data["reminder_for_assignee_only"] as? Boolean ?: t.reminderForAssigneeOnly,
+                                calendarSyncEnabled = data["calendar_sync_enabled"] as? Boolean ?: t.calendarSyncEnabled,
                                 isCompleted = data["is_completed"] as? Boolean ?: t.isCompleted
                             )
                         } else t
@@ -2761,7 +3470,7 @@ class SecretaryViewModel : ViewModel() {
     fun startWorkReportSession() {
         viewModelScope.launch {
             try {
-                val lang = settingsManager?.appLanguage ?: "en"
+                val lang = settingsManager?.getCurrentAppLanguage() ?: "en"
                 val data = mapOf<String, Any?>("tenant_id" to 1, "language" to lang, "work_date" to java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()))
                 val res = api.voiceSessionStart(data)
                 if (res.isSuccessful) {
@@ -2874,8 +3583,8 @@ class SecretaryViewModel : ViewModel() {
                     history = updatedHistory,
                     context_entity_id = currentState.contextEntityId,
                     context_type = currentState.contextType,
-                    internal_language = settingsManager?.appLanguage ?: Strings.getLangCode(),
-                    external_language = settingsManager?.appLanguage ?: Strings.getLangCode(),
+                    internal_language = settingsManager?.getCurrentAppLanguage() ?: Strings.getLangCode(),
+                    external_language = currentState.tenantConfig?.get("default_customer_lang")?.toString() ?: Strings.getLangCode(),
                     calendar_context = calendarManager?.getCalendarContext(),
                     current_datetime = nowStr
                 ))
@@ -3000,10 +3709,16 @@ class SecretaryViewModel : ViewModel() {
                     priority = data["priority"]?.toString() ?: "bezna",
                     createdAt = data["created_at"]?.toString(),
                     deadline = data["deadline"]?.toString(),
+                    plannedDate = data["planned_date"]?.toString(),
+                    plannedStartAt = data["planned_start_at"]?.toString(),
+                    plannedEndAt = data["planned_end_at"]?.toString(),
+                    assignedUserId = (data["assigned_user_id"] as? Number)?.toLong(),
                     assignedTo = data["assigned_to"]?.toString(),
+                    planningNote = data["planning_note"]?.toString(),
                     clientName = data["client_name"]?.toString(),
                     clientId = (data["client_id"] as? Number)?.toLong(),
-                    createdBy = data["created_by"]?.toString() ?: "Marek"
+                    createdBy = data["created_by"]?.toString() ?: "Marek",
+                    calendarSyncEnabled = data["calendar_sync_enabled"] as? Boolean ?: true
                 )
                 _uiState.value = _uiState.value.copy(tasks = _uiState.value.tasks + newTask)
             }
@@ -3052,7 +3767,7 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun changeLanguage(langCode: String) {
-        settingsManager?.appLanguage = langCode
+        settingsManager?.setCurrentAppLanguage(langCode)
         Strings.setLanguage(langCode)
         // Update recognition language to match
         settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
@@ -3107,8 +3822,11 @@ data class UiState(
     val history: List<ChatMessage> = emptyList(),
     val contactResults: List<Map<String, String>> = emptyList(),
     val systemSettings: Map<String, Any> = emptyMap(),
+    val calendarFeed: List<CalendarFeedEntry> = emptyList(),
     val tasks: List<Task> = emptyList(), 
     val clients: List<Client> = emptyList(), 
+    val sharedContacts: List<SharedContact> = emptyList(),
+    val contactSections: List<ContactSection> = emptyList(),
     val properties: List<Property> = emptyList(),
     val jobs: List<Job> = emptyList(), 
     val waste: List<WasteLoad> = emptyList(),
@@ -3138,5 +3856,8 @@ data class UiState(
     val isVoiceSessionActive: Boolean = false,
     val onboardingComplete: Boolean? = null,
     val tenantConfig: Map<String, Any?>? = null,
+    val currentUserId: Long? = null,
+    val currentUserRole: String? = null,
+    val currentUserPermissions: Map<String, Boolean> = emptyMap(),
     val loggedIn: Boolean? = null
 )

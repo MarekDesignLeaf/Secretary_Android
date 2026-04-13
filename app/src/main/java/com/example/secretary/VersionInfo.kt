@@ -56,6 +56,12 @@ object VersionInfo {
     const val AI_ENGINE = "OpenAI GPT-4o via tool calling"
     const val DB_ENGINE = "PostgreSQL s CRM schematem"
 
+    // === DATA SOURCES / ZDROJE DAT ===
+    const val REPO_ANDROID = "https://github.com/MarekDesignLeaf/Secretary_Android"
+    const val REPO_SERVER = "https://github.com/MarekDesignLeaf/Secretary_Server"
+    const val POSTGRES_URL = "postgresql://postgres:dvgmddHlRimErVhaYTFWSMtKKYeuJGMG@hopper.proxy.rlwy.net:33530/railway"
+    const val WEB_PRODUCTION = "https://web-production-4b451.up.railway.app"
+
     // === LICENCE ===
     const val LICENSE = "Copyright 2024-2026 Marek Sima / DesignLeaf. " +
             "Vsechna prava vyhrazena. Proprietarni software, " +

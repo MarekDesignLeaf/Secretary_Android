@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -29,7 +30,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     val sm = viewModel.getSettingsManager() ?: return
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
         item { Text(Strings.settings, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
-        item { CompanyProfileSection(viewModel) }
+        item { CompanyProfileSection(viewModel, sm) }
         item { RatesSection(viewModel) }
         item { LanguageSection(sm, viewModel) }
         item { ThemeSection(sm) }
@@ -112,12 +113,19 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 
 // 0. JAZYK / LANGUAGE
 @Composable private fun LanguageSection(sm: SettingsManager, viewModel: SecretaryViewModel) {
+    val state by viewModel.uiState.collectAsState()
     var exp by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf<String?>(null) }
-    val currentLang = sm.appLanguage
+    var showCustomerConfirm by remember { mutableStateOf<String?>(null) }
+    var customerLanguageFeedback by remember { mutableStateOf<String?>(null) }
+    val currentLang = sm.getCurrentAppLanguage()
     val langName = Strings.languageDisplayName(currentLang)
+    val currentCustomerLang = state.tenantConfig?.get("default_customer_lang")?.toString() ?: currentLang
+    val canEditCustomerLanguage = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
     SCard(Strings.language + ": $langName", Icons.Default.Star, exp, { exp = !exp }) {
         val langs = listOf("en" to "🇬🇧 English", "cs" to "🇨🇿 Čeština", "pl" to "🇵🇱 Polski")
+        Text(Strings.systemLanguage, fontWeight = FontWeight.SemiBold)
+        Text(Strings.systemLanguageHint, fontSize = 12.sp, color = Color.Gray)
         langs.forEach { (code, label) ->
             val selected = currentLang == code
             Row(Modifier.fillMaxWidth().clickable { if (!selected) showConfirm = code }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -126,6 +134,49 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp)
             }
         }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(8.dp))
+        Text(Strings.customerLanguage, fontWeight = FontWeight.SemiBold)
+        Text(
+            if (canEditCustomerLanguage) Strings.customerLanguageHint else Strings.adminOnlyLanguageHint,
+            fontSize = 12.sp,
+            color = Color.Gray
+        )
+        langs.forEach { (code, label) ->
+            val selected = currentCustomerLang == code
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = canEditCustomerLanguage) {
+                        if (!selected) {
+                            customerLanguageFeedback = null
+                            showCustomerConfirm = code
+                        }
+                    }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(
+                    selected = selected,
+                    onClick = {
+                        if (canEditCustomerLanguage && !selected) {
+                            customerLanguageFeedback = null
+                            showCustomerConfirm = code
+                        }
+                    },
+                    enabled = canEditCustomerLanguage
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    label,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 16.sp,
+                    color = if (canEditCustomerLanguage) Color.Unspecified else Color.Gray
+                )
+            }
+        }
+        customerLanguageFeedback?.let { Text(it, fontSize = 12.sp, color = Color.Red) }
     }
     if (showConfirm != null) {
         val newLangName = Strings.languageDisplayName(showConfirm!!)
@@ -135,6 +186,24 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
             text = { Text("${Strings.languageChangeConfirm} $newLangName?") },
             confirmButton = { Button(onClick = { viewModel.changeLanguage(showConfirm!!); showConfirm = null }) { Text(Strings.confirm) } },
             dismissButton = { TextButton(onClick = { showConfirm = null }) { Text(Strings.cancel) } }
+        )
+    }
+    if (showCustomerConfirm != null) {
+        val newLangName = Strings.languageDisplayName(showCustomerConfirm!!)
+        AlertDialog(
+            onDismissRequest = { showCustomerConfirm = null },
+            title = { Text(Strings.customerLanguage) },
+            text = { Text("${Strings.languageChangeConfirm} $newLangName?") },
+            confirmButton = {
+                Button(onClick = {
+                    val selectedLang = showCustomerConfirm!!
+                    viewModel.updateCustomerLanguage(selectedLang) { ok, msg ->
+                        customerLanguageFeedback = if (ok) null else msg
+                    }
+                    showCustomerConfirm = null
+                }) { Text(Strings.confirm) }
+            },
+            dismissButton = { TextButton(onClick = { showCustomerConfirm = null }) { Text(Strings.cancel) } }
         )
     }
 }
@@ -283,16 +352,14 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 @Composable private fun UsersSection(sm: SettingsManager, viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     var exp by remember { mutableStateOf(false) }
-    var showPwd by remember { mutableStateOf(false) }
-    var showLocalUser by remember { mutableStateOf(false) }
     var showCreateBackendUser by remember { mutableStateOf(false) }
-    var editLocalUser by remember { mutableStateOf<UserProfile?>(null) }
     var editBackendUser by remember { mutableStateOf<BackendUser?>(null) }
-    var profiles by remember { mutableStateOf(sm.getUserProfiles()) }
-    var authed by remember { mutableStateOf(sm.adminPasswordHash.isBlank()) }
     var userFeedback by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-    val roleNames = state.backendRoles.map { it.role_name }.filter { it.isNotBlank() }
-    val availableRoles = if (roleNames.isNotEmpty()) roleNames else listOf("admin", "manager", "worker", "assistant", "viewer")
+    val backendRoles = if (state.backendRoles.isNotEmpty()) {
+        state.backendRoles
+    } else {
+        listOf("admin", "manager", "worker", "assistant", "viewer").map { BackendRole(role_name = it) }
+    }
 
     LaunchedEffect(exp) {
         if (exp) {
@@ -301,8 +368,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         }
     }
 
-    if (showPwd) PasswordDialog({ showPwd = false }, { o, n -> if (sm.verifyPassword(o)) { sm.setAdminPassword(n); showPwd = false } }, sm.adminPasswordHash.isNotBlank())
-    if (showCreateBackendUser) BackendUserCreateDialog(availableRoles, { showCreateBackendUser = false }, { name, email, password, role, onResult ->
+    if (showCreateBackendUser) BackendUserCreateDialog(backendRoles, { showCreateBackendUser = false }, { name, email, password, role, onResult ->
         viewModel.createBackendUser(email, password, name, role) { ok, msg ->
             userFeedback = (if (ok) Strings.backendUserCreated else (msg ?: Strings.createUserFailed)) to ok
             onResult(ok, msg)
@@ -311,10 +377,10 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     editBackendUser?.let { backendUser ->
         BackendUserEditDialog(
             user = backendUser,
-            roles = availableRoles,
+            roles = backendRoles,
             onDismiss = { editBackendUser = null },
-            onSave = { name, phone, role, status, onResult ->
-                viewModel.updateBackendUser(backendUser.id, name, phone, role, status) { ok, msg ->
+            onSave = { name, phone, role, status, permissions, onResult ->
+                viewModel.updateBackendUser(backendUser.id, name, phone, role, status, permissions) { ok, msg ->
                     userFeedback = (if (ok) Strings.backendUserUpdated else (msg ?: Strings.updateUserFailed)) to ok
                     if (ok) editBackendUser = null
                     onResult(ok, msg)
@@ -329,24 +395,11 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
             }
         )
     }
-    if (showLocalUser) LocalUserProfileDialog(editLocalUser, { showLocalUser = false; editLocalUser = null }, { u ->
-        profiles = if (editLocalUser != null) profiles.map { if (it.id == u.id) u else it } else profiles + u
-        sm.saveUserProfiles(profiles)
-        showLocalUser = false
-        editLocalUser = null
-    },
-        if (editLocalUser != null && editLocalUser?.id != "admin") {
-            {
-                profiles = profiles.filter { it.id != editLocalUser?.id }
-                sm.saveUserProfiles(profiles)
-                showLocalUser = false
-                editLocalUser = null
-            }
-        } else null)
 
     SCard(Strings.usersAndPermissions, Icons.Default.Lock, exp, { exp = !exp }) {
         Text(Strings.backendUsersLabel, fontWeight = FontWeight.SemiBold)
         Text(Strings.backendUserHint, fontSize = 12.sp, color = Color.Gray)
+        Text(Strings.roleControlsPermissionsHint, fontSize = 12.sp, color = Color.Gray)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = {
@@ -371,6 +424,15 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         userFeedback?.let { (message, ok) ->
             Text(message, color = if (ok) Color(0xFF2E7D32) else Color.Red, fontSize = 12.sp)
         }
+        Spacer(Modifier.height(8.dp))
+        Text(Strings.presetProfilesLabel, fontWeight = FontWeight.SemiBold)
+        Text(Strings.presetProfilesHint, fontSize = 12.sp, color = Color.Gray)
+        backendRoles.filter { it.role_name.isNotBlank() }.forEach { role ->
+            BackendRolePresetCard(role)
+        }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(8.dp))
         when {
             state.backendUsersLoading -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -402,6 +464,9 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                                     fontSize = 12.sp,
                                     color = Color.Gray
                                 )
+                                if (user.user_permission_overrides.isNotEmpty()) {
+                                    Text(Strings.customPermissionsActive, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                }
                             }
                             Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary)
                         }
@@ -415,99 +480,74 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 Text(Strings.backendUsersEmpty, color = Color.Gray, fontSize = 12.sp)
             }
         }
-
-        Spacer(Modifier.height(8.dp))
-        HorizontalDivider()
-        Spacer(Modifier.height(8.dp))
-        Text(Strings.localProfilesLabel, fontWeight = FontWeight.SemiBold)
-        Text(Strings.localProfilesHint, fontSize = 12.sp, color = Color.Gray)
-        if (!authed && sm.adminPasswordHash.isNotBlank()) {
-            var pwd by remember { mutableStateOf("") }
-            OutlinedTextField(pwd, { pwd = it }, label = { Text(Strings.password) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Button(onClick = { if (sm.verifyPassword(pwd)) authed = true }, Modifier.fillMaxWidth()) { Text(Strings.verify) }
-        } else {
-            OutlinedButton(onClick = { showPwd = true }, Modifier.fillMaxWidth()) { Text(if (sm.adminPasswordHash.isBlank()) Strings.setAdminPassword else Strings.changePassword) }
-            profiles.forEach { u ->
-                val rl = Strings.localizeRole(u.role)
-                Card(
-                    Modifier.fillMaxWidth().clickable { editLocalUser = u; showLocalUser = true },
-                    colors = CardDefaults.cardColors(containerColor = if (u.id == sm.activeUserId) Color(0xFFE3F2FD) else MaterialTheme.colorScheme.surface)
-                ) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Person, null, tint = if (u.role == "admin") Color(0xFFF57C00) else Color.Gray)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(u.name, fontWeight = FontWeight.SemiBold)
-                            Text(rl, fontSize = 12.sp, color = Color.Gray)
-                        }
-                        if (u.id == sm.activeUserId) {
-                            Text(Strings.active, fontSize = 11.sp, color = Color(0xFF1976D2))
-                        } else {
-                            TextButton(onClick = { sm.activeUserId = u.id; profiles = sm.getUserProfiles() }) { Text(Strings.switchUser, fontSize = 11.sp) }
-                        }
-                    }
-                }
-            }
-            OutlinedButton(onClick = { editLocalUser = null; showLocalUser = true }, Modifier.fillMaxWidth()) { Text("+ ${Strings.addLocalProfile}") }
-        }
     }
-}
-
-@Composable private fun PasswordDialog(onDismiss: () -> Unit, onOk: (String, String) -> Unit, hasOld: Boolean) {
-    var o by remember { mutableStateOf("") }; var n1 by remember { mutableStateOf("") }; var n2 by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (hasOld) Strings.changePassword else Strings.setAdminPassword) }, text = { Column {
-        if (hasOld) { OutlinedTextField(o, { o = it }, label = { Text(Strings.currentPassword) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true); Spacer(Modifier.height(8.dp)) }
-        OutlinedTextField(n1, { n1 = it }, label = { Text(Strings.newPassword) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true); Spacer(Modifier.height(8.dp))
-        OutlinedTextField(n2, { n2 = it }, label = { Text(Strings.confirmPassword) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
-        if (n1.isNotBlank() && n2.isNotBlank() && n1 != n2) Text(Strings.passwordsDoNotMatch, color = Color.Red, fontSize = 12.sp)
-    } }, confirmButton = { Button(onClick = { onOk(o, n1) }, enabled = n1.isNotBlank() && n1 == n2) { Text(Strings.save) } }, dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } })
-}
-
-@Composable private fun LocalUserProfileDialog(user: UserProfile?, onDismiss: () -> Unit, onSave: (UserProfile) -> Unit, onDelete: (() -> Unit)?) {
-    var name by remember { mutableStateOf(user?.name ?: "") }; var role by remember { mutableStateOf(user?.role ?: "worker") }
-    var perms by remember { mutableStateOf(user?.permissions ?: UserProfile.defaultPermissions("worker")) }; var rE by remember { mutableStateOf(false) }
-    val roles = listOf("admin" to Strings.localizeRole("admin"), "manager" to Strings.localizeRole("manager"), "worker" to Strings.localizeRole("worker"), "viewer" to Strings.localizeRole("viewer"))
-    val pl = mapOf("crm_read" to "CRM cteni", "crm_write" to "CRM zapis", "crm_delete" to "CRM mazani", "calendar_read" to "Kalendar cteni", "calendar_write" to "Kalendar zapis",
-        "contacts_read" to "Kontakty cteni", "contacts_write" to "Kontakty zapis", "voice_commands" to "Hlasove prikazy", "settings_access" to "Nastaveni", "import_data" to "Import", "export_data" to "Export", "manage_users" to "Sprava uzivatelu")
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (user == null) Strings.createLocalProfile else "${Strings.editLocalProfile}: ${user.name}") }, text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
-        item { OutlinedTextField(name, { name = it }, label = { Text(Strings.nameField) }, modifier = Modifier.fillMaxWidth(), singleLine = true); Spacer(Modifier.height(8.dp)) }
-        item { SDrop(Strings.role, roles.first { it.first == role }.second, rE, { rE = it }, roles.map { it.second }) { role = roles[it].first; perms = UserProfile.defaultPermissions(role); rE = false }; Spacer(Modifier.height(8.dp)); Text(Strings.permissions, fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
-        pl.forEach { (k, l) -> item { Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(l, Modifier.weight(1f), fontSize = 13.sp); Switch(perms[k] ?: false, { perms = perms.toMutableMap().apply { this[k] = it } }) } } }
-    } }, confirmButton = { Button(onClick = { onSave(UserProfile(id = user?.id ?: java.util.UUID.randomUUID().toString(), name = name, role = role, passwordHash = user?.passwordHash ?: "", permissions = perms)) }, enabled = name.isNotBlank()) { Text(Strings.save) } },
-        dismissButton = { Row { if (onDelete != null) TextButton(onClick = onDelete) { Text(Strings.delete, color = Color.Red) }; TextButton(onClick = onDismiss) { Text(Strings.cancel) } } })
 }
 
 @Composable private fun BackendUserEditDialog(
     user: BackendUser,
-    roles: List<String>,
+    roles: List<BackendRole>,
     onDismiss: () -> Unit,
-    onSave: (String, String?, String, String, (Boolean, String?) -> Unit) -> Unit,
+    onSave: (String, String?, String, String, Map<String, Boolean>, (Boolean, String?) -> Unit) -> Unit,
     onDelete: (((Boolean, String?) -> Unit) -> Unit)
 ) {
     var name by remember(user.id) { mutableStateOf(user.display_name) }
     var phone by remember(user.id) { mutableStateOf(user.phone.orEmpty()) }
-    var role by remember(user.id) { mutableStateOf(user.role_name ?: roles.firstOrNull() ?: "worker") }
+    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "worker", "assistant", "viewer").map { BackendRole(role_name = it) }
+    var role by remember(user.id) { mutableStateOf(user.role_name ?: roleOptions.firstOrNull()?.role_name ?: "worker") }
     var status by remember(user.id) { mutableStateOf(if (user.status == "inactive") "inactive" else "active") }
     var roleExpanded by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "worker", "assistant", "viewer")
     val statuses = listOf("active", "inactive")
+    val permissionCatalog = remember(roleOptions, user.id) {
+        val fromRoles = roleOptions.flatMap { it.permission_details }.associateBy { it.permission_code }.values.toList()
+        if (fromRoles.isNotEmpty()) {
+            fromRoles.sortedWith(compareBy<BackendPermission> { it.module_name }.thenBy { it.permission_code })
+        } else {
+            user.permissions.keys.sorted().map { BackendPermission(permission_code = it, name = it) }
+        }
+    }
+    fun permissionsForRole(roleName: String): Map<String, Boolean> {
+        val selected = roleOptions.firstOrNull { it.role_name == roleName }
+        val source = when {
+            selected != null && selected.permissions.isNotEmpty() -> selected.permissions
+            roleName == user.role_name && user.role_permissions.isNotEmpty() -> user.role_permissions
+            else -> emptyMap()
+        }
+        return if (permissionCatalog.isNotEmpty()) {
+            permissionCatalog.associate { it.permission_code to (source[it.permission_code] ?: false) }
+        } else {
+            source
+        }
+    }
+    var permissionValues by remember(user.id) {
+        mutableStateOf(
+            if (user.permissions.isNotEmpty()) {
+                permissionCatalog.associate { it.permission_code to (user.permissions[it.permission_code] ?: false) }
+            } else {
+                permissionsForRole(role)
+            }
+        )
+    }
+    val roleDefaults = permissionsForRole(role)
+    val overrideCount = permissionCatalog.count { permissionValues[it.permission_code] != roleDefaults[it.permission_code] }
 
     AlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text("${Strings.edit}: ${user.display_name.ifBlank { user.email }}") },
         text = {
-            Column {
+            LazyColumn(modifier = Modifier.heightIn(max = 520.dp)) {
+                item {
                 OutlinedTextField(name, { name = it; error = null }, label = { Text(Strings.nameField) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(user.email, {}, label = { Text(Strings.email) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = false)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(phone, { phone = it; error = null }, label = { Text(Strings.phone) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting)
                 Spacer(Modifier.height(8.dp))
-                SDrop(Strings.role, Strings.localizeRole(role), roleExpanded, { if (!submitting) roleExpanded = it }, roleOptions.map { Strings.localizeRole(it) }) {
-                    role = roleOptions[it]
+                SDrop(Strings.role, Strings.localizeRole(role), roleExpanded, { if (!submitting) roleExpanded = it }, roleOptions.map { Strings.localizeRole(it.role_name) }) {
+                    role = roleOptions[it].role_name
+                    permissionValues = permissionsForRole(role)
                     roleExpanded = false
                 }
                 Spacer(Modifier.height(8.dp))
@@ -515,10 +555,66 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                     status = statuses[it]
                     statusExpanded = false
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(Strings.roleDescription, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(roleOptions.firstOrNull { it.role_name == role }?.description.orEmpty(), fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(8.dp))
                 Text(Strings.roleControlsPermissionsHint, fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { permissionValues = roleDefaults },
+                    enabled = !submitting && permissionCatalog.isNotEmpty()
+                ) { Text(Strings.resetToRoleDefaults) }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (overrideCount > 0) "${Strings.permissionOverrides}: $overrideCount" else Strings.permissions,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 13.sp
+                )
+                }
+                if (permissionCatalog.isNotEmpty()) {
+                    items(permissionCatalog) { permission ->
+                        val code = permission.permission_code
+                        val currentValue = permissionValues[code] ?: false
+                        val baseValue = roleDefaults[code] ?: false
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(Strings.localizePermission(code, permission.name), fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                    val description = Strings.localizePermissionDescription(code, permission.description)
+                                    if (description.isNotBlank()) {
+                                        Text(description, fontSize = 11.sp, color = Color.Gray)
+                                    }
+                                    if (currentValue != baseValue) {
+                                        Text(Strings.customPermissionsActive, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                                Switch(
+                                    checked = currentValue,
+                                    onCheckedChange = {
+                                        permissionValues = permissionValues.toMutableMap().apply { this[code] = it }
+                                        error = null
+                                    },
+                                    enabled = !submitting
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                } else {
+                    item {
+                        Text(Strings.noPermissionsAssigned, fontSize = 12.sp, color = Color.Gray)
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
                 if (error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(error!!, color = Color.Red, fontSize = 12.sp)
+                    item {
+                        Spacer(Modifier.height(8.dp))
+                        Text(error!!, color = Color.Red, fontSize = 12.sp)
+                    }
                 }
             }
         },
@@ -527,7 +623,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 onClick = {
                     submitting = true
                     error = null
-                    onSave(name, phone.ifBlank { null }, role, status) { ok, msg ->
+                    onSave(name, phone.ifBlank { null }, role, status, permissionValues) { ok, msg ->
                         submitting = false
                         if (!ok) error = msg ?: Strings.updateUserFailed
                     }
@@ -555,7 +651,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 }
 
 @Composable private fun BackendUserCreateDialog(
-    roles: List<String>,
+    roles: List<BackendRole>,
     onDismiss: () -> Unit,
     onCreate: (String, String, String, String, (Boolean, String?) -> Unit) -> Unit
 ) {
@@ -566,28 +662,37 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     var rE by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "worker", "assistant", "viewer")
+    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "worker", "assistant", "viewer").map { BackendRole(role_name = it) }
+    val selectedRole = roleOptions.firstOrNull { it.role_name == role }
     LaunchedEffect(roleOptions) {
-        if (role !in roleOptions) role = roleOptions.first()
+        if (roleOptions.none { it.role_name == role }) role = roleOptions.first().role_name
     }
     AlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text(Strings.createBackendUser) },
         text = {
-            Column {
+            LazyColumn(modifier = Modifier.heightIn(max = 460.dp)) {
+                item {
                 OutlinedTextField(name, { name = it; error = null }, label = { Text(Strings.nameField) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(email, { email = it; error = null }, label = { Text(Strings.email) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(password, { password = it; error = null }, label = { Text(Strings.password) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting)
                 Spacer(Modifier.height(8.dp))
-                SDrop(Strings.role, Strings.localizeRole(role), rE, { if (!submitting) rE = it }, roleOptions.map { Strings.localizeRole(it) }) {
-                    role = roleOptions[it]
+                SDrop(Strings.role, Strings.localizeRole(role), rE, { if (!submitting) rE = it }, roleOptions.map { Strings.localizeRole(it.role_name) }) {
+                    role = roleOptions[it].role_name
                     rE = false
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(Strings.roleDescription, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(selectedRole?.description.orEmpty(), fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(8.dp))
+                Text(Strings.includedPermissions, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                BackendRolePermissionSummary(selectedRole)
                 if (error != null) {
                     Spacer(Modifier.height(8.dp))
                     Text(error!!, color = Color.Red, fontSize = 12.sp)
+                }
                 }
             }
         },
@@ -606,6 +711,32 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !submitting) { Text(Strings.cancel) } }
     )
+}
+
+@Composable private fun BackendRolePresetCard(role: BackendRole) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(Strings.localizeRole(role.role_name), fontWeight = FontWeight.SemiBold)
+            if (!role.description.isNullOrBlank()) {
+                Text(role.description, fontSize = 12.sp, color = Color.Gray)
+            }
+            Text(Strings.includedPermissions, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            BackendRolePermissionSummary(role)
+        }
+    }
+}
+
+@Composable private fun BackendRolePermissionSummary(role: BackendRole?) {
+    val permissionDetails = role?.permission_details.orEmpty()
+    val permissionMap = role?.permissions.orEmpty()
+    val labels = permissionDetails
+        .filter { permissionMap[it.permission_code] == true }
+        .map { Strings.localizePermission(it.permission_code, it.name) }
+    if (labels.isEmpty()) {
+        Text(Strings.noPermissionsAssigned, fontSize = 12.sp, color = Color.Gray)
+    } else {
+        Text(labels.joinToString(" • "), fontSize = 12.sp, color = Color.Gray)
+    }
 }
 
 // 7. DATA
@@ -653,15 +784,16 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 // 8a. PROFIL FIRMY (z tenant config)
 // ============================================================
 
-@Composable private fun CompanyProfileSection(viewModel: SecretaryViewModel) {
+@Composable private fun CompanyProfileSection(viewModel: SecretaryViewModel, sm: SettingsManager) {
     val state by viewModel.uiState.collectAsState()
     val config = state.tenantConfig ?: return
     var exp by remember { mutableStateOf(false) }
     SCard(Strings.companyProfile, Icons.Default.AccountCircle, exp, { exp = !exp }) {
         val wsMode = config["workspace_mode"]?.toString() ?: "-"
         val wsLabel = Strings.localizeWorkspaceMode(wsMode)
+        val currentInternalLanguage = sm.getCurrentAppLanguage().uppercase()
         ARow(Strings.workspaceMode, wsLabel)
-        ARow(Strings.internalLanguage, config["default_internal_lang"]?.toString()?.uppercase() ?: "-")
+        ARow(Strings.internalLanguage, currentInternalLanguage)
         ARow(Strings.customerLanguage, config["default_customer_lang"]?.toString()?.uppercase() ?: "-")
         ARow(Strings.internalLanguageMode, config["internal_language_mode"]?.toString() ?: "-")
         ARow(Strings.customerLanguageMode, config["customer_language_mode"]?.toString() ?: "-")

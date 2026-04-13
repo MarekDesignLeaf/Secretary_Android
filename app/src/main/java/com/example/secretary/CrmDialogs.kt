@@ -23,15 +23,45 @@ import androidx.compose.ui.unit.sp
 fun EditJobDialog(job: Job, onDismiss: () -> Unit, onSave: (Map<String, Any?>) -> Unit) {
     var title by remember { mutableStateOf(job.job_title) }
     var startDate by remember { mutableStateOf(job.start_date_planned ?: "") }
+    var plannedStart by remember { mutableStateOf(job.planned_start_at ?: "") }
+    var plannedEnd by remember { mutableStateOf(job.planned_end_at ?: "") }
+    var assignedTo by remember { mutableStateOf(job.assigned_to ?: "") }
+    var handoverNote by remember { mutableStateOf(job.handover_note ?: "") }
+    var calendarSync by remember { mutableStateOf(job.calendar_sync_enabled) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.editJob) },
         text = {
-            Column {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) { item {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(Strings.jobTitle) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = plannedStart, onValueChange = { plannedStart = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = plannedEnd, onValueChange = { plannedEnd = it }, label = { Text("${Strings.plannedEnd} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = assignedTo, onValueChange = { assignedTo = it }, label = { Text(Strings.assigned) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = handoverNote, onValueChange = { handoverNote = it }, label = { Text(Strings.handoverNote) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = calendarSync, onCheckedChange = { calendarSync = it })
+                    Text(Strings.syncCalendar)
+                }
+            } }
         },
-        confirmButton = { Button(onClick = { onSave(mapOf("job_title" to title, "start_date_planned" to startDate.ifBlank { null })) }) { Text(Strings.save) } },
+        confirmButton = { Button(onClick = {
+            onSave(
+                mapOf(
+                    "job_title" to title,
+                    "start_date_planned" to startDate.ifBlank { null },
+                    "planned_start_at" to plannedStart.ifBlank { null },
+                    "planned_end_at" to plannedEnd.ifBlank { null },
+                    "assigned_to" to assignedTo.ifBlank { null },
+                    "handover_note" to handoverNote.ifBlank { null },
+                    "calendar_sync_enabled" to calendarSync
+                )
+            )
+        }) { Text(Strings.save) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
