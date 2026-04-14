@@ -96,8 +96,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // Voice service will be started after login, permissions just need to be granted
         Log.d("MainActivity", "Permissions result: RECORD_AUDIO=${permissions[Manifest.permission.RECORD_AUDIO]}")
+        val micGranted = permissions[Manifest.permission.RECORD_AUDIO] == true ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (micGranted) {
+            ensureVoiceServiceRunning()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -174,6 +178,18 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     private var voiceServiceStarted = false
+    private fun ensureVoiceServiceRunning() {
+        val micGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!micGranted) return
+        if (viewModel.uiState.value.loggedIn != true) return
+        if (!viewModel.uiState.value.isBackgroundActive) return
+        if (!voiceServiceStarted || !serviceBound || voiceService?.voiceManager == null) {
+            startAndBindVoiceService()
+        } else {
+            voiceService?.voiceManager?.startHotwordLoop()
+        }
+    }
+
     private fun startAndBindVoiceService() {
         if (voiceServiceStarted) return
         voiceServiceStarted = true
@@ -198,6 +214,11 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onDestroy() {
         if (serviceBound) unbindService(serviceConnection)
         super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ensureVoiceServiceRunning()
     }
 }
 

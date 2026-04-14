@@ -45,7 +45,7 @@ class VoiceService : Service() {
         onHotwordDetected: () -> Unit,
         onStatusChange: (String) -> Unit
     ) {
-        if (voiceManager != null) return
+        voiceManager?.destroy()
         voiceManager = VoiceManager(
             context = this,
             settings = settings,
