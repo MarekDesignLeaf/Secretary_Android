@@ -106,7 +106,17 @@ class VoiceManager(
     }
 
     fun startHotwordLoop() {
-        if (!settings.hotwordEnabled || isSpeaking || !settings.isWithinWorkHours()) return
+        if (!settings.hotwordEnabled) {
+            mode = ListenMode.IDLE
+            onStatusChange(Strings.hotwordDisabledStatus)
+            return
+        }
+        if (!settings.isWithinWorkHours()) {
+            mode = ListenMode.IDLE
+            onStatusChange(Strings.outsideWorkHoursStatus)
+            return
+        }
+        if (isSpeaking) return
         mode = ListenMode.HOTWORD
         consecutiveErrors = 0
         hotwordMatchedInSession = false
@@ -201,7 +211,6 @@ class VoiceManager(
             val lang = currentRecognitionLanguage()
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang)
-            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, mode == ListenMode.HOTWORD)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             // Do NOT use EXTRA_PREFER_OFFLINE — breaks recognizer if no offline model

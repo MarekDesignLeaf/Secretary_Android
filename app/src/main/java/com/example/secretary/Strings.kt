@@ -434,6 +434,8 @@ object Strings {
     val importStarted get() = t("Import started", "Import spuštěn", "Import uruchomiony")
     val backgroundDisabled get() = t("Background disabled", "Pozadí vypnuto", "Działanie w tle wyłączone")
     val backgroundListening get() = t("Listening in background", "Poslouchám na pozadí", "Nasłuchuję w tle")
+    val hotwordDisabledStatus get() = t("Wake word detection is disabled", "Detekce aktivačního slova je vypnutá", "Wykrywanie słowa aktywującego jest wyłączone")
+    val outsideWorkHoursStatus get() = t("Wake word is paused outside work hours", "Aktivační slovo je mimo pracovní dobu pozastavené", "Słowo aktywujące jest poza godzinami pracy wstrzymane")
     val restarting get() = t("Restarting...", "Restartuji...", "Uruchamiam ponownie...")
     val foundContacts get() = t("FOUND CONTACTS", "NALEZENÉ KONTAKTY", "ZNALEZIONE KONTAKTY")
     val importTitle get() = t("Import contacts", "Import kontaktů", "Import kontaktów")
