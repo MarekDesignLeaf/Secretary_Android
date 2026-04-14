@@ -2570,8 +2570,11 @@ class SecretaryViewModel : ViewModel() {
         val normalized = detail?.lowercase(Locale.ROOT)
         return when {
             detail.isNullOrBlank() -> Strings.connectionError
+            detail.contains("not configured", ignoreCase = true) && detail.contains("disease", ignoreCase = true) -> Strings.plantHealthUnavailable
             detail.contains("not configured", ignoreCase = true) -> Strings.plantRecognitionUnavailable
+            normalized?.contains("network error") == true && normalized.contains("disease") -> Strings.plantHealthNetworkError
             normalized?.contains("network error") == true -> Strings.plantRecognitionNetworkError
+            normalized?.contains("failed") == true && normalized.contains("disease") -> Strings.plantHealthFailed
             normalized?.contains("failed") == true && normalized.contains("plant") -> Strings.plantRecognitionFailed
             normalized?.contains("maximum of 5") == true || normalized?.contains("maximálně 5") == true || normalized?.contains("maksymalnie 5") == true -> Strings.plantTooManyPhotos
             normalized?.contains("is empty") == true || normalized?.contains("je prázdný") == true || normalized?.contains("jest pusty") == true -> Strings.plantEmptyPhoto
@@ -2931,18 +2934,91 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun requestPlantCaptureFromVoice() {
-        val reply = Strings.plantRecognitionVoiceGuide
+    fun assessPlantHealth(photos: List<PlantPhotoUpload>) {
+        val voiceTriggered = _uiState.value.isPlantVoiceCaptureActive
+        if (photos.isEmpty()) {
+            _uiState.value = _uiState.value.copy(plantDiseaseError = Strings.plantNeedsPhoto)
+            if (voiceTriggered) voiceManager?.speak(Strings.plantNeedsPhoto, expectReply = false)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(
+                    plantDiseaseLoading = true,
+                    plantDiseaseError = null
+                )
+                val mediaType = "image/*".toMediaType()
+                val imageParts = photos.mapIndexed { index, photo ->
+                    val requestFile = photo.file.asRequestBody(mediaType)
+                    okhttp3.MultipartBody.Part.createFormData(
+                        "images",
+                        photo.file.name.ifBlank { "plant_health_${index + 1}.jpg" },
+                        requestFile
+                    )
+                }
+                val textType = "text/plain".toMediaType()
+                val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
+                val response = api.assessPlantHealth(imageParts, language)
+                if (response.isSuccessful) {
+                    val result = response.body()
+                    _uiState.value = _uiState.value.copy(
+                        plantDiseaseLoading = false,
+                        plantDiseaseError = null,
+                        selectedPlantDisease = result,
+                        isPlantVoiceCaptureActive = false
+                    )
+                    val spoken = result?.spoken_summary ?: result?.top_issue_name ?: Strings.plantHealthTitle
+                    if (voiceTriggered) voiceManager?.speak(spoken, expectReply = false)
+                } else {
+                    val errorText = parseApiError(response.errorBody()?.string())
+                    _uiState.value = _uiState.value.copy(
+                        plantDiseaseLoading = false,
+                        plantDiseaseError = errorText,
+                        isPlantVoiceCaptureActive = false
+                    )
+                    if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
+                }
+            } catch (e: Exception) {
+                val message = e.message?.takeIf { it.isNotBlank() } ?: Strings.connectionError
+                _uiState.value = _uiState.value.copy(
+                    plantDiseaseLoading = false,
+                    plantDiseaseError = message,
+                    isPlantVoiceCaptureActive = false
+                )
+                if (voiceTriggered) voiceManager?.speak(message, expectReply = false)
+            }
+        }
+    }
+
+    fun requestPlantCaptureFromVoice(mode: String = "identify") {
+        val isHealthMode = mode == "health"
+        val reply = if (isHealthMode) Strings.plantHealthVoiceGuide else Strings.plantRecognitionVoiceGuide
+        val title = if (isHealthMode) Strings.plantHealthTitle else Strings.plantRecognitionTitle
         _uiState.value = _uiState.value.copy(
-            history = (_uiState.value.history + ChatMessage("user", Strings.plantRecognitionTitle) + ChatMessage("assistant", reply)).takeLast(30),
+            history = (_uiState.value.history + ChatMessage("user", title) + ChatMessage("assistant", reply)).takeLast(30),
             lastAiReply = reply,
             status = Strings.plantCaptureReady,
             pendingPlantCaptureRequestId = System.currentTimeMillis(),
             isPlantVoiceCaptureActive = true,
+            plantCaptureMode = mode,
             plantRecognitionError = null,
-            selectedPlantRecognition = null
+            selectedPlantRecognition = null,
+            plantDiseaseError = null,
+            selectedPlantDisease = null
         )
         voiceManager?.speak(reply, expectReply = false, stayIdle = true)
+    }
+
+    fun setPlantCaptureMode(mode: String) {
+        _uiState.value = _uiState.value.copy(
+            plantCaptureMode = mode,
+            selectedPlantRecognition = null,
+            selectedPlantDisease = null,
+            plantRecognitionError = null,
+            plantDiseaseError = null,
+            plantRecognitionLoading = false,
+            plantDiseaseLoading = false
+        )
     }
 
     fun consumePendingPlantCaptureRequest(resumeHotword: Boolean = true) {
@@ -2959,8 +3035,11 @@ class SecretaryViewModel : ViewModel() {
         val shouldResumeHotword = _uiState.value.isPlantVoiceCaptureActive
         _uiState.value = _uiState.value.copy(
             selectedPlantRecognition = null,
+            selectedPlantDisease = null,
             plantRecognitionError = null,
+            plantDiseaseError = null,
             plantRecognitionLoading = false,
+            plantDiseaseLoading = false,
             isPlantVoiceCaptureActive = false,
             pendingPlantCaptureRequestId = null
         )
@@ -3748,8 +3827,12 @@ class SecretaryViewModel : ViewModel() {
             processVoiceSessionInput(text)
             return
         }
+        if (Strings.matchesPlantHealthCommand(lower)) {
+            requestPlantCaptureFromVoice("health")
+            return
+        }
         if (Strings.matchesPlantRecognitionCommand(lower)) {
-            requestPlantCaptureFromVoice()
+            requestPlantCaptureFromVoice("identify")
             return
         }
         val currentState = _uiState.value
@@ -4031,9 +4114,13 @@ data class UiState(
     val pendingPhotoTaskId: String? = null,
     val pendingPhotoTaskTitle: String? = null,
     val pendingPlantCaptureRequestId: Long? = null,
+    val plantCaptureMode: String = "identify",
     val selectedPlantRecognition: PlantRecognitionResponse? = null,
+    val selectedPlantDisease: PlantDiseaseResponse? = null,
     val plantRecognitionLoading: Boolean = false,
     val plantRecognitionError: String? = null,
+    val plantDiseaseLoading: Boolean = false,
+    val plantDiseaseError: String? = null,
     val isPlantVoiceCaptureActive: Boolean = false,
     val isBackgroundActive: Boolean = true,
     val voiceSessionId: String? = null,

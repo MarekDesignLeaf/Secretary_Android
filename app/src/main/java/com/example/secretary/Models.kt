@@ -175,6 +175,34 @@ data class PlantRecognitionResponse(
     val suggestions: List<PlantRecognitionSuggestion> = emptyList()
 )
 
+data class PlantDiseaseTreatment(
+    val chemical: List<String> = emptyList(),
+    val biological: List<String> = emptyList(),
+    val prevention: List<String> = emptyList()
+)
+
+data class PlantDiseaseSuggestion(
+    val name: String = "",
+    val probability: Double = 0.0,
+    val common_names: List<String> = emptyList(),
+    val description: String? = null,
+    val treatment: PlantDiseaseTreatment = PlantDiseaseTreatment(),
+    val classification: List<String> = emptyList()
+)
+
+data class PlantDiseaseResponse(
+    val database: String = "Plant.id Health Assessment",
+    val is_healthy: Boolean = false,
+    val health_probability: Double = 0.0,
+    val top_issue_name: String? = null,
+    val top_issue_common_names: List<String> = emptyList(),
+    val top_issue_probability: Double = 0.0,
+    val top_issue_description: String? = null,
+    val guidance: String? = null,
+    val spoken_summary: String? = null,
+    val suggestions: List<PlantDiseaseSuggestion> = emptyList()
+)
+
 data class ImportableSharedContact(
     val contact_key: String = "",
     val name: String = "",

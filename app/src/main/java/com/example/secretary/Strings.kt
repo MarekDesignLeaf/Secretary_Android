@@ -91,25 +91,53 @@ object Strings {
 
     // === PLANT RECOGNITION ===
     val plantRecognitionTitle get() = t("Plant recognition", "Rozpoznávání rostlin", "Rozpoznawanie roślin")
+    val plantHealthTitle get() = t("Plant diseases", "Choroby rostlin", "Choroby roślin")
+    val plantModeRecognition get() = t("Identify plant", "Rozpoznat rostlinu", "Rozpoznaj roślinę")
+    val plantModeHealth get() = t("Check disease", "Zjistit chorobu", "Sprawdź chorobę")
     val plantRecognitionHint get() = t(
         "Take at least 1 photo. For better results, add the whole plant, a leaf detail, and flower or fruit if available. Optional shots can be skipped.",
         "Pořiď alespoň 1 fotografii. Pro lepší výsledek přidej celou rostlinu, detail listu a pokud je k dispozici, květ nebo plod. Volitelné snímky lze přeskočit.",
         "Zrób co najmniej 1 zdjęcie. Dla lepszego wyniku dodaj całą roślinę, zbliżenie liścia oraz kwiat lub owoc, jeśli są dostępne. Zdjęcia opcjonalne można pominąć."
+    )
+    val plantHealthHint get() = t(
+        "Take at least 1 clear photo of the damaged part. For better diagnosis, add the whole plant, a close leaf detail, and any spots, mold, pests or stem damage.",
+        "Pořiď alespoň 1 jasnou fotografii poškozené části. Pro lepší diagnózu přidej celou rostlinu, detail listu a případné skvrny, plíseň, škůdce nebo poškození stonku.",
+        "Zrób co najmniej 1 wyraźne zdjęcie uszkodzonej części. Dla lepszej diagnozy dodaj całą roślinę, zbliżenie liścia oraz plamy, pleśń, szkodniki lub uszkodzenia łodygi."
     )
     val plantRecognitionVoiceGuide get() = t(
         "Take at least 1 photo. Whole plant, leaf detail, and flower or fruit are recommended, but you can skip optional shots.",
         "Pořiď alespoň 1 fotografii. Celá rostlina, detail listu a květ nebo plod jsou doporučené, ale volitelné snímky můžeš přeskočit.",
         "Zrób co najmniej 1 zdjęcie. Cała roślina, zbliżenie liścia oraz kwiat lub owoc są zalecane, ale zdjęcia opcjonalne możesz pominąć."
     )
+    val plantHealthVoiceGuide get() = t(
+        "Take at least 1 photo of the diseased part. Whole plant, damaged leaf detail, and any visible mold, insects or stem damage are recommended. Optional shots can be skipped.",
+        "Pořiď alespoň 1 fotografii nemocné části. Doporučená je celá rostlina, detail poškozeného listu a viditelná plíseň, hmyz nebo poškození stonku. Volitelné snímky můžeš přeskočit.",
+        "Zrób co najmniej 1 zdjęcie chorej części. Zalecane są: cała roślina, zbliżenie uszkodzonego liścia oraz widoczna pleśń, owady lub uszkodzenia łodygi. Zdjęcia opcjonalne możesz pominąć."
+    )
     val plantWholePlant get() = t("Whole plant", "Celá rostlina", "Cała roślina")
     val plantLeafDetail get() = t("Leaf detail", "Detail listu", "Detal liścia")
     val plantFlowerOrFruit get() = t("Flower, fruit or bark", "Květ, plod nebo kůra", "Kwiat, owoc lub kora")
+    val plantDiseaseCloseup get() = t("Damaged part", "Poškozená část", "Uszkodzona część")
+    val plantDiseaseLeafDetail get() = t("Damaged leaf detail", "Detail poškozeného listu", "Detal uszkodzonego liścia")
+    val plantDiseaseContext get() = t("Whole plant or stem context", "Celá rostlina nebo stonek", "Cała roślina lub łodyga")
     val identifyPlantAction get() = t("Identify plant", "Rozpoznat rostlinu", "Rozpoznaj roślinę")
+    val assessPlantHealthAction get() = t("Check disease", "Zjistit chorobu", "Sprawdź chorobę")
     val plantRecognitionLoading get() = t("Identifying plant...", "Rozpoznávám rostlinu...", "Rozpoznaję roślinę...")
+    val plantHealthLoading get() = t("Checking plant disease...", "Zjišťuji chorobu rostliny...", "Sprawdzam chorobę rośliny...")
     val plantNoResultYet get() = t("No identification yet", "Zatím bez rozpoznání", "Brak identyfikacji")
+    val plantHealthNoResultYet get() = t("No disease assessment yet", "Zatím bez posouzení choroby", "Brak oceny choroby")
     val plantBestMatch get() = t("Best match", "Nejlepší shoda", "Najlepsze dopasowanie")
     val plantGuidance get() = t("Description and care", "Popis a nároky", "Opis i wymagania")
     val plantAlternatives get() = t("Other likely matches", "Další pravděpodobné shody", "Inne prawdopodobne dopasowania")
+    val plantHealthBestMatch get() = t("Most likely issue", "Nejpravděpodobnější problém", "Najbardziej prawdopodobny problem")
+    val plantHealthSummary get() = t("Diagnosis and treatment", "Diagnóza a léčba", "Diagnoza i leczenie")
+    val plantHealthAlternatives get() = t("Other possible issues", "Další možné problémy", "Inne możliwe problemy")
+    val plantTreatmentLabel get() = t("Recommended treatment", "Doporučená léčba", "Zalecane leczenie")
+    val plantPreventionLabel get() = t("Prevention", "Prevence", "Zapobieganie")
+    val plantBiologicalLabel get() = t("Biological steps", "Biologické kroky", "Działania biologiczne")
+    val plantChemicalLabel get() = t("Chemical steps", "Chemické kroky", "Działania chemiczne")
+    val plantHealthyLabel get() = t("Plant looks healthy", "Rostlina vypadá zdravě", "Roślina wygląda zdrowo")
+    val plantHealthyGuidance get() = t("No clear disease signal was found in the photos.", "Na fotografiích nebyl nalezen jasný signál choroby.", "Na zdjęciach nie znaleziono wyraźnego sygnału choroby.")
     val confidence get() = t("Confidence", "Pravděpodobnost", "Pewność")
     val plantNeedsPhoto get() = t(
         "You need at least 1 photo before identification.",
@@ -119,8 +147,11 @@ object Strings {
     val plantVoiceBanner get() = t("Voice-guided capture is active.", "Je aktivní hlasově vedené focení.", "Aktywne jest prowadzenie głosowe podczas robienia zdjęć.")
     val plantCaptureReady get() = t("Camera is ready for the next plant photo.", "Fotoaparát je připraven pro další fotografii rostliny.", "Aparat jest gotowy na kolejne zdjęcie rośliny.")
     val plantRecognitionUnavailable get() = t("Plant recognition service is not configured yet.", "Služba pro rozpoznávání rostlin ještě není nastavená.", "Usługa rozpoznawania roślin nie jest jeszcze skonfigurowana.")
+    val plantHealthUnavailable get() = t("Plant disease service is not configured yet.", "Služba pro choroby rostlin ještě není nastavená.", "Usługa chorób roślin nie jest jeszcze skonfigurowana.")
     val plantRecognitionFailed get() = t("Plant recognition failed. Try another photo.", "Rozpoznání rostliny se nepodařilo. Zkus jinou fotografii.", "Rozpoznanie rośliny nie powiodło się. Spróbuj innego zdjęcia.")
+    val plantHealthFailed get() = t("Plant disease assessment failed. Try another photo.", "Posouzení choroby rostliny se nepodařilo. Zkus jinou fotografii.", "Ocena choroby rośliny nie powiodła się. Spróbuj innego zdjęcia.")
     val plantRecognitionNetworkError get() = t("Plant recognition network error.", "Síťová chyba při rozpoznání rostliny.", "Błąd sieci podczas rozpoznawania rośliny.")
+    val plantHealthNetworkError get() = t("Plant disease network error.", "Síťová chyba při zjišťování choroby rostliny.", "Błąd sieci podczas sprawdzania choroby rośliny.")
     val plantTooManyPhotos get() = t("Use at most 5 photos.", "Použij maximálně 5 fotografií.", "Użyj maksymalnie 5 zdjęć.")
     val plantEmptyPhoto get() = t("One of the photos is empty.", "Jedna z fotografií je prázdná.", "Jedno ze zdjęć jest puste.")
     val skipPhoto get() = t("Skip", "Přeskočit", "Pomiń")
@@ -823,6 +854,30 @@ object Strings {
             "jaka to roslina",
             "rozpoznaj roślinę",
             "rozpoznaj rosline"
+        )
+        return phrases.any { normalized.contains(it) }
+    }
+    fun matchesPlantHealthCommand(text: String): Boolean {
+        val normalized = text.lowercase().trim()
+        val phrases = listOf(
+            "co je to za chorobu",
+            "co je rostline",
+            "co je rostlině",
+            "co ji je",
+            "co jí je",
+            "jaka je to choroba",
+            "jaká je to choroba",
+            "nemoc rostliny",
+            "choroba rostliny",
+            "plant disease",
+            "what disease is this",
+            "what is wrong with this plant",
+            "check plant disease",
+            "jaka to choroba",
+            "co dolega roslinie",
+            "co dolega roślinie",
+            "choroba rosliny",
+            "choroba rośliny"
         )
         return phrases.any { normalized.contains(it) }
     }

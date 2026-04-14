@@ -26,6 +26,13 @@ interface SecretaryApi {
         @Part("language") language: RequestBody
     ): Response<PlantRecognitionResponse>
 
+    @Multipart
+    @POST("plants/health-assessment")
+    suspend fun assessPlantHealth(
+        @Part images: List<MultipartBody.Part>,
+        @Part("language") language: RequestBody
+    ): Response<PlantDiseaseResponse>
+
     // === CLIENTS ===
     @GET("crm/clients")
     suspend fun getClients(): Response<List<Client>>

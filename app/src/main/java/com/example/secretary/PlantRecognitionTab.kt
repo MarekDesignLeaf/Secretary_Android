@@ -51,15 +51,20 @@ private fun defaultPlantSlots(): List<PlantCaptureSlot> = listOf(
     PlantCaptureSlot(id = 2, organ = "flower")
 )
 
-private fun slotLabel(slotId: Int): String = when (slotId) {
-    0 -> Strings.plantWholePlant
-    1 -> Strings.plantLeafDetail
+private fun slotLabel(slotId: Int, mode: String): String = when {
+    mode == "health" && slotId == 0 -> Strings.plantDiseaseCloseup
+    mode == "health" && slotId == 1 -> Strings.plantDiseaseLeafDetail
+    mode == "health" -> Strings.plantDiseaseContext
+    slotId == 0 -> Strings.plantWholePlant
+    slotId == 1 -> Strings.plantLeafDetail
     else -> Strings.plantFlowerOrFruit
 }
 
 @Composable
 fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
     val context = LocalContext.current
+    val mode = state.plantCaptureMode
+    val isHealthMode = mode == "health"
     var slots by remember { mutableStateOf(defaultPlantSlots()) }
     var targetSlotId by remember { mutableStateOf<Int?>(null) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
@@ -78,12 +83,12 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
             }
         }
         val autoReadyPhotos = updatedSlots.mapNotNull { slot ->
-            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id)) }
+            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, mode)) }
         }
         val shouldAutoIdentify = success && isVoiceCaptureActive && autoReadyPhotos.isNotEmpty()
         viewModel.consumePendingPlantCaptureRequest(resumeHotword = !shouldAutoIdentify)
         if (shouldAutoIdentify) {
-            viewModel.identifyPlant(autoReadyPhotos)
+            if (isHealthMode) viewModel.assessPlantHealth(autoReadyPhotos) else viewModel.identifyPlant(autoReadyPhotos)
         }
     }
 
@@ -99,12 +104,12 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
             slots = updatedSlots
         }
         val autoReadyPhotos = updatedSlots.mapNotNull { slot ->
-            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id)) }
+            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, mode)) }
         }
         val shouldAutoIdentify = uri != null && isVoiceCaptureActive && autoReadyPhotos.isNotEmpty()
         viewModel.consumePendingPlantCaptureRequest(resumeHotword = !shouldAutoIdentify)
         if (shouldAutoIdentify) {
-            viewModel.identifyPlant(autoReadyPhotos)
+            if (isHealthMode) viewModel.assessPlantHealth(autoReadyPhotos) else viewModel.identifyPlant(autoReadyPhotos)
         }
     }
 
@@ -132,7 +137,7 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
     }
 
     val readyPhotos = slots.mapNotNull { slot ->
-        slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id)) }
+        slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, mode)) }
     }
 
     LazyColumn(
@@ -142,14 +147,19 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(Strings.plantRecognitionTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { viewModel.setPlantCaptureMode("identify") }) { Text(Strings.plantModeRecognition) }
+                        OutlinedButton(onClick = { viewModel.setPlantCaptureMode("health") }) { Text(Strings.plantModeHealth) }
+                    }
                     Spacer(Modifier.height(8.dp))
-                    Text(Strings.plantRecognitionHint)
+                    Text(if (isHealthMode) Strings.plantHealthTitle else Strings.plantRecognitionTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(if (isHealthMode) Strings.plantHealthHint else Strings.plantRecognitionHint)
                     if (state.isPlantVoiceCaptureActive) {
                         Spacer(Modifier.height(8.dp))
                         Text(Strings.plantVoiceBanner, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(4.dp))
-                        Text(Strings.plantRecognitionVoiceGuide)
+                        Text(if (isHealthMode) Strings.plantHealthVoiceGuide else Strings.plantRecognitionVoiceGuide)
                     }
                 }
             }
@@ -158,12 +168,12 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
         items(slots, key = { it.id }) { slot ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(slotLabel(slot.id), fontWeight = FontWeight.SemiBold)
+                    Text(slotLabel(slot.id, mode), fontWeight = FontWeight.SemiBold)
                     Text(
                         if (slot.isRequired) Strings.requiredPhoto else Strings.optionalPhoto,
                         color = if (slot.isRequired) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (slot.id == 2) {
+                    if (!isHealthMode && slot.id == 2) {
                         Box {
                             OutlinedButton(onClick = { organMenuSlotId = slot.id }) {
                                 Text("${Strings.type}: ${Strings.localizePlantOrgan(slot.organ)}")
@@ -208,19 +218,22 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
         }
 
         item {
-            if (state.plantRecognitionLoading) {
+            val loading = if (isHealthMode) state.plantDiseaseLoading else state.plantRecognitionLoading
+            if (loading) {
                 Column(Modifier.fillMaxWidth()) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
-                    Text(Strings.plantRecognitionLoading)
+                    Text(if (isHealthMode) Strings.plantHealthLoading else Strings.plantRecognitionLoading)
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = { viewModel.identifyPlant(readyPhotos) },
+                        onClick = {
+                            if (isHealthMode) viewModel.assessPlantHealth(readyPhotos) else viewModel.identifyPlant(readyPhotos)
+                        },
                         enabled = readyPhotos.isNotEmpty()
                     ) {
-                        Text(Strings.identifyPlantAction)
+                        Text(if (isHealthMode) Strings.assessPlantHealthAction else Strings.identifyPlantAction)
                     }
                     TextButton(onClick = {
                         slots = defaultPlantSlots()
@@ -232,26 +245,30 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
             }
         }
 
-        state.plantRecognitionError?.let { error ->
+        (if (isHealthMode) state.plantDiseaseError else state.plantRecognitionError)?.let { error ->
             item {
                 Text(error, color = MaterialTheme.colorScheme.error)
             }
         }
 
         item {
-            val result = state.selectedPlantRecognition
-            if (result == null) {
+            val plantResult = state.selectedPlantRecognition
+            val diseaseResult = state.selectedPlantDisease
+            if (!isHealthMode && plantResult == null) {
                 Text(Strings.plantNoResultYet, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
+            } else if (isHealthMode && diseaseResult == null) {
+                Text(Strings.plantHealthNoResultYet, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (!isHealthMode && plantResult != null) {
+                val result = plantResult
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(Strings.plantBestMatch, fontWeight = FontWeight.Bold)
                         Text(result.display_name.ifBlank { result.scientific_name }, style = MaterialTheme.typography.titleMedium)
                         if (result.scientific_name.isNotBlank() && result.display_name != result.scientific_name) {
-                        Text(result.scientific_name, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text("${Strings.confidence}: ${(result.score * 100).toInt()}%")
-                    result.family?.takeIf { it.isNotBlank() }?.let { Text("${Strings.familyLabel}: $it") }
+                            Text(result.scientific_name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("${Strings.confidence}: ${(result.score * 100).toInt()}%")
+                        result.family?.takeIf { it.isNotBlank() }?.let { Text("${Strings.familyLabel}: $it") }
                         Text("${Strings.databaseLabel}: ${result.database}")
                         result.guidance?.takeIf { it.isNotBlank() }?.let {
                             Spacer(Modifier.height(4.dp))
@@ -264,6 +281,33 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                             result.suggestions.drop(1).forEach { suggestion ->
                                 HorizontalDivider()
                                 Text("${suggestion.display_name.ifBlank { suggestion.scientific_name }} ${(suggestion.score * 100).toInt()}%")
+                            }
+                        }
+                    }
+                }
+            } else {
+                val result = diseaseResult!!
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(Strings.plantHealthBestMatch, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (result.is_healthy) Strings.plantHealthyLabel else (result.top_issue_name ?: Strings.plantHealthTitle),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        val shownProbability = if (result.is_healthy) result.health_probability else result.top_issue_probability
+                        Text("${Strings.confidence}: ${(shownProbability * 100).toInt()}%", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${Strings.databaseLabel}: ${result.database}")
+                        result.guidance?.takeIf { it.isNotBlank() }?.let {
+                            Spacer(Modifier.height(4.dp))
+                            Text(Strings.plantHealthSummary, fontWeight = FontWeight.SemiBold)
+                            Text(it)
+                        }
+                        if (result.suggestions.size > 1) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(Strings.plantHealthAlternatives, fontWeight = FontWeight.SemiBold)
+                            result.suggestions.drop(1).forEach { suggestion ->
+                                HorizontalDivider()
+                                Text("${suggestion.name} ${(suggestion.probability * 100).toInt()}%")
                             }
                         }
                     }
