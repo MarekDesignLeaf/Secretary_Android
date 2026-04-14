@@ -2567,9 +2567,14 @@ class SecretaryViewModel : ViewModel() {
                 it
             }
         }?.trim()
+        val normalized = detail?.lowercase(Locale.ROOT)
         return when {
             detail.isNullOrBlank() -> Strings.connectionError
             detail.contains("not configured", ignoreCase = true) -> Strings.plantRecognitionUnavailable
+            normalized?.contains("network error") == true -> Strings.plantRecognitionNetworkError
+            normalized?.contains("failed") == true && normalized.contains("plant") -> Strings.plantRecognitionFailed
+            normalized?.contains("maximum of 5") == true || normalized?.contains("maximálně 5") == true || normalized?.contains("maksymalnie 5") == true -> Strings.plantTooManyPhotos
+            normalized?.contains("is empty") == true || normalized?.contains("je prázdný") == true || normalized?.contains("jest pusty") == true -> Strings.plantEmptyPhoto
             else -> detail
         }
     }
