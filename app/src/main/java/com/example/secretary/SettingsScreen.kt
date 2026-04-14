@@ -287,13 +287,35 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 // 3. CRM
 @Composable private fun CrmSection(sm: SettingsManager) {
     var exp by remember { mutableStateOf(false) }
-    SCard("CRM", Icons.Default.Person, exp, { exp = !exp }) {
-        var rE by remember { mutableStateOf(false) }; val ints = listOf(0 to "Manualne", 5 to "5 min", 15 to "15 min", 30 to "30 min")
-        SDrop("Auto refresh", ints.first { it.first == sm.autoRefreshInterval }.second, rE, { rE = it }, ints.map { it.second }) { sm.autoRefreshInterval = ints[it].first; rE = false }
-        var tE by remember { mutableStateOf(false) }; val tabs = listOf("Klienti", "Nemovitosti", "Zakazky", "Odpady", "Finance")
-        SDrop("Vychozi tab", tabs[sm.defaultCrmTab], tE, { tE = it }, tabs) { sm.defaultCrmTab = it; tE = false }
-        var sE by remember { mutableStateOf(false) }; val sorts = listOf("name" to "Jmeno", "created" to "Datum", "activity" to "Aktivita")
-        SDrop("Razeni", sorts.first { it.first == sm.clientSortOrder }.second, sE, { sE = it }, sorts.map { it.second }) { sm.clientSortOrder = sorts[it].first; sE = false }
+    SCard(Strings.crmSettingsLabel, Icons.Default.Person, exp, { exp = !exp }) {
+        var rE by remember { mutableStateOf(false) }
+        val refreshOptions = listOf(0, 5, 15, 30)
+        SDrop(
+            Strings.autoRefreshLabel,
+            Strings.localizeAutoRefreshInterval(sm.autoRefreshInterval),
+            rE,
+            { rE = it },
+            refreshOptions.map { Strings.localizeAutoRefreshInterval(it) }
+        ) { sm.autoRefreshInterval = refreshOptions[it]; rE = false }
+        var tE by remember { mutableStateOf(false) }
+        val tabs = listOf("clients", "properties", "jobs", "waste", "finance")
+        val selectedTab = tabs.getOrElse(sm.defaultCrmTab) { tabs.first() }
+        SDrop(
+            Strings.crmTabLabel,
+            Strings.localizeCrmTab(selectedTab),
+            tE,
+            { tE = it },
+            tabs.map { Strings.localizeCrmTab(it) }
+        ) { sm.defaultCrmTab = it; tE = false }
+        var sE by remember { mutableStateOf(false) }
+        val sorts = listOf("name", "created", "activity")
+        SDrop(
+            Strings.sorting,
+            Strings.localizeClientSortOrder(sm.clientSortOrder),
+            sE,
+            { sE = it },
+            sorts.map { Strings.localizeClientSortOrder(it) }
+        ) { sm.clientSortOrder = sorts[it]; sE = false }
     }
 }
 
@@ -303,8 +325,15 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     SCard(Strings.notificationsLabel, Icons.Default.Notifications, exp, { exp = !exp }) {
         var p by remember { mutableStateOf(sm.persistentNotification) }
         SSwitch(Strings.persistentNotificationLabel, null, p) { p = it; sm.persistentNotification = it }
-        var rE by remember { mutableStateOf(false) }; val rems = listOf(0 to "Vyp", 5 to "5m", 15 to "15m", 30 to "30m", 60 to "1h")
-        SDrop(Strings.taskReminder, rems.first { it.first == sm.reminderMinutes }.second, rE, { rE = it }, rems.map { it.second }) { sm.reminderMinutes = rems[it].first; rE = false }
+        var rE by remember { mutableStateOf(false) }
+        val rems = listOf(0, 5, 15, 30, 60)
+        SDrop(
+            Strings.taskReminder,
+            Strings.localizeReminderInterval(sm.reminderMinutes),
+            rE,
+            { rE = it },
+            rems.map { Strings.localizeReminderInterval(it) }
+        ) { sm.reminderMinutes = rems[it]; rE = false }
     }
 }
 
@@ -318,15 +347,22 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         SField(Strings.startLabel, st, { st = it; sm.workHoursStart = it }, kbt = KeyboardType.Number)
         var en by remember { mutableStateOf(sm.workHoursEnd) }
         SField(Strings.endLabel, en, { en = it; sm.workHoursEnd = it }, kbt = KeyboardType.Number)
-        var pE by remember { mutableStateOf(false) }; val prios = listOf("low" to "Nizka", "normal" to "Normalni", "high" to "Vysoka", "urgent" to "Urgentni")
-        SDrop(Strings.defaultPriorityLabel, prios.first { it.first == sm.defaultTaskPriority }.second, pE, { pE = it }, prios.map { it.second }) { sm.defaultTaskPriority = prios[it].first; pE = false }
+        var pE by remember { mutableStateOf(false) }
+        val prios = listOf("low", "normal", "high", "urgent")
+        SDrop(
+            Strings.defaultPriorityLabel,
+            Strings.localizePriority(sm.defaultTaskPriority),
+            pE,
+            { pE = it },
+            prios.map { Strings.localizePriority(it) }
+        ) { sm.defaultTaskPriority = prios[it]; pE = false }
 
         Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
         Text(Strings.emailSignatures, fontWeight = FontWeight.SemiBold)
         var sigs by remember { mutableStateOf(sm.getSavedSignatures()) }
         var actId by remember { mutableStateOf(sm.activeSignatureId.ifBlank { sigs.firstOrNull()?.id ?: "" }) }
         var content by remember { mutableStateOf(sigs.find { it.id == actId }?.content ?: sm.emailSignature) }
-        var name by remember { mutableStateOf(sigs.find { it.id == actId }?.name ?: "Podpis") }
+        var name by remember { mutableStateOf(sigs.find { it.id == actId }?.name ?: Strings.signatureDefaultName()) }
         var dirty by remember { mutableStateOf(false) }
 
         var slE by remember { mutableStateOf(false) }
@@ -557,7 +593,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(Strings.roleDescription, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Text(roleOptions.firstOrNull { it.role_name == role }?.description.orEmpty(), fontSize = 12.sp, color = Color.Gray)
+                Text(Strings.localizeRoleDescription(role, roleOptions.firstOrNull { it.role_name == role }?.description), fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
                 Text(Strings.roleControlsPermissionsHint, fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
@@ -685,7 +721,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(Strings.roleDescription, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Text(selectedRole?.description.orEmpty(), fontSize = 12.sp, color = Color.Gray)
+                Text(Strings.localizeRoleDescription(role, selectedRole?.description), fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
                 Text(Strings.includedPermissions, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 BackendRolePermissionSummary(selectedRole)
@@ -718,7 +754,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(Strings.localizeRole(role.role_name), fontWeight = FontWeight.SemiBold)
             if (!role.description.isNullOrBlank()) {
-                Text(role.description, fontSize = 12.sp, color = Color.Gray)
+                Text(Strings.localizeRoleDescription(role.role_name, role.description), fontSize = 12.sp, color = Color.Gray)
             }
             Text(Strings.includedPermissions, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             BackendRolePermissionSummary(role)
@@ -767,10 +803,17 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp)); Text(Strings.importDatabase, fontWeight = FontWeight.SemiBold)
         var path by remember { mutableStateOf(sm.importFilePath) }
         SField(Strings.csvPath, path, { path = it; sm.importFilePath = it })
-        var tE by remember { mutableStateOf(false) }; val tbls = listOf("clients" to "Klienti", "properties" to "Nemovitosti", "jobs" to "Zakazky")
-        SDrop(Strings.table, tbls.first { it.first == sm.importTargetTable }.second, tE, { tE = it }, tbls.map { it.second }) { sm.importTargetTable = tbls[it].first; tE = false }
+        var tE by remember { mutableStateOf(false) }
+        val tbls = listOf("clients", "properties", "jobs")
+        SDrop(
+            Strings.table,
+            Strings.localizeCrmTab(sm.importTargetTable),
+            tE,
+            { tE = it },
+            tbls.map { Strings.localizeCrmTab(it) }
+        ) { sm.importTargetTable = tbls[it]; tE = false }
         var ai by remember { mutableStateOf(sm.autoImportEnabled) }
-        SSwitch("Auto import pri spusteni", null, ai) { ai = it; sm.autoImportEnabled = it }
+        SSwitch(Strings.autoImportOnStartup, null, ai) { ai = it; sm.autoImportEnabled = it }
         Button(onClick = { vm.triggerManualImport() }, Modifier.fillMaxWidth(), enabled = path.isNotBlank()) { Text(Strings.startImport) }
         Text(Strings.voiceImportHint, fontSize = 11.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
@@ -791,12 +834,13 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     SCard(Strings.companyProfile, Icons.Default.AccountCircle, exp, { exp = !exp }) {
         val wsMode = config["workspace_mode"]?.toString() ?: "-"
         val wsLabel = Strings.localizeWorkspaceMode(wsMode)
-        val currentInternalLanguage = sm.getCurrentAppLanguage().uppercase()
+        val currentInternalLanguage = Strings.languageDisplayName(sm.getCurrentAppLanguage())
+        val currentCustomerLanguage = Strings.languageDisplayName(config["default_customer_lang"]?.toString() ?: sm.getCurrentAppLanguage())
         ARow(Strings.workspaceMode, wsLabel)
         ARow(Strings.internalLanguage, currentInternalLanguage)
-        ARow(Strings.customerLanguage, config["default_customer_lang"]?.toString()?.uppercase() ?: "-")
-        ARow(Strings.internalLanguageMode, config["internal_language_mode"]?.toString() ?: "-")
-        ARow(Strings.customerLanguageMode, config["customer_language_mode"]?.toString() ?: "-")
+        ARow(Strings.customerLanguage, currentCustomerLanguage)
+        ARow(Strings.internalLanguageMode, Strings.localizeLanguageMode(config["internal_language_mode"]?.toString() ?: "-"))
+        ARow(Strings.customerLanguageMode, Strings.localizeLanguageMode(config["customer_language_mode"]?.toString() ?: "-"))
         @Suppress("UNCHECKED_CAST")
         val limits = config["limits"] as? Map<String, Any?>
         if (limits != null) {
@@ -824,7 +868,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     var exp by remember { mutableStateOf(false) }
     SCard(Strings.aboutApp, Icons.Default.Info, exp, { exp = !exp }) {
         Text(VersionInfo.APP_NAME, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(VersionInfo.APP_DESCRIPTION, fontSize = 13.sp, color = Color.Gray)
+        Text(VersionInfo.appDescription(), fontSize = 13.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
 
         ARow(Strings.versionLabel, "${VersionInfo.VERSION_NAME} (build ${VersionInfo.VERSION_CODE})")
@@ -841,26 +885,26 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 
         val latest = VersionInfo.getLatestChanges()
         if (latest != null && latest.coder.isNotBlank()) {
-            ARow(Strings.codingLabel, latest.coder)
+            ARow(Strings.codingLabel, VersionInfo.localizeCoder(latest.coder))
         }
         Spacer(Modifier.height(12.dp))
 
         Text(Strings.technologies, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-        ARow(Strings.platformLabel, VersionInfo.PLATFORM)
-        ARow("Backend", VersionInfo.BACKEND)
-        ARow(Strings.architectureLabel, VersionInfo.ARCHITECTURE)
-        ARow("AI engine", VersionInfo.AI_ENGINE)
-        ARow(Strings.databaseLabel, VersionInfo.DB_ENGINE)
-        ARow("Min SDK", "${VersionInfo.MIN_SDK}")
-        ARow("Target SDK", "${VersionInfo.TARGET_SDK}")
+        ARow(Strings.platformLabel, VersionInfo.platformValue())
+        ARow(Strings.backendLabel, VersionInfo.backendValue())
+        ARow(Strings.architectureLabel, VersionInfo.architectureValue())
+        ARow(Strings.aiEngineLabel, VersionInfo.aiEngineValue())
+        ARow(Strings.databaseLabel, VersionInfo.dbEngineValue())
+        ARow(Strings.minSdkLabel, "${VersionInfo.MIN_SDK}")
+        ARow(Strings.targetSdkLabel, "${VersionInfo.TARGET_SDK}")
         Spacer(Modifier.height(12.dp))
 
         Text(Strings.projectStructureLabel, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-        VersionInfo.PROJECT_STRUCTURE.forEach { ARow(it.filename, it.description) }
+        VersionInfo.PROJECT_STRUCTURE.forEach { ARow(it.filename, VersionInfo.localizeProjectDescription(it.filename, it.description)) }
         Spacer(Modifier.height(12.dp))
 
         Text(Strings.licenseTitle, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-        Text(VersionInfo.LICENSE, fontSize = 11.sp, color = Color.Gray, lineHeight = 15.sp)
+        Text(VersionInfo.licenseText(), fontSize = 11.sp, color = Color.Gray, lineHeight = 15.sp)
     }
 }
 
@@ -875,8 +919,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         Text(Strings.versioningRules, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         VersionInfo.VERSIONING_RULES.forEach { rule ->
             Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                Text(rule.type, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.width(60.dp), color = when (rule.type) { "PATCH" -> Color(0xFF4CAF50); "MINOR" -> Color(0xFF2196F3); else -> Color(0xFFF44336) })
-                Column { Text(rule.example, fontSize = 12.sp); Text(rule.description, fontSize = 11.sp, color = Color.Gray) }
+                Text(Strings.localizeVersionRuleType(rule.type), fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.width(110.dp), color = when (rule.type) { "PATCH" -> Color(0xFF4CAF50); "MINOR" -> Color(0xFF2196F3); else -> Color(0xFFF44336) })
+                Column { Text(rule.example, fontSize = 12.sp); Text(VersionInfo.localizeVersionRuleDescription(rule.type, rule.description), fontSize = 11.sp, color = Color.Gray) }
             }
         }
 
@@ -885,7 +929,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         // Povinne kroky
         Text(Strings.mandatoryStepsOnChange, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         VersionInfo.MANDATORY_STEPS.forEach { step ->
-            Text(step, fontSize = 12.sp, color = Color.DarkGray, modifier = Modifier.padding(vertical = 1.dp))
+            Text(VersionInfo.localizeMandatoryStep(step), fontSize = 12.sp, color = Color.DarkGray, modifier = Modifier.padding(vertical = 1.dp))
         }
 
         Spacer(Modifier.height(12.dp)); HorizontalDivider(); Spacer(Modifier.height(12.dp))
@@ -905,18 +949,18 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                         Spacer(Modifier.weight(1f))
                         Text(entry.date, fontSize = 11.sp, color = Color.Gray)
                     }
-                    Text(entry.summary, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    Text(VersionInfo.localizeChangelogSummary(entry.summary), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     Text("${Strings.authorLabel}: ${entry.author}", fontSize = 11.sp, color = Color.Gray)
-                    if (entry.coder.isNotBlank()) Text("${Strings.codingLabel}: ${entry.coder}", fontSize = 11.sp, color = Color.Gray)
+                    if (entry.coder.isNotBlank()) Text("${Strings.codingLabel}: ${VersionInfo.localizeCoder(entry.coder)}", fontSize = 11.sp, color = Color.Gray)
 
                     // Rozbalitelny detail
                     var showDetail by remember { mutableStateOf(false) }
                     TextButton(onClick = { showDetail = !showDetail }) { Text(if (showDetail) Strings.hideChanges() else Strings.showChanges(entry.changes.size), fontSize = 11.sp) }
                     if (showDetail) {
-                        entry.changes.forEach { change -> Text("  * $change", fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) }
+                        entry.changes.forEach { change -> Text("  * ${VersionInfo.localizeChangelogChange(change)}", fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) }
                         if (entry.knownIssues.isNotEmpty()) {
                             Text(Strings.knownIssuesLabel, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = Color(0xFFF57C00), modifier = Modifier.padding(top = 4.dp))
-                            entry.knownIssues.forEach { issue -> Text("  ! $issue", fontSize = 11.sp, color = Color(0xFFF57C00), modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) }
+                            entry.knownIssues.forEach { issue -> Text("  ! ${VersionInfo.localizeKnownIssue(issue)}", fontSize = 11.sp, color = Color(0xFFF57C00), modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)) }
                         }
                     }
                 }

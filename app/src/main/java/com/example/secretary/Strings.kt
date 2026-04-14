@@ -294,6 +294,8 @@ object Strings {
     val voicePitch get() = t("Voice pitch", "Výška hlasu", "Wysokość głosu")
     val silenceLengthLabel get() = t("Silence length", "Délka ticha", "Długość ciszy")
     val serverConnection get() = t("Server and connection", "Server a připojení", "Serwer i połączenie")
+    val crmSettingsLabel get() = t("CRM", "CRM", "CRM")
+    val autoRefreshLabel get() = t("Auto refresh", "Automatické obnovení", "Automatyczne odświeżanie")
     val apiServerUrl get() = t("API server URL", "URL API serveru", "URL serwera API")
     val connected get() = t("Connected", "Připojeno", "Połączono")
     val disconnected get() = t("Disconnected", "Odpojeno", "Rozłączono")
@@ -362,6 +364,7 @@ object Strings {
     val importDatabase get() = t("Database import", "Import databáze", "Import bazy danych")
     val csvPath get() = t("CSV path", "Cesta k CSV", "Ścieżka do CSV")
     val table get() = t("Table", "Tabulka", "Tabela")
+    val autoImportOnStartup get() = t("Auto import on startup", "Automatický import při spuštění", "Automatyczny import przy uruchomieniu")
     val startImport get() = t("Start import", "Spustit import", "Uruchom import")
     val voiceImportHint get() = t("Voice: 'import client database'", "Hlasem: 'importuj databázi klientů'", "Głosowo: 'importuj bazę klientów'")
     val companyProfile get() = t("Company profile", "Profil firmy", "Profil firmy")
@@ -427,6 +430,10 @@ object Strings {
     val versionLabel get() = t("Version", "Verze", "Wersja")
     val releaseDate get() = t("Release date", "Datum vydání", "Data vydania")
     val packageLabel get() = t("Package", "Balíček", "Pakiet")
+    val backendLabel get() = t("Backend", "Backend", "Backend")
+    val aiEngineLabel get() = t("AI engine", "AI engine", "Silnik AI")
+    val minSdkLabel get() = t("Min SDK", "Min SDK", "Min SDK")
+    val targetSdkLabel get() = t("Target SDK", "Target SDK", "Target SDK")
     val ready get() = t("Ready", "Připravena", "Gotowe")
     val waitingForYourCommand get() = t("Waiting for your command...", "Čekám na váš povel...", "Czekam na Twoje polecenie...")
     val speechRecognitionUnavailable get() = t("Speech recognition not available", "Rozpoznávání řeči není k dispozici", "Rozpoznawanie mowy nie jest dostępne")
@@ -448,6 +455,9 @@ object Strings {
     val removeDuplicates get() = t("Remove duplicates", "Odstranit duplicity", "Usuń duplikaty")
     val includeEmail get() = t("Include email", "Zahrnout e-mail", "Uwzględnij email")
     val workDate get() = t("Date", "Datum", "Data")
+    val financeLabel get() = t("Finance", "Finance", "Finanse")
+    val wasteLabel get() = t("Waste", "Odpady", "Odpady")
+    val activityLabel get() = t("Activity", "Aktivita", "Aktywność")
     val totalHours get() = t("Total hours", "Celkem hodin", "Łącznie godzin")
     val totalPrice get() = t("Total price", "Celkem", "Cena łączna")
     val quote get() = t("Quote", "Nabídka", "Oferta")
@@ -547,7 +557,7 @@ object Strings {
     val backgroundInactive get() = t("Background inactive", "Na pozadí neaktivní", "Nieaktywne w tle")
 
     // === HELPER ===
-    private fun t(en: String, cs: String, pl: String): String = when (activeLang) {
+    fun t(en: String, cs: String, pl: String): String = when (activeLang) {
         Lang.EN -> en; Lang.CS -> cs; Lang.PL -> pl
     }
 
@@ -643,6 +653,12 @@ object Strings {
     )
     fun showChanges(count: Int): String = t("Show changes ($count)", "Zobrazit změny ($count)", "Pokaż zmiany ($count)")
     fun hideChanges(): String = t("Hide changes", "Skrýt změny", "Ukryj zmiany")
+    fun localizeVersionRuleType(type: String): String = when (type.uppercase()) {
+        "PATCH" -> t("FIX", "OPRAVA", "POPRAWKA")
+        "MINOR" -> t("FEATURE", "FUNKCE", "FUNKCJA")
+        "MAJOR" -> t("ARCHITECTURE", "ARCHITEKTURA", "ARCHITEKTURA")
+        else -> type
+    }
     fun versionTypeLabel(type: ChangeType): String = when (type) {
         ChangeType.PATCH -> t("FIX", "OPRAVA", "POPRAWKA")
         ChangeType.MINOR -> t("FEATURE", "FUNKCE", "FUNKCJA")
@@ -654,6 +670,14 @@ object Strings {
         "worker" -> t("Worker", "Pracovník", "Pracownik")
         "assistant" -> t("Assistant", "Asistent", "Asystent")
         else -> t("Viewer", "Náhled", "Podgląd")
+    }
+    fun localizeRoleDescription(role: String, fallback: String? = null): String = when (role.lowercase()) {
+        "admin" -> t("Full access to users, settings and all CRM operations.", "Plný přístup k uživatelům, nastavení a všem CRM operacím.", "Pełny dostęp do użytkowników, ustawień i wszystkich operacji CRM.")
+        "manager" -> t("Manages clients, jobs, planning and team work.", "Spravuje klienty, zakázky, plánování a týmovou práci.", "Zarządza klientami, zleceniami, planowaniem i pracą zespołu.")
+        "worker" -> t("Works with own tasks, reports, calendar and photos.", "Pracuje se svými úkoly, výkazy, kalendářem a fotkami.", "Pracuje z własnymi zadaniami, raportami, kalendarzem i zdjęciami.")
+        "assistant" -> t("Broad operational access with limited destructive actions.", "Široký provozní přístup s omezenými destruktivními akcemi.", "Szeroki dostęp operacyjny z ograniczonymi akcjami destrukcyjnymi.")
+        "viewer" -> t("Read-only access to shared CRM data.", "Pouze čtení sdílených CRM dat.", "Dostęp tylko do odczytu współdzielonych danych CRM.")
+        else -> fallback ?: ""
     }
     fun localizeThemeMode(mode: String): String = when (mode) {
         "system" -> accordingToSystem
@@ -689,6 +713,42 @@ object Strings {
         "business" -> t("Business (6-30)", "Firma (6-30)", "Firma (6-30)")
         else -> mode
     }
+    fun localizeLanguageMode(mode: String): String = when (mode.lowercase()) {
+        "single" -> t("Single language", "Jeden jazyk", "Jeden język")
+        "multi" -> t("Multiple languages", "Více jazyků", "Wiele języków")
+        else -> mode
+    }
+    fun localizeCrmTab(tab: String): String = when (tab.lowercase()) {
+        "clients" -> clients
+        "properties" -> properties
+        "jobs" -> jobs
+        "waste" -> wasteLabel
+        "finance" -> financeLabel
+        else -> tab
+    }
+    fun localizeClientSortOrder(order: String): String = when (order.lowercase()) {
+        "name" -> nameField
+        "created" -> created
+        "activity" -> activityLabel
+        else -> order
+    }
+    fun localizeAutoRefreshInterval(minutes: Int): String = when {
+        minutes <= 0 -> t("Manual", "Ručně", "Ręcznie")
+        else -> t("$minutes min", "$minutes min", "$minutes min")
+    }
+    fun localizeReminderInterval(minutes: Int): String = when {
+        minutes <= 0 -> t("Off", "Vypnuto", "Wyłączone")
+        minutes % 60 == 0 -> t("${minutes / 60} h", "${minutes / 60} h", "${minutes / 60} h")
+        else -> t("$minutes min", "$minutes min", "$minutes min")
+    }
+    fun localizePriority(priority: String): String = when (priority.lowercase()) {
+        "low" -> low
+        "normal" -> normal
+        "high" -> high
+        "urgent" -> urgent
+        else -> priority
+    }
+    fun signatureDefaultName(index: Int = 1): String = t("Signature $index", "Podpis $index", "Podpis $index")
     fun localizeServiceRateKey(key: String): String = when (key.lowercase()) {
         "garden_maintenance", "hourly_rate" -> gardenMaintenanceRate
         "hedge_trimming" -> hedgeTrimmingRate
