@@ -673,6 +673,12 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
             (it.email_primary ?: "").contains(searchQuery, ignoreCase = true) ||
             (it.phone_primary ?: "").contains(searchQuery, ignoreCase = true)
         }
+    val filteredPhoneContacts = if (searchQuery.isBlank()) phoneContacts else phoneContacts.filter {
+        it.name.contains(searchQuery, ignoreCase = true) ||
+            (it.phone ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.email ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.linked_client_name ?: "").contains(searchQuery, ignoreCase = true)
+    }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
@@ -716,7 +722,7 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                 }
                 if (contactsLoading) {
                     Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.clientSetupLoading, color = Color.Gray) }
-                } else if (phoneContacts.isEmpty()) {
+                } else if (filteredPhoneContacts.isEmpty()) {
                     Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noPhoneContacts, color = Color.Gray) }
                 } else {
                     Row(
@@ -739,7 +745,7 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                         }
                     }
                     LazyColumn(Modifier.fillMaxSize()) {
-                        items(phoneContacts, key = { it.contact_key }) { contact ->
+                        items(filteredPhoneContacts, key = { it.contact_key }) { contact ->
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -3155,8 +3161,8 @@ class SecretaryViewModel : ViewModel() {
 
     private fun preparePhoneContacts(
         context: Context,
-        onlyUkNumbers: Boolean = true,
-        skipWithoutPhone: Boolean = true,
+        onlyUkNumbers: Boolean = false,
+        skipWithoutPhone: Boolean = false,
         skipWithoutName: Boolean = true,
         removeDuplicates: Boolean = true,
         includeEmail: Boolean = true
@@ -3172,7 +3178,13 @@ class SecretaryViewModel : ViewModel() {
                 .replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
             val cleanedEmail = c["email"].orEmpty().trim().lowercase(Locale.ROOT)
             val normalizedName = c["name"].orEmpty().trim()
-            val contactKey = cleanedPhone.filter { it.isDigit() }
+            val phoneDigits = cleanedPhone.filter { it.isDigit() }
+            val normalizedPhone = when {
+                phoneDigits.startsWith("0044") -> "0" + phoneDigits.removePrefix("0044")
+                phoneDigits.startsWith("44") -> "0" + phoneDigits.removePrefix("44")
+                else -> phoneDigits
+            }
+            val contactKey = normalizedPhone
                 .ifBlank { cleanedEmail.ifBlank { normalizedName.lowercase(Locale.ROOT) } }
             mapOf(
                 "contact_key" to contactKey,
@@ -3202,7 +3214,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val localContacts = preparePhoneContacts(context)
-                val res = api.syncContacts(mapOf("contacts" to localContacts, "filter_uk" to true))
+                val res = api.syncContacts(mapOf("contacts" to localContacts, "filter_uk" to false))
                 if (res.isSuccessful) {
                     val remoteMap = (res.body()?.contacts ?: emptyList()).associateBy { it.contact_key }
                     val merged = localContacts.map { local ->
@@ -3252,7 +3264,7 @@ class SecretaryViewModel : ViewModel() {
                         "selected_as_client" to contact.selected_as_client
                     )
                 }
-                val res = api.syncContacts(mapOf("contacts" to payload, "filter_uk" to true))
+                val res = api.syncContacts(mapOf("contacts" to payload, "filter_uk" to false))
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -3385,8 +3397,8 @@ class SecretaryViewModel : ViewModel() {
 
     fun syncPhoneContacts(
         context: Context,
-        onlyUkNumbers: Boolean = true,
-        skipWithoutPhone: Boolean = true,
+        onlyUkNumbers: Boolean = false,
+        skipWithoutPhone: Boolean = false,
         skipWithoutName: Boolean = true,
         removeDuplicates: Boolean = true,
         includeEmail: Boolean = true
