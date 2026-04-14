@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.core.content.FileProvider
+import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil.CoilImage
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +62,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -203,7 +206,17 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val state by viewModel.uiState.collectAsState()
     var showAddClientDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.pendingPlantCaptureRequestId, currentRoute) {
+        if (state.pendingPlantCaptureRequestId != null && currentRoute != Screen.Crm.route) {
+            navController.navigate(Screen.Crm.route) {
+                popUpTo(navController.graph.startDestinationId)
+                launchSingleTop = true
+            }
+        }
+    }
 
     if (showAddClientDialog) {
         AddClientDialog(
@@ -456,7 +469,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
                                     val phone = contact["phone"] ?: return@IconButton
                                     val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
                                     try { context.startActivity(intent) } catch (_: Exception) {}
-                                }) { Icon(Icons.Default.Call, null) } 
+                                }) { Icon(imageVector = Icons.Default.Call, contentDescription = null) } 
                             }
                         )
                     }
@@ -474,19 +487,19 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
                 contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
-            Icon(if (state.isListening) Icons.Default.Refresh else Icons.Default.Call, contentDescription = null, modifier = Modifier.size(48.dp))
+            Icon(imageVector = if (state.isListening) Icons.Default.Refresh else Icons.Default.Call, contentDescription = null, modifier = Modifier.size(48.dp))
         }
         
         // Ovladaci tlacitka - radek 1
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             OutlinedButton(onClick = { viewModel.toggleBackground() }) {
-                Icon(Icons.Default.Notifications, null, Modifier.size(16.dp))
+                Icon(imageVector = Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(if (state.isBackgroundActive) Strings.backgroundEnabledShort else Strings.backgroundDisabledShort, fontSize = 11.sp)
             }
             OutlinedButton(onClick = { viewModel.restartVoice() }) {
-                Icon(Icons.Default.Refresh, null, Modifier.size(16.dp))
+                Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(Strings.restartShort, fontSize = 11.sp)
             }
@@ -498,7 +511,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
                 onClick = { viewModel.shutdownApp() },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Default.Close, null, Modifier.size(16.dp))
+                Icon(imageVector = Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(Strings.closeApp, fontSize = 11.sp)
             }
@@ -506,7 +519,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
                 onClick = { viewModel.logout() },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Default.ExitToApp, null, Modifier.size(16.dp))
+                Icon(imageVector = Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(Strings.logout, fontSize = 11.sp)
             }
@@ -537,21 +550,26 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
     var showAddSharedContact by remember { mutableStateOf(false) }
     var showEditLead by remember { mutableStateOf<Lead?>(null) }
     var showInvoiceStatus by remember { mutableStateOf<Invoice?>(null) }
-    val tabs = listOf(Strings.today, Strings.clients, Strings.jobs, Strings.tasks, Strings.leads, Strings.quotes, Strings.invoices, Strings.workReports, Strings.contactsDirectory, Strings.communications)
+    val tabs = listOf(Strings.today, Strings.clients, Strings.jobs, Strings.tasks, Strings.leads, Strings.quotes, Strings.invoices, Strings.workReports, Strings.contactsDirectory, Strings.plants, Strings.communications)
 
     LaunchedEffect(Unit) { viewModel.refreshCrmData() }
+    LaunchedEffect(state.pendingPlantCaptureRequestId) {
+        if (state.pendingPlantCaptureRequestId != null) {
+            selectedTab = 9
+        }
+    }
 
     Scaffold(
         floatingActionButton = {
             when (selectedTab) {
-                1 -> FloatingActionButton(onClick = { showAddClient = true }) { Icon(Icons.Default.Add, "Klient") }
-                2 -> FloatingActionButton(onClick = { showAddJob = true }) { Icon(Icons.Default.Add, "Zakázka") }
-                4 -> FloatingActionButton(onClick = { showAddLead = true }) { Icon(Icons.Default.Add, "Lead") }
-                5 -> FloatingActionButton(onClick = { showAddQuote = true }) { Icon(Icons.Default.Add, "Nabídka") }
-                6 -> FloatingActionButton(onClick = { showAddInvoice = true }) { Icon(Icons.Default.Add, "Faktura") }
-                7 -> FloatingActionButton(onClick = { showAddWorkReport = true }) { Icon(Icons.Default.Add, "Výkaz") }
-                8 -> FloatingActionButton(onClick = { showAddSharedContact = true }) { Icon(Icons.Default.Add, "Kontakt") }
-                9 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(Icons.Default.Add, "Komunikace") }
+                1 -> FloatingActionButton(onClick = { showAddClient = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Klient") }
+                2 -> FloatingActionButton(onClick = { showAddJob = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Zakázka") }
+                4 -> FloatingActionButton(onClick = { showAddLead = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Lead") }
+                5 -> FloatingActionButton(onClick = { showAddQuote = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Nabídka") }
+                6 -> FloatingActionButton(onClick = { showAddInvoice = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Faktura") }
+                7 -> FloatingActionButton(onClick = { showAddWorkReport = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Výkaz") }
+                8 -> FloatingActionButton(onClick = { showAddSharedContact = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Kontakt") }
+                10 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Komunikace") }
                 else -> {}
             }
         }
@@ -582,7 +600,8 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
                     }
                     7 -> WorkReportsTab(state.workReports, viewModel, navController)
                     8 -> ContactsDirectoryTab(state, viewModel)
-                    9 -> CommunicationTab(state, viewModel, navController)
+                    9 -> PlantRecognitionTab(state, viewModel)
+                    10 -> CommunicationTab(state, viewModel, navController)
                 }
             }
         }
@@ -659,8 +678,8 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
             OutlinedTextField(
                 value = searchQuery, onValueChange = { searchQuery = it },
                 placeholder = { Text(Strings.searchClients, fontSize = 14.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                trailingIcon = { if (searchQuery.isNotBlank()) IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Clear, null) } },
+                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null) },
+                trailingIcon = { if (searchQuery.isNotBlank()) IconButton(onClick = { searchQuery = "" }) { Icon(imageVector = Icons.Default.Clear, contentDescription = null) } },
                 modifier = Modifier.weight(1f),
                 singleLine = true
             )
@@ -761,8 +780,8 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                     ) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                Icons.Default.Person,
-                                null, modifier = Modifier.size(40.dp).padding(end = 12.dp),
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null, modifier = Modifier.size(40.dp).padding(end = 12.dp),
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Column(Modifier.weight(1f)) {
@@ -774,7 +793,7 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                                 client.phone_primary?.let { Text("\u260E $it", fontSize = 13.sp, maxLines = 1) }
                                 client.email_primary?.let { Text("\u2709 $it", fontSize = 13.sp, color = Color.Gray, maxLines = 1) }
                             }
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = Color.Gray)
+                            Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.Gray)
                         }
                     }
                 }
@@ -797,7 +816,7 @@ fun JobsListTab(jobs: List<Job>, navController: NavHostController, viewModel: Se
             items(jobs) { job ->
                 Card(Modifier.fillMaxWidth().padding(bottom = 4.dp).clickable { navController.navigate("job/${job.id}") }) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(imageVector = Icons.Default.Star, contentDescription = null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(job.job_title, fontWeight = FontWeight.SemiBold)
@@ -819,7 +838,7 @@ fun JobsListTab(jobs: List<Job>, navController: NavHostController, viewModel: Se
                         Surface(shape = RoundedCornerShape(8.dp), color = statusColor.copy(alpha = 0.15f)) {
                             Text(Strings.localizeStatus(job.job_status), Modifier.padding(horizontal = 8.dp, vertical = 4.dp), fontSize = 11.sp, color = statusColor)
                         }
-                        IconButton(onClick = { editJob = job }) { Icon(Icons.Default.Edit, "Upravit", tint = Color.Gray) }
+                        IconButton(onClick = { editJob = job }) { Icon(imageVector = Icons.Default.Edit, contentDescription = "Upravit", tint = Color.Gray) }
                     }
                 }
             }
@@ -1124,7 +1143,7 @@ fun DashboardTab(state: UiState, viewModel: SecretaryViewModel, navController: N
         val activeJobs = state.jobs.filter { it.job_status != "completed" && it.job_status != "cancelled" }
         if (activeJobs.isNotEmpty()) {
             item { DashSection(Strings.activeJobs, activeJobs.size) }
-            items(activeJobs) { j -> ListItem(headlineContent = { Text(j.job_title) }, supportingContent = { Text(Strings.localizeStatus(j.job_status)) }, leadingContent = { Icon(Icons.Default.Star, null, tint = MaterialTheme.colorScheme.primary) }, modifier = Modifier.clickable { navController.navigate("job/${j.id}") }); HorizontalDivider() }
+            items(activeJobs) { j -> ListItem(headlineContent = { Text(j.job_title) }, supportingContent = { Text(Strings.localizeStatus(j.job_status)) }, leadingContent = { Icon(imageVector = Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }, modifier = Modifier.clickable { navController.navigate("job/${j.id}") }); HorizontalDivider() }
         }
         // Nove leady
         val newLeads = state.leads.filter { it.status == "new" || it.status == "kvalifikovany" }
@@ -1169,8 +1188,8 @@ fun <T> CrmDataList(items: List<T>, icon: androidx.compose.ui.graphics.vector.Im
                 }
                 ListItem(
                     headlineContent = { Text(label) },
-                    leadingContent = { Icon(icon, null) },
-                    trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) },
+                    leadingContent = { Icon(imageVector = icon, contentDescription = null) },
+                    trailingContent = { Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
                     modifier = Modifier.clickable { onClick(item) }
                 )
                 HorizontalDivider()
@@ -1195,16 +1214,16 @@ fun ClientDetailScreen(clientId: Long, viewModel: SecretaryViewModel, navControl
         topBar = {
             TopAppBar(
                 title = { Text(detail?.client?.display_name ?: "Načítám...") },
-                navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
+                navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) } },
                 actions = {
-                    IconButton(onClick = { showEditDialog = true }) { Icon(Icons.Default.Edit, "Upravit") }
+                    IconButton(onClick = { showEditDialog = true }) { Icon(imageVector = Icons.Default.Edit, contentDescription = "Upravit") }
                 }
             )
         },
         floatingActionButton = {
             when (selectedTab) {
-                2 -> FloatingActionButton(onClick = { showAddTaskDialog = true }) { Icon(Icons.Default.Add, "Úkol") }
-                4 -> FloatingActionButton(onClick = { showNoteDialog = true }) { Icon(Icons.Default.Add, "Poznámka") }
+                2 -> FloatingActionButton(onClick = { showAddTaskDialog = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Úkol") }
+                4 -> FloatingActionButton(onClick = { showNoteDialog = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Poznámka") }
                 else -> {}
             }
         }
@@ -1271,22 +1290,22 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                 if (!c.phone_primary.isNullOrBlank()) {
                     Button(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.phone_primary}"))) },
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                    ) { Icon(Icons.Default.Phone, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.call, fontSize = 12.sp) }
+                    ) { Icon(imageVector = Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.call, fontSize = 12.sp) }
                     Button(onClick = {
                         val phone = c.phone_primary!!.replace("+","").replace(" ","").replace("-","")
                         val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$phone"))
                         ctx.startActivity(waIntent)
                     }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
-                    ) { Icon(Icons.Default.Send, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("WhatsApp", fontSize = 12.sp) }
+                    ) { Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("WhatsApp", fontSize = 12.sp) }
                 }
                 if (!c.email_primary.isNullOrBlank()) {
                     Button(onClick = { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${c.email_primary}"))) },
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3))
-                    ) { Icon(Icons.Default.Email, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.email, fontSize = 12.sp) }
+                    ) { Icon(imageVector = Icons.Default.Email, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.email, fontSize = 12.sp) }
                 }
                 Button(onClick = { showEditDialog = true },
                     modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-                ) { Icon(Icons.Default.Edit, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.edit, fontSize = 12.sp) }
+                ) { Icon(imageVector = Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.edit, fontSize = 12.sp) }
             }
         }
         item {
@@ -1687,10 +1706,10 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
         topBar = {
             TopAppBar(
                 title = { Text(detail?.job?.job_title ?: "Načítám...") },
-                navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
+                navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) } },
                 actions = {
-                    IconButton(onClick = { showEditDialog = true }) { Icon(Icons.Default.Edit, "Upravit") }
-                    IconButton(onClick = { showStatusDialog = true }) { Icon(Icons.Default.Settings, Strings.changeStatus) }
+                    IconButton(onClick = { showEditDialog = true }) { Icon(imageVector = Icons.Default.Edit, contentDescription = "Upravit") }
+                    IconButton(onClick = { showStatusDialog = true }) { Icon(imageVector = Icons.Default.Settings, contentDescription = Strings.changeStatus) }
                 }
             )
         },
@@ -1699,12 +1718,12 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
                 SmallFloatingActionButton(
                     onClick = { launchCamera() },
                     modifier = Modifier.padding(bottom = 8.dp)
-                ) { Icon(Icons.Default.AddAPhoto, null) }
+                ) { Icon(imageVector = Icons.Outlined.CameraAlt, contentDescription = null) }
                 
                 FloatingActionButton(onClick = { 
                     noteTypeForDialog = if (selectedTab == 3) "complication" else "general"
                     showNoteDialog = true 
-                }) { Icon(Icons.Default.Add, "Poznámka") }
+                }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Poznámka") }
             }
         }
     ) { padding ->
@@ -1718,7 +1737,7 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
                     }
                 }
 
-                LazyColumn(Modifier.weight(1f).padding(12.dp)) {
+                LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
                     when (selectedTab) {
                         0 -> jobStageContent(detail, "start", viewModel)
                         1 -> jobStageContent(detail, "process", viewModel)
@@ -1735,7 +1754,7 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
         EditJobDialog(job = detail.job, onDismiss = { showEditDialog = false },
             onSave = { data -> viewModel.updateJob(jobId, data); showEditDialog = false })
     }
-    if (showNoteDialog) {
+    if (showNoteDialog && detail != null) {
         AddJobNoteDialog(onDismiss = { showNoteDialog = false },
             onSave = { note -> viewModel.addJobNote(jobId, note, noteTypeForDialog); showNoteDialog = false })
     }
@@ -1809,8 +1828,8 @@ private fun LazyListScope.jobStageContent(detail: JobDetail, stage: String, view
                 row.forEach { photo ->
                     Box(Modifier.weight(1f).aspectRatio(1f).padding(4.dp)) {
                         CoilImage(
-                            imageModel = photo.url,
-                            contentScale = ContentScale.Crop,
+                            imageModel = { photo.url },
+                            imageOptions = ImageOptions(contentScale = ContentScale.Crop),
                             modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))
                         )
                     }
@@ -2513,6 +2532,21 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    private fun parseApiError(rawError: String?): String {
+        val detail = rawError?.let {
+            try {
+                org.json.JSONObject(it).optString("detail").ifBlank { it }
+            } catch (_: Exception) {
+                it
+            }
+        }?.trim()
+        return when {
+            detail.isNullOrBlank() -> Strings.connectionError
+            detail.contains("not configured", ignoreCase = true) -> Strings.plantRecognitionUnavailable
+            else -> detail
+        }
+    }
+
     fun logout() {
         settingsManager?.accessToken = null
         settingsManager?.refreshToken = null
@@ -2774,8 +2808,12 @@ class SecretaryViewModel : ViewModel() {
     fun addJobAuditEntry(jobId: Long, actionType: String, description: String) {
         viewModelScope.launch {
             try {
-                val entry = JobAuditEntry(job_id = jobId, action_type = actionType, description = description)
-                api.addJobAuditEntry(jobId, entry)
+                val data = mapOf(
+                    "job_id" to jobId.toString(),
+                    "action_type" to actionType,
+                    "description" to description
+                )
+                api.addJobAuditEntry(jobId, data)
                 loadJobDetail(jobId)
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -2786,12 +2824,15 @@ class SecretaryViewModel : ViewModel() {
     fun uploadJobPhoto(jobId: Long, photoType: String, file: java.io.File, description: String? = null) {
         viewModelScope.launch {
             try {
-                val requestFile = okhttp3.RequestBody.create(okhttp3.MediaType.parse("image/*"), file)
+                val mediaType = "image/*".toMediaType()
+                val requestFile = file.asRequestBody(mediaType)
                 val body = okhttp3.MultipartBody.Part.createFormData("file", file.name, requestFile)
-                val descPart = description?.let { okhttp3.RequestBody.create(okhttp3.MediaType.parse("text/plain"), it) }
-                val typePart = okhttp3.RequestBody.create(okhttp3.MediaType.parse("text/plain"), photoType)
+                
+                val textType = "text/plain".toMediaType()
+                val descPart = description?.toRequestBody(textType)
+                val typePart = photoType.toRequestBody(textType)
 
-                val response = api.uploadJobPhoto(jobId, body, typePart, descPart)
+                val response = api.uploadJobPhoto(jobId, body, descPart, typePart)
                 if (response.isSuccessful) {
                     addJobAuditEntry(jobId, "photo_upload", "Uploaded $photoType photo: ${file.name}")
                 }
@@ -2799,6 +2840,93 @@ class SecretaryViewModel : ViewModel() {
                 e.printStackTrace()
             }
         }
+    }
+
+    fun identifyPlant(photos: List<PlantPhotoUpload>) {
+        val voiceTriggered = _uiState.value.isPlantVoiceCaptureActive
+        if (photos.size < 3) {
+            _uiState.value = _uiState.value.copy(plantRecognitionError = Strings.plantNeedsThreePhotos)
+            if (voiceTriggered) voiceManager?.speak(Strings.plantNeedsThreePhotos, expectReply = false)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(
+                    plantRecognitionLoading = true,
+                    plantRecognitionError = null
+                )
+                val mediaType = "image/*".toMediaType()
+                val imageParts = photos.mapIndexed { index, photo ->
+                    val requestFile = photo.file.asRequestBody(mediaType)
+                    okhttp3.MultipartBody.Part.createFormData(
+                        "images",
+                        photo.file.name.ifBlank { "plant_${index + 1}.jpg" },
+                        requestFile
+                    )
+                }
+                val textType = "text/plain".toMediaType()
+                val organsJson = org.json.JSONArray(photos.map { it.organ }).toString().toRequestBody(textType)
+                val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
+                val response = api.identifyPlant(imageParts, organsJson, language)
+                if (response.isSuccessful) {
+                    val result = response.body()
+                    _uiState.value = _uiState.value.copy(
+                        plantRecognitionLoading = false,
+                        plantRecognitionError = null,
+                        selectedPlantRecognition = result,
+                        isPlantVoiceCaptureActive = false
+                    )
+                    val spoken = result?.spoken_summary ?: result?.display_name ?: Strings.plantRecognitionTitle
+                    if (voiceTriggered) voiceManager?.speak(spoken, expectReply = false)
+                } else {
+                    val errorText = parseApiError(response.errorBody()?.string())
+                    _uiState.value = _uiState.value.copy(
+                        plantRecognitionLoading = false,
+                        plantRecognitionError = errorText,
+                        isPlantVoiceCaptureActive = false
+                    )
+                    if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
+                }
+            } catch (e: Exception) {
+                val message = e.message?.takeIf { it.isNotBlank() } ?: Strings.connectionError
+                _uiState.value = _uiState.value.copy(
+                    plantRecognitionLoading = false,
+                    plantRecognitionError = message,
+                    isPlantVoiceCaptureActive = false
+                )
+                if (voiceTriggered) voiceManager?.speak(message, expectReply = false)
+            }
+        }
+    }
+
+    fun requestPlantCaptureFromVoice() {
+        val reply = Strings.plantRecognitionVoiceGuide
+        _uiState.value = _uiState.value.copy(
+            history = (_uiState.value.history + ChatMessage("user", Strings.plantRecognitionTitle) + ChatMessage("assistant", reply)).takeLast(30),
+            lastAiReply = reply,
+            status = Strings.plantCaptureReady,
+            pendingPlantCaptureRequestId = System.currentTimeMillis(),
+            isPlantVoiceCaptureActive = true,
+            plantRecognitionError = null,
+            selectedPlantRecognition = null
+        )
+        voiceManager?.speak(reply, expectReply = false)
+    }
+
+    fun consumePendingPlantCaptureRequest() {
+        if (_uiState.value.pendingPlantCaptureRequestId != null) {
+            _uiState.value = _uiState.value.copy(pendingPlantCaptureRequestId = null)
+        }
+    }
+
+    fun clearPlantRecognitionResult() {
+        _uiState.value = _uiState.value.copy(
+            selectedPlantRecognition = null,
+            plantRecognitionError = null,
+            plantRecognitionLoading = false,
+            isPlantVoiceCaptureActive = false,
+            pendingPlantCaptureRequestId = null
+        )
     }
 
     fun refreshCrmData() {
@@ -3317,7 +3445,12 @@ class SecretaryViewModel : ViewModel() {
     fun addJobNote(jobId: Long, note: String, noteType: String = "general") {
         viewModelScope.launch {
             try {
-                val response = api.addJobNote(jobId, JobNote(job_id = jobId, note = note, note_type = noteType))
+                val data = mapOf(
+                    "job_id" to jobId.toString(),
+                    "note" to note,
+                    "note_type" to noteType
+                )
+                val response = api.addJobNote(jobId, data)
                 if (response.isSuccessful) {
                     addJobAuditEntry(jobId, "note_added", "Added $noteType note: $note")
                     loadJobDetail(jobId)
@@ -3567,6 +3700,10 @@ class SecretaryViewModel : ViewModel() {
         // If voice work report session is active, redirect to session
         if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
             processVoiceSessionInput(text)
+            return
+        }
+        if (Strings.matchesPlantRecognitionCommand(lower)) {
+            requestPlantCaptureFromVoice()
             return
         }
         val currentState = _uiState.value
@@ -3847,6 +3984,11 @@ data class UiState(
     val pendingCall: String? = null,
     val pendingPhotoTaskId: String? = null,
     val pendingPhotoTaskTitle: String? = null,
+    val pendingPlantCaptureRequestId: Long? = null,
+    val selectedPlantRecognition: PlantRecognitionResponse? = null,
+    val plantRecognitionLoading: Boolean = false,
+    val plantRecognitionError: String? = null,
+    val isPlantVoiceCaptureActive: Boolean = false,
     val isBackgroundActive: Boolean = true,
     val voiceSessionId: String? = null,
     val voiceSessionStep: String? = null,

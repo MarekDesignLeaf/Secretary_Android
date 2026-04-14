@@ -17,6 +17,15 @@ interface SecretaryApi {
     @POST("process")
     suspend fun processMessage(@Body request: MessageRequest): Response<AssistantResponse>
 
+    // === PLANTS ===
+    @Multipart
+    @POST("plants/identify")
+    suspend fun identifyPlant(
+        @Part images: List<MultipartBody.Part>,
+        @Part("organs_json") organsJson: RequestBody,
+        @Part("language") language: RequestBody
+    ): Response<PlantRecognitionResponse>
+
     // === CLIENTS ===
     @GET("crm/clients")
     suspend fun getClients(): Response<List<Client>>
@@ -181,9 +190,6 @@ interface SecretaryApi {
     @POST("work-reports")
     suspend fun createWorkReport(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
-    // === JOB NOTES ===
-    @POST("crm/jobs/{id}/notes")
-    suspend fun addJobNote(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === QUOTES ===
     @GET("crm/quotes")

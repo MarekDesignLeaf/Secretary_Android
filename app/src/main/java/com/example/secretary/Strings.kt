@@ -38,6 +38,7 @@ object Strings {
     val today get() = t("Today", "Dnes", "Dziś")
     val clients get() = t("Clients", "Klienti", "Klienci")
     val contactsDirectory get() = t("Contacts", "Kontakty", "Kontakty")
+    val plants get() = t("Plants", "Rostliny", "Rośliny")
     val employeesSection get() = t("Employees", "Zaměstnanci", "Pracownicy")
     val subcontractorsSection get() = t("Subcontractors", "Subkontraktoři", "Podwykonawcy")
     val materialSuppliersSection get() = t("Material suppliers", "Dodavatelé materiálu", "Dostawcy materiałów")
@@ -88,6 +89,37 @@ object Strings {
     val notes get() = t("Notes", "Poznámky", "Notatki")
     val overview get() = t("Overview", "Přehled", "Przegląd")
 
+    // === PLANT RECOGNITION ===
+    val plantRecognitionTitle get() = t("Plant recognition", "Rozpoznávání rostlin", "Rozpoznawanie roślin")
+    val plantRecognitionHint get() = t(
+        "Take at least 3 photos of the same plant: whole plant, leaf detail, and flower or fruit if available.",
+        "Pořiď minimálně 3 fotografie stejné rostliny: celou rostlinu, detail listu a pokud je k dispozici, květ nebo plod.",
+        "Zrób co najmniej 3 zdjęcia tej samej rośliny: całej rośliny, zbliżenia liścia oraz kwiatu lub owocu, jeśli są dostępne."
+    )
+    val plantRecognitionVoiceGuide get() = t(
+        "Take at least 3 photos: whole plant, leaf detail, and flower or fruit if available. Then I will identify it.",
+        "Pořiď minimálně 3 fotografie: celou rostlinu, detail listu a pokud je k dispozici květ nebo plod. Potom ji rozpoznám.",
+        "Zrób co najmniej 3 zdjęcia: całej rośliny, zbliżenia liścia oraz kwiatu lub owocu, jeśli są dostępne. Potem ją rozpoznam."
+    )
+    val plantWholePlant get() = t("Whole plant", "Celá rostlina", "Cała roślina")
+    val plantLeafDetail get() = t("Leaf detail", "Detail listu", "Detal liścia")
+    val plantFlowerOrFruit get() = t("Flower, fruit or bark", "Květ, plod nebo kůra", "Kwiat, owoc lub kora")
+    val identifyPlantAction get() = t("Identify plant", "Rozpoznat rostlinu", "Rozpoznaj roślinę")
+    val plantRecognitionLoading get() = t("Identifying plant...", "Rozpoznávám rostlinu...", "Rozpoznaję roślinę...")
+    val plantNoResultYet get() = t("No identification yet", "Zatím bez rozpoznání", "Brak identyfikacji")
+    val plantBestMatch get() = t("Best match", "Nejlepší shoda", "Najlepsze dopasowanie")
+    val plantGuidance get() = t("Description and care", "Popis a nároky", "Opis i wymagania")
+    val plantAlternatives get() = t("Other likely matches", "Další pravděpodobné shody", "Inne prawdopodobne dopasowania")
+    val confidence get() = t("Confidence", "Pravděpodobnost", "Pewność")
+    val plantNeedsThreePhotos get() = t(
+        "You need at least 3 photos before identification.",
+        "Před rozpoznáním jsou potřeba alespoň 3 fotografie.",
+        "Przed rozpoznaniem potrzebne są co najmniej 3 zdjęcia."
+    )
+    val plantVoiceBanner get() = t("Voice-guided capture is active.", "Je aktivní hlasově vedené focení.", "Aktywne jest prowadzenie głosowe podczas robienia zdjęć.")
+    val plantCaptureReady get() = t("Camera is ready for the next plant photo.", "Fotoaparát je připraven pro další fotografii rostliny.", "Aparat jest gotowy na kolejne zdjęcie rośliny.")
+    val plantRecognitionUnavailable get() = t("Plant recognition service is not configured yet.", "Služba pro rozpoznávání rostlin ještě není nastavená.", "Usługa rozpoznawania roślin nie jest jeszcze skonfigurowana.")
+
     // === ACTIONS ===
     val save get() = t("Save", "Uložit", "Zapisz")
     val cancel get() = t("Cancel", "Zrušit", "Anuluj")
@@ -96,6 +128,8 @@ object Strings {
     val delete get() = t("Delete", "Smazat", "Usuń")
     val close get() = t("Close", "Zavřít", "Zamknij")
     val confirm get() = t("Confirm", "Potvrdit", "Potwierdź")
+    val useCamera get() = t("Use camera", "Použít fotoaparát", "Użyj aparatu")
+    val chooseFromGallery get() = t("Choose from gallery", "Vybrat z galerie", "Wybierz z galerii")
     val convert get() = t("Convert", "Převést", "Konwertuj")
     val complete get() = t("Complete", "Dokončit", "Zakończ")
     val addNote get() = t("Add note", "Přidat poznámku", "Dodaj notatkę")
@@ -311,7 +345,7 @@ object Strings {
     val clearHistoryQuestion get() = t("Clear history?", "Vymazat historii?", "Wyczyścić historię?")
     val restoreDefaultsQuestion get() = t("Restore default settings?", "Obnovit výchozí nastavení?", "Przywrócić ustawienia domyślne?")
     val exportCrmCsv get() = t("Export CRM (CSV)", "Exportovat CRM (CSV)", "Eksportuj CRM (CSV)")
-    val importContactsFromPhone get() = t("Import contacts from phone", "Import kontaktů z telefonu", "Importuj kontakty z telefonu")
+    val importContactsFromPhone get() = t("Import contacts from phone", "Import kontaktů z telefonu", "Importuj kontaty z telefonu")
     val onlyUkNumbers get() = t("UK numbers only (+44, 07, 01, 02)", "Pouze UK čísla (+44, 07, 01, 02)", "Tylko numery UK (+44, 07, 01, 02)")
     val allNumbers get() = t("All numbers", "Všechna čísla", "Wszystkie numery")
     val importContacts get() = t("Import contacts", "Importovat kontakty", "Importuj kontakty")
@@ -362,7 +396,13 @@ object Strings {
     val workHours get() = t("Work hours", "Pracovní hodiny", "Godziny pracy")
     val hotwordDuringWorkHours get() = t("Wake word only during work hours", "Hotword jen v pracovní době", "Słowo aktywujące tylko w godzinach pracy")
     val startLabel get() = t("Start", "Začátek", "Początek")
+    val progressLabel get() = t("Progress", "Průběh", "Przebieg")
     val endLabel get() = t("End", "Konec", "Koniec")
+    val complicationsLabel get() = t("Complications", "Komplikace", "Komplikacje")
+    val timestampLabel get() = t("Timestamp", "Čas", "Czas")
+    val userLabel get() = t("User", "Uživatel", "Użytkownik")
+    val actionLabel get() = t("Action", "Akce", "Akcja")
+    val auditLog get() = t("Audit Log", "Historie změn", "Log zmian")
     val defaultPriorityLabel get() = t("Default priority", "Výchozí priorita", "Domyślny priorytet")
     val workspaceMode get() = t("Workspace mode", "Režim", "Tryb pracy")
     val internalLanguage get() = t("Internal language", "Interní jazyk", "Język wewnętrzny")
@@ -376,7 +416,7 @@ object Strings {
     val voiceMinutes get() = t("Voice minutes", "Hlasové minuty", "Minuty głosowe")
     val aboutApp get() = t("About app", "O aplikaci", "O aplikacji")
     val versionLabel get() = t("Version", "Verze", "Wersja")
-    val releaseDate get() = t("Release date", "Datum vydání", "Data wydania")
+    val releaseDate get() = t("Release date", "Datum vydání", "Data vydania")
     val packageLabel get() = t("Package", "Balíček", "Pakiet")
     val ready get() = t("Ready", "Připravena", "Gotowe")
     val waitingForYourCommand get() = t("Waiting for your command...", "Čekám na váš povel...", "Czekam na Twoje polecenie...")
@@ -653,6 +693,14 @@ object Strings {
         "equipment_vehicle_rental" -> rentalsSection
         else -> fallback ?: sectionCode
     }
+    fun localizePlantOrgan(organ: String): String = when (organ.lowercase()) {
+        "auto" -> t("Auto", "Automaticky", "Automatycznie")
+        "leaf" -> t("Leaf", "List", "Liść")
+        "flower" -> t("Flower", "Květ", "Kwiat")
+        "fruit" -> t("Fruit", "Plod", "Owoc")
+        "bark" -> t("Bark", "Kůra", "Kora")
+        else -> organ
+    }
     fun localizePermission(code: String, fallback: String = code): String = when (code.lowercase()) {
         "crm_read" -> t("View CRM", "Čtení CRM", "Podgląd CRM")
         "crm_write" -> t("Edit CRM", "Úpravy CRM", "Edycja CRM")
@@ -690,6 +738,22 @@ object Strings {
             normalized.contains("odhlasit") ||
             normalized.contains("odhlásit") ||
             normalized.contains("wyloguj")
+    }
+    fun matchesPlantRecognitionCommand(text: String): Boolean {
+        val normalized = text.lowercase().trim()
+        val phrases = listOf(
+            "co je to za rostlinu",
+            "rozpoznej rostlinu",
+            "poznej rostlinu",
+            "identifikuj rostlinu",
+            "what plant is this",
+            "identify this plant",
+            "identify plant",
+            "jaka to roslina",
+            "rozpoznaj roślinę",
+            "rozpoznaj rosline"
+        )
+        return phrases.any { normalized.contains(it) }
     }
     fun loggingOutMessage(): String = t("Logging you out. Goodbye!", "Odhlašuji vás. Na shledanou!", "Wylogowuję Cię. Do widzenia!")
 

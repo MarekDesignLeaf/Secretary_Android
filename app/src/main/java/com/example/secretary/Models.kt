@@ -1,5 +1,7 @@
 package com.example.secretary
 
+import java.io.File
+
 data class ChatMessage(
     val role: String,
     val content: String
@@ -142,6 +144,35 @@ data class SharedContactImportResult(
     val imported: Int = 0,
     val merged: Int = 0,
     val errors: List<String> = emptyList()
+)
+
+data class PlantPhotoUpload(
+    val file: File,
+    val organ: String,
+    val label: String
+)
+
+data class PlantRecognitionSuggestion(
+    val display_name: String = "",
+    val scientific_name: String = "",
+    val common_names: List<String> = emptyList(),
+    val family: String? = null,
+    val genus: String? = null,
+    val score: Double = 0.0
+)
+
+data class PlantRecognitionResponse(
+    val database: String = "Pl@ntNet",
+    val display_name: String = "",
+    val scientific_name: String = "",
+    val common_names: List<String> = emptyList(),
+    val family: String? = null,
+    val genus: String? = null,
+    val score: Double = 0.0,
+    val organs: List<String> = emptyList(),
+    val guidance: String? = null,
+    val spoken_summary: String? = null,
+    val suggestions: List<PlantRecognitionSuggestion> = emptyList()
 )
 
 data class ImportableSharedContact(
