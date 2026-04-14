@@ -2940,12 +2940,12 @@ class SecretaryViewModel : ViewModel() {
         voiceManager?.speak(reply, expectReply = false, stayIdle = true)
     }
 
-    fun consumePendingPlantCaptureRequest() {
+    fun consumePendingPlantCaptureRequest(resumeHotword: Boolean = true) {
         val shouldResumeHotword = _uiState.value.isPlantVoiceCaptureActive
         if (_uiState.value.pendingPlantCaptureRequestId != null) {
             _uiState.value = _uiState.value.copy(pendingPlantCaptureRequestId = null)
         }
-        if (shouldResumeHotword) {
+        if (resumeHotword && shouldResumeHotword) {
             voiceManager?.startHotwordLoop()
         }
     }
