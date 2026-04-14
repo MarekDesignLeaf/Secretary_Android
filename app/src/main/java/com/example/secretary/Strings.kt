@@ -92,14 +92,14 @@ object Strings {
     // === PLANT RECOGNITION ===
     val plantRecognitionTitle get() = t("Plant recognition", "Rozpoznávání rostlin", "Rozpoznawanie roślin")
     val plantRecognitionHint get() = t(
-        "Take at least 3 photos of the same plant: whole plant, leaf detail, and flower or fruit if available.",
-        "Pořiď minimálně 3 fotografie stejné rostliny: celou rostlinu, detail listu a pokud je k dispozici, květ nebo plod.",
-        "Zrób co najmniej 3 zdjęcia tej samej rośliny: całej rośliny, zbliżenia liścia oraz kwiatu lub owocu, jeśli są dostępne."
+        "Take at least 1 photo. For better results, add the whole plant, a leaf detail, and flower or fruit if available. Optional shots can be skipped.",
+        "Pořiď alespoň 1 fotografii. Pro lepší výsledek přidej celou rostlinu, detail listu a pokud je k dispozici, květ nebo plod. Volitelné snímky lze přeskočit.",
+        "Zrób co najmniej 1 zdjęcie. Dla lepszego wyniku dodaj całą roślinę, zbliżenie liścia oraz kwiat lub owoc, jeśli są dostępne. Zdjęcia opcjonalne można pominąć."
     )
     val plantRecognitionVoiceGuide get() = t(
-        "Take at least 3 photos: whole plant, leaf detail, and flower or fruit if available. Then I will identify it.",
-        "Pořiď minimálně 3 fotografie: celou rostlinu, detail listu a pokud je k dispozici květ nebo plod. Potom ji rozpoznám.",
-        "Zrób co najmniej 3 zdjęcia: całej rośliny, zbliżenia liścia oraz kwiatu lub owocu, jeśli są dostępne. Potem ją rozpoznam."
+        "Take at least 1 photo. Whole plant, leaf detail, and flower or fruit are recommended, but you can skip optional shots.",
+        "Pořiď alespoň 1 fotografii. Celá rostlina, detail listu a květ nebo plod jsou doporučené, ale volitelné snímky můžeš přeskočit.",
+        "Zrób co najmniej 1 zdjęcie. Cała roślina, zbliżenie liścia oraz kwiat lub owoc są zalecane, ale zdjęcia opcjonalne możesz pominąć."
     )
     val plantWholePlant get() = t("Whole plant", "Celá rostlina", "Cała roślina")
     val plantLeafDetail get() = t("Leaf detail", "Detail listu", "Detal liścia")
@@ -111,14 +111,19 @@ object Strings {
     val plantGuidance get() = t("Description and care", "Popis a nároky", "Opis i wymagania")
     val plantAlternatives get() = t("Other likely matches", "Další pravděpodobné shody", "Inne prawdopodobne dopasowania")
     val confidence get() = t("Confidence", "Pravděpodobnost", "Pewność")
-    val plantNeedsThreePhotos get() = t(
-        "You need at least 3 photos before identification.",
-        "Před rozpoznáním jsou potřeba alespoň 3 fotografie.",
-        "Przed rozpoznaniem potrzebne są co najmniej 3 zdjęcia."
+    val plantNeedsPhoto get() = t(
+        "You need at least 1 photo before identification.",
+        "Před rozpoznáním je potřeba alespoň 1 fotografie.",
+        "Przed rozpoznaniem potrzebne jest co najmniej 1 zdjęcie."
     )
     val plantVoiceBanner get() = t("Voice-guided capture is active.", "Je aktivní hlasově vedené focení.", "Aktywne jest prowadzenie głosowe podczas robienia zdjęć.")
     val plantCaptureReady get() = t("Camera is ready for the next plant photo.", "Fotoaparát je připraven pro další fotografii rostliny.", "Aparat jest gotowy na kolejne zdjęcie rośliny.")
     val plantRecognitionUnavailable get() = t("Plant recognition service is not configured yet.", "Služba pro rozpoznávání rostlin ještě není nastavená.", "Usługa rozpoznawania roślin nie jest jeszcze skonfigurowana.")
+    val skipPhoto get() = t("Skip", "Přeskočit", "Pomiń")
+    val removePhoto get() = t("Remove photo", "Odebrat fotku", "Usuń zdjęcie")
+    val optionalPhoto get() = t("Optional", "Volitelné", "Opcjonalne")
+    val requiredPhoto get() = t("Required", "Povinné", "Wymagane")
+    val familyLabel get() = t("Family", "Čeleď", "Rodzina")
 
     // === ACTIONS ===
     val save get() = t("Save", "Uložit", "Zapisz")

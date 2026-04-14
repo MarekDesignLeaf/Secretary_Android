@@ -2844,9 +2844,9 @@ class SecretaryViewModel : ViewModel() {
 
     fun identifyPlant(photos: List<PlantPhotoUpload>) {
         val voiceTriggered = _uiState.value.isPlantVoiceCaptureActive
-        if (photos.size < 3) {
-            _uiState.value = _uiState.value.copy(plantRecognitionError = Strings.plantNeedsThreePhotos)
-            if (voiceTriggered) voiceManager?.speak(Strings.plantNeedsThreePhotos, expectReply = false)
+        if (photos.isEmpty()) {
+            _uiState.value = _uiState.value.copy(plantRecognitionError = Strings.plantNeedsPhoto)
+            if (voiceTriggered) voiceManager?.speak(Strings.plantNeedsPhoto, expectReply = false)
             return
         }
         viewModelScope.launch {

@@ -39,11 +39,12 @@ import java.io.File
 private data class PlantCaptureSlot(
     val id: Int,
     val organ: String,
-    val file: File? = null
+    val file: File? = null,
+    val isRequired: Boolean = false
 )
 
 private fun defaultPlantSlots(): List<PlantCaptureSlot> = listOf(
-    PlantCaptureSlot(id = 0, organ = "auto"),
+    PlantCaptureSlot(id = 0, organ = "auto", isRequired = true),
     PlantCaptureSlot(id = 1, organ = "leaf"),
     PlantCaptureSlot(id = 2, organ = "flower")
 )
@@ -133,6 +134,10 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(slotLabel(slot.id), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (slot.isRequired) Strings.requiredPhoto else Strings.optionalPhoto,
+                        color = if (slot.isRequired) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     if (slot.id == 2) {
                         Box {
                             OutlinedButton(onClick = { organMenuSlotId = slot.id }) {
@@ -163,6 +168,15 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                         OutlinedButton(onClick = { launchGallery(slot.id) }) {
                             Text(Strings.chooseFromGallery)
                         }
+                        if (slot.file != null) {
+                            TextButton(onClick = {
+                                slots = slots.map { current ->
+                                    if (current.id == slot.id) current.copy(file = null) else current
+                                }
+                            }) {
+                                Text(Strings.removePhoto)
+                            }
+                        }
                     }
                 }
             }
@@ -179,7 +193,7 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { viewModel.identifyPlant(readyPhotos) },
-                        enabled = readyPhotos.size >= 3
+                        enabled = readyPhotos.isNotEmpty()
                     ) {
                         Text(Strings.identifyPlantAction)
                     }
@@ -209,10 +223,10 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                         Text(Strings.plantBestMatch, fontWeight = FontWeight.Bold)
                         Text(result.display_name.ifBlank { result.scientific_name }, style = MaterialTheme.typography.titleMedium)
                         if (result.scientific_name.isNotBlank() && result.display_name != result.scientific_name) {
-                            Text(result.scientific_name, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Text("${Strings.confidence}: ${(result.score * 100).toInt()}%")
-                        result.family?.takeIf { it.isNotBlank() }?.let { Text("Family: $it") }
+                        Text(result.scientific_name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("${Strings.confidence}: ${(result.score * 100).toInt()}%")
+                    result.family?.takeIf { it.isNotBlank() }?.let { Text("${Strings.familyLabel}: $it") }
                         Text("${Strings.databaseLabel}: ${result.database}")
                         result.guidance?.takeIf { it.isNotBlank() }?.let {
                             Spacer(Modifier.height(4.dp))
