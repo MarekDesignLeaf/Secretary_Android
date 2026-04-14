@@ -2920,12 +2920,17 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun consumePendingPlantCaptureRequest() {
+        val shouldResumeHotword = _uiState.value.isPlantVoiceCaptureActive
         if (_uiState.value.pendingPlantCaptureRequestId != null) {
             _uiState.value = _uiState.value.copy(pendingPlantCaptureRequestId = null)
+        }
+        if (shouldResumeHotword) {
+            voiceManager?.startHotwordLoop()
         }
     }
 
     fun clearPlantRecognitionResult() {
+        val shouldResumeHotword = _uiState.value.isPlantVoiceCaptureActive
         _uiState.value = _uiState.value.copy(
             selectedPlantRecognition = null,
             plantRecognitionError = null,
@@ -2933,6 +2938,9 @@ class SecretaryViewModel : ViewModel() {
             isPlantVoiceCaptureActive = false,
             pendingPlantCaptureRequestId = null
         )
+        if (shouldResumeHotword) {
+            voiceManager?.startHotwordLoop()
+        }
     }
 
     fun refreshCrmData() {
