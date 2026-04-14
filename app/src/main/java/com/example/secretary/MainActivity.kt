@@ -2916,7 +2916,7 @@ class SecretaryViewModel : ViewModel() {
             plantRecognitionError = null,
             selectedPlantRecognition = null
         )
-        voiceManager?.speak(reply, expectReply = false)
+        voiceManager?.speak(reply, expectReply = false, stayIdle = true)
     }
 
     fun consumePendingPlantCaptureRequest() {

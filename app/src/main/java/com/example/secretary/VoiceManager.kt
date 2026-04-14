@@ -29,6 +29,7 @@ class VoiceManager(
     private var isTtsReady = false
     private var isSpeaking = false
     private var expectReplyAfterSpeak = false
+    private var stayIdleAfterSpeak = false
     private val handler = Handler(Looper.getMainLooper())
     private val TAG = "VoiceManager"
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -48,17 +49,60 @@ class VoiceManager(
     private fun normalize(text: String): String {
         return Normalizer.normalize(text.lowercase(), Normalizer.Form.NFD)
             .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+            .replace("[^\\p{L}\\p{Nd}\\s]".toRegex(), " ")
+            .replace("\\s+".toRegex(), " ")
+            .trim()
+    }
+
+    private fun currentRecognitionLanguage(): String {
+        val lang = when {
+            settings.getCurrentAppLanguage().lowercase().startsWith("cs") -> "cs-CZ"
+            settings.getCurrentAppLanguage().lowercase().startsWith("pl") -> "pl-PL"
+            else -> "en-GB"
+        }
+        if (settings.recognitionLanguage != lang) {
+            settings.recognitionLanguage = lang
+        }
+        return lang
+    }
+
+    private fun spokenTokenCorrections(): Map<String, String> = mapOf(
+        "hey" to "hej",
+        "hei" to "hej",
+        "okey" to "ok",
+        "tree" to "tri",
+        "free" to "tri"
+    )
+
+    private fun normalizeRecognizedText(text: String): String {
+        val corrected = normalize(text)
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { token -> spokenTokenCorrections()[token] ?: token }
+        return corrected.trim()
+    }
+
+    private fun recognitionCandidates(results: Bundle?): List<String> {
+        return results
+            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            ?.map { it.orEmpty() }
+            ?.filter { it.isNotBlank() }
+            ?.distinct()
+            .orEmpty()
     }
 
     private fun getHotwords(): List<String> {
-        val custom = settings.activationWord.lowercase()
-        val base = listOf("sekretářko", "sekretářka", "marcus", "hej kundo", "kundo", "hej k****")
-        return (base + custom).distinct()
+        val custom = settings.activationWord.trim()
+        return listOf(custom).filter { it.isNotBlank() }.distinct()
     }
 
     private fun matchesHotword(text: String): Boolean {
-        val normText = normalize(text)
-        return getHotwords().any { normalize(it).let { normHw -> normText.contains(normHw) } }
+        val normText = normalizeRecognizedText(text)
+        if (normText.isBlank()) return false
+        return getHotwords().any {
+            val normHw = normalizeRecognizedText(it)
+            normText == normHw || normText.startsWith("$normHw ") || normText.contains(" $normHw ")
+        }
     }
 
     fun startHotwordLoop() {
@@ -85,19 +129,23 @@ class VoiceManager(
         handler.removeCallbacksAndMessages(null)
     }
 
-    fun speak(text: String, expectReply: Boolean = false) {
+    fun speak(text: String, expectReply: Boolean = false, stayIdle: Boolean = false) {
         expectReplyAfterSpeak = expectReply
+        stayIdleAfterSpeak = stayIdle
         if (!isTtsReady) {
             handler.post {
-                if (expectReply) startListening()
-                else startHotwordLoop()
+                when {
+                    stayIdleAfterSpeak -> stop()
+                    expectReply -> startListening()
+                    else -> startHotwordLoop()
+                }
             }
             return
         }
         isSpeaking = true
         cancelRecognizer()
         // Update TTS locale — try current language, fall back to en-GB
-        val locale = Locale.forLanguageTag(settings.recognitionLanguage)
+        val locale = Locale.forLanguageTag(currentRecognitionLanguage())
         val langResult = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
         if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
             tts?.setLanguage(Locale.forLanguageTag("en-GB"))
@@ -150,11 +198,12 @@ class VoiceManager(
     private fun createRecognizerIntent(): Intent {
         return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            val lang = settings.recognitionLanguage
+            val lang = currentRecognitionLanguage()
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang)
             putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, mode == ListenMode.HOTWORD)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             // Do NOT use EXTRA_PREFER_OFFLINE — breaks recognizer if no offline model
             
             val silence = settings.silenceLength
@@ -195,29 +244,43 @@ class VoiceManager(
             isRecognizerActive = false
             consecutiveErrors++
             if (mode == ListenMode.COMMAND) onRecognizerError(error)
+            if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED) {
+                try { recognizer?.cancel() } catch (_: Exception) { }
+                try { recognizer?.destroy() } catch (_: Exception) { }
+                recognizer = null
+            }
             if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
                 recognizer?.destroy()
                 recognizer = null
                 consecutiveErrors = 0
             }
             if (mode == ListenMode.IDLE) return
-            val delay = if (error == SpeechRecognizer.ERROR_NO_MATCH) 200L else 1000L
+            val delay = when (error) {
+                SpeechRecognizer.ERROR_NO_MATCH -> 200L
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+                SpeechRecognizer.ERROR_CLIENT,
+                SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> 1500L
+                else -> 1000L
+            }
             scheduleRestart(delay)
         }
         override fun onResults(results: Bundle?) {
             isRecognizerActive = false
             if (mode == ListenMode.HOTWORD && hotwordMatchedInSession) return
-            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+            val candidates = recognitionCandidates(results)
             when (mode) {
-                ListenMode.HOTWORD -> if (matchesHotword(text)) triggerHotword() else scheduleRestart(200)
-                ListenMode.COMMAND -> if (text.isNotBlank()) onResult(text) else startHotwordLoop()
+                ListenMode.HOTWORD -> if (candidates.any(::matchesHotword)) triggerHotword() else scheduleRestart(200)
+                ListenMode.COMMAND -> {
+                    val text = candidates.firstOrNull()?.let(::normalizeRecognizedText).orEmpty()
+                    if (text.isNotBlank()) onResult(text) else startHotwordLoop()
+                }
                 else -> {}
             }
         }
         override fun onPartialResults(results: Bundle?) {
             if (mode != ListenMode.HOTWORD || hotwordMatchedInSession) return
-            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-            if (matchesHotword(text)) {
+            val candidates = recognitionCandidates(results)
+            if (candidates.any(::matchesHotword)) {
                 hotwordMatchedInSession = true
                 triggerHotword()
             }
@@ -254,26 +317,35 @@ class VoiceManager(
     private fun setupTts() {
         tts = TextToSpeech(context.applicationContext, { status ->
             if (status == TextToSpeech.SUCCESS) {
-                val locale = Locale.forLanguageTag(settings.recognitionLanguage)
+                val activeRecognitionLanguage = currentRecognitionLanguage()
+                val locale = Locale.forLanguageTag(activeRecognitionLanguage)
                 val result = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-                Log.d(TAG, "TTS setLanguage(${settings.recognitionLanguage}) result=$result")
+                Log.d(TAG, "TTS setLanguage($activeRecognitionLanguage) result=$result")
                 if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Log.w(TAG, "TTS language ${settings.recognitionLanguage} not available (result=$result), falling back to en-GB")
+                    Log.w(TAG, "TTS language $activeRecognitionLanguage not available (result=$result), falling back to en-GB")
                     tts?.setLanguage(Locale.forLanguageTag("en-GB"))
                 } else {
-                    Log.d(TAG, "TTS language set to ${settings.recognitionLanguage} OK")
+                    Log.d(TAG, "TTS language set to $activeRecognitionLanguage OK")
                 }
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(id: String?) { isSpeaking = true; Log.d(TAG, "TTS onStart: $id") }
                     override fun onDone(id: String?) {
                         isSpeaking = false
                         Log.d(TAG, "TTS onDone: $id")
-                        handler.post { if (expectReplyAfterSpeak) startListening() else startHotwordLoop() }
+                        handler.post {
+                            when {
+                                stayIdleAfterSpeak -> stop()
+                                expectReplyAfterSpeak -> startListening()
+                                else -> startHotwordLoop()
+                            }
+                        }
                     }
                     override fun onError(id: String?) {
                         isSpeaking = false
                         Log.e(TAG, "TTS onError: $id")
-                        handler.post { startHotwordLoop() }
+                        handler.post {
+                            if (stayIdleAfterSpeak) stop() else startHotwordLoop()
+                        }
                     }
                 })
                 isTtsReady = true
