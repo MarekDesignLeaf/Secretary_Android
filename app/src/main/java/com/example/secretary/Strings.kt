@@ -869,15 +869,32 @@ object Strings {
             "jaká je to choroba",
             "nemoc rostliny",
             "choroba rostliny",
+            "jak lecit tuto rostlinu",
+            "jak léčit tuto rostlinu",
+            "jak lecit tuhle rostlinu",
+            "jak léčit tuhle rostlinu",
+            "jak vylecit tuto rostlinu",
+            "jak vyléčit tuto rostlinu",
+            "jak zachranit tuto rostlinu",
+            "jak zachránit tuto rostlinu",
+            "jak osetrit tuto rostlinu",
+            "jak ošetřit tuto rostlinu",
             "plant disease",
             "what disease is this",
             "what is wrong with this plant",
+            "how do i treat this plant",
+            "how to treat this plant",
+            "how to save this plant",
             "check plant disease",
             "jaka to choroba",
             "co dolega roslinie",
             "co dolega roślinie",
             "choroba rosliny",
-            "choroba rośliny"
+            "choroba rośliny",
+            "jak leczyc te rosline",
+            "jak leczyć tę roślinę",
+            "jak uratowac te rosline",
+            "jak uratować tę roślinę"
         )
         return phrases.any { normalized.contains(it) }
     }
