@@ -2701,13 +2701,28 @@ class SecretaryViewModel : ViewModel() {
             } catch (_: Exception) {
                 it
             }
-        }?.trim()
+        }?.trim()?.replace(Regex("""\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+Exception:\s*"""), "")?.trim()
         val normalized = detail?.lowercase(Locale.ROOT)
         return when {
             detail.isNullOrBlank() -> Strings.connectionError
             detail.contains("not configured", ignoreCase = true) && detail.contains("mushroom", ignoreCase = true) -> Strings.mushroomRecognitionUnavailable
             detail.contains("not configured", ignoreCase = true) && detail.contains("disease", ignoreCase = true) -> Strings.plantHealthUnavailable
             detail.contains("not configured", ignoreCase = true) -> Strings.plantRecognitionUnavailable
+            normalized?.contains("rejected the api key") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionAuthError
+            normalized?.contains("rejected the api key") == true && normalized.contains("disease") -> Strings.plantHealthAuthError
+            normalized?.contains("rejected the api key") == true -> Strings.plantRecognitionAuthError
+            normalized?.contains("api key") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionAuthError
+            normalized?.contains("api key") == true && normalized.contains("disease") -> Strings.plantHealthAuthError
+            normalized?.contains("api key") == true && normalized.contains("plant") -> Strings.plantRecognitionAuthError
+            normalized?.contains("unauthorized") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionAuthError
+            normalized?.contains("unauthorized") == true && normalized.contains("disease") -> Strings.plantHealthAuthError
+            normalized?.contains("unauthorized") == true && normalized.contains("plant") -> Strings.plantRecognitionAuthError
+            normalized?.contains("forbidden") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionAuthError
+            normalized?.contains("forbidden") == true && normalized.contains("disease") -> Strings.plantHealthAuthError
+            normalized?.contains("forbidden") == true && normalized.contains("plant") -> Strings.plantRecognitionAuthError
+            normalized?.contains("service unavailable") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionUnavailable
+            normalized?.contains("service unavailable") == true && normalized.contains("disease") -> Strings.plantHealthUnavailable
+            normalized?.contains("service unavailable") == true && normalized.contains("plant") -> Strings.plantRecognitionUnavailable
             normalized?.contains("network error") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionNetworkError
             normalized?.contains("network error") == true && normalized.contains("disease") -> Strings.plantHealthNetworkError
             normalized?.contains("network error") == true -> Strings.plantRecognitionNetworkError
@@ -2718,6 +2733,33 @@ class SecretaryViewModel : ViewModel() {
             normalized?.contains("is empty") == true || normalized?.contains("je prázdný") == true || normalized?.contains("jest pusty") == true -> Strings.plantEmptyPhoto
             else -> detail
         }
+    }
+
+    private fun parseRecognitionThrowable(error: Throwable, fallback: String): String {
+        val raw = error.message?.trim().orEmpty()
+        val normalized = raw.lowercase(Locale.ROOT)
+        if (raw.isBlank()) return fallback
+        if (normalized.contains("illegalstateexception") || normalized.contains("java.lang.")) return fallback
+        if (normalized.contains("unable to resolve host") || normalized.contains("failed to connect") || normalized.contains("timeout")) {
+            return Strings.connectionError
+        }
+        if (normalized.contains("api key") || normalized.contains("unauthorized") || normalized.contains("forbidden")) {
+            return when {
+                fallback == Strings.mushroomRecognitionFailed -> Strings.mushroomRecognitionAuthError
+                fallback == Strings.plantHealthFailed -> Strings.plantHealthAuthError
+                fallback == Strings.plantRecognitionFailed -> Strings.plantRecognitionAuthError
+                else -> fallback
+            }
+        }
+        if (normalized.contains("service is not configured") || normalized.contains("service unavailable")) {
+            return when {
+                fallback == Strings.mushroomRecognitionFailed -> Strings.mushroomRecognitionUnavailable
+                fallback == Strings.plantHealthFailed -> Strings.plantHealthUnavailable
+                fallback == Strings.plantRecognitionFailed -> Strings.plantRecognitionUnavailable
+                else -> fallback
+            }
+        }
+        return raw.replace(Regex("""\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)+Exception:\s*"""), "").trim().ifBlank { fallback }
     }
 
     private fun optionalMultipartText(value: Any?): okhttp3.RequestBody? {
@@ -3122,7 +3164,7 @@ class SecretaryViewModel : ViewModel() {
                     if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
                 }
             } catch (e: Exception) {
-                val message = e.message?.takeIf { it.isNotBlank() } ?: Strings.connectionError
+                val message = parseRecognitionThrowable(e, Strings.plantRecognitionFailed)
                 _uiState.value = _uiState.value.copy(
                     plantRecognitionLoading = false,
                     plantRecognitionError = message,
@@ -3187,7 +3229,7 @@ class SecretaryViewModel : ViewModel() {
                     if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
                 }
             } catch (e: Exception) {
-                val message = e.message?.takeIf { it.isNotBlank() } ?: Strings.connectionError
+                val message = parseRecognitionThrowable(e, Strings.plantHealthFailed)
                 _uiState.value = _uiState.value.copy(
                     plantDiseaseLoading = false,
                     plantDiseaseError = message,
@@ -3252,7 +3294,7 @@ class SecretaryViewModel : ViewModel() {
                     if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
                 }
             } catch (e: Exception) {
-                val message = e.message?.takeIf { it.isNotBlank() } ?: Strings.connectionError
+                val message = parseRecognitionThrowable(e, Strings.mushroomRecognitionFailed)
                 _uiState.value = _uiState.value.copy(
                     mushroomRecognitionLoading = false,
                     mushroomRecognitionError = message,
