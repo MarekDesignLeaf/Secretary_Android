@@ -364,6 +364,73 @@ object Strings {
     val newPassword get() = t("New password", "Nové heslo", "Nowe hasło")
     val confirmPassword get() = t("Confirm password", "Potvrdit heslo", "Potwierdź hasło")
     val passwordsDoNotMatch get() = t("Passwords do not match", "Neshodují se", "Hasła nie są zgodne")
+    val invalidCredentials get() = t("Invalid email or password", "Neplatný e-mail nebo heslo", "Nieprawidłowy e-mail lub hasło")
+    val oldPasswordIncorrect get() = t("Current password is incorrect", "Současné heslo není správné", "Obecne hasło jest nieprawidłowe")
+    val passwordMinLength get() = t("Password must be at least 6 characters", "Heslo musí mít alespoň 6 znaků", "Hasło musi mieć co najmniej 6 znaków")
+    val passwordMustDifferFromDefault get() = t(
+        "Choose a new password different from 12345",
+        "Zvolte nové heslo odlišné od 12345",
+        "Wybierz nowe hasło inne niż 12345"
+    )
+    val firstLoginPasswordChangeRequired get() = t(
+        "First login detected. Change the temporary password before entering the app.",
+        "Bylo zjištěno první přihlášení. Před vstupem do aplikace změňte dočasné heslo.",
+        "Wykryto pierwsze logowanie. Przed wejściem do aplikacji zmień hasło tymczasowe."
+    )
+    val firstLoginChangePasswordTitle get() = t(
+        "Change temporary password",
+        "Změna dočasného hesla",
+        "Zmiana hasła tymczasowego"
+    )
+    val firstLoginChangePasswordHint get() = t(
+        "Use the default password 12345 once, then set a new personal password.",
+        "Výchozí heslo 12345 použijte jen jednou a pak si nastavte nové osobní heslo.",
+        "Domyślnego hasła 12345 użyj tylko raz, a potem ustaw nowe własne hasło."
+    )
+    val enableBiometricLogin get() = t("Enable biometric login", "Zapnout biometrické přihlášení", "Włącz logowanie biometryczne")
+    val biometricLoginQuestion get() = t(
+        "Do you want to save this account for fingerprint login on this device?",
+        "Chcete tento účet uložit pro přihlášení otiskem prstu v tomto zařízení?",
+        "Czy chcesz zapisać to konto do logowania odciskiem palca na tym urządzeniu?"
+    )
+    val enable get() = t("Enable", "Zapnout", "Włącz")
+    val notNow get() = t("Not now", "Teď ne", "Nie teraz")
+    val defaultPasswordInfo get() = t(
+        "New users start with default password 12345 and must change it on first login.",
+        "Noví uživatelé začínají s výchozím heslem 12345 a při prvním přihlášení ho musí změnit.",
+        "Nowi użytkownicy zaczynają z domyślnym hasłem 12345 i muszą je zmienić przy pierwszym logowaniu."
+    )
+    val resetPasswordToDefault get() = t("Reset password to 12345", "Resetovat heslo na 12345", "Zresetuj hasło do 12345")
+    val passwordResetDone get() = t(
+        "Password reset to 12345. The user must change it on next login.",
+        "Heslo bylo resetováno na 12345. Uživatel ho musí při dalším přihlášení změnit.",
+        "Hasło zostało zresetowane do 12345. Użytkownik musi je zmienić przy następnym logowaniu."
+    )
+    val passwordResetFailed get() = t(
+        "Password reset failed",
+        "Reset hesla selhal",
+        "Reset hasła nie powiódł się"
+    )
+    val passwordChangeRequiredBadge get() = t(
+        "Password change required",
+        "Čeká na změnu hesla",
+        "Wymagana zmiana hasła"
+    )
+    val biometricProfilesLabel get() = t("Saved profiles", "Uložené profily", "Zapisane profile")
+    val firstLoginUsersLabel get() = t("New users", "Noví uživatelé", "Nowi użytkownicy")
+    val firstLoginUsersHint get() = t(
+        "These users still use the temporary password 12345.",
+        "Tito uživatelé ještě používají dočasné heslo 12345.",
+        "Ci użytkownicy nadal używają hasła tymczasowego 12345."
+    )
+    val chooseProfile get() = t("Choose profile", "Vyberte profil", "Wybierz profil")
+    val signInAs get() = t("Sign in as", "Přihlásit jako", "Zaloguj jako")
+    val useTemporaryPasswordHint get() = t(
+        "Use password 12345 once and then change it.",
+        "Jednou použijte heslo 12345 a potom ho změňte.",
+        "Użyj raz hasła 12345, a potem je zmień."
+    )
+    val noSavedProfiles get() = t("No biometric profiles saved yet", "Zatím nejsou uloženy žádné biometrické profily", "Nie zapisano jeszcze żadnych profili biometrycznych")
     val permissions get() = t("Permissions", "Oprávnění", "Uprawnienia")
     val includedPermissions get() = t("Included permissions", "Obsažená práva", "Zawarte uprawnienia")
     val permissionOverrides get() = t("Individual overrides", "Individuální override", "Indywidualne nadpisania")
@@ -599,6 +666,11 @@ object Strings {
     }
 
     fun biometricError(err: String): String = t("Biometric error: $err", "Chyba biometrie: $err", "Błąd biometrii: $err")
+    fun connectionProblem(message: String): String = t(
+        "Connection error: $message",
+        "Chyba připojení: $message",
+        "Błąd połączenia: $message"
+    )
     fun serverVersion(version: String): String = t("Server: $version", "Server: $version", "Serwer: $version")
     fun addedToCalendar(taskTitle: String): String = t("Added to calendar: $taskTitle", "Přidáno do kalendáře: $taskTitle", "Dodano do kalendarza: $taskTitle")
     fun planningCalendarSynced(count: Int): String = t("Planning synced: $count entries", "Plánování synchronizováno: $count položek", "Plan zsynchronizowany: $count pozycji")

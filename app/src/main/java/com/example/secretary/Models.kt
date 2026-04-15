@@ -47,10 +47,17 @@ data class BackendUser(
     val phone: String? = null,
     val status: String = "active",
     val role_name: String? = null,
+    val must_change_password: Boolean = false,
     val created_at: String? = null,
     val permissions: Map<String, Boolean> = emptyMap(),
     val role_permissions: Map<String, Boolean> = emptyMap(),
     val user_permission_overrides: Map<String, Boolean> = emptyMap()
+)
+
+data class FirstLoginUser(
+    val id: Long = 0,
+    val display_name: String = "",
+    val email: String = ""
 )
 
 // === CLIENT — matches DB: clients table (schema.sql) ===

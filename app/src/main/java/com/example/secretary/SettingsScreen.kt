@@ -404,8 +404,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         }
     }
 
-    if (showCreateBackendUser) BackendUserCreateDialog(backendRoles, { showCreateBackendUser = false }, { name, email, password, role, onResult ->
-        viewModel.createBackendUser(email, password, name, role) { ok, msg ->
+    if (showCreateBackendUser) BackendUserCreateDialog(backendRoles, { showCreateBackendUser = false }, { name, email, role, onResult ->
+        viewModel.createBackendUser(email, name, role) { ok, msg ->
             userFeedback = (if (ok) Strings.backendUserCreated else (msg ?: Strings.createUserFailed)) to ok
             onResult(ok, msg)
         }
@@ -426,6 +426,12 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 viewModel.deleteBackendUser(backendUser.id) { ok, msg ->
                     userFeedback = (if (ok) Strings.backendUserDeleted else (msg ?: Strings.deleteUserFailed)) to ok
                     if (ok) editBackendUser = null
+                    onResult(ok, msg)
+                }
+            },
+            onResetPassword = { onResult ->
+                viewModel.resetBackendUserPassword(backendUser.id) { ok, msg ->
+                    userFeedback = (if (ok) Strings.passwordResetDone else (msg ?: Strings.passwordResetFailed)) to ok
                     onResult(ok, msg)
                 }
             }
@@ -500,6 +506,9 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                                     fontSize = 12.sp,
                                     color = Color.Gray
                                 )
+                                if (user.must_change_password) {
+                                    Text(Strings.passwordChangeRequiredBadge, fontSize = 11.sp, color = Color(0xFFD84315))
+                                }
                                 if (user.user_permission_overrides.isNotEmpty()) {
                                     Text(Strings.customPermissionsActive, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                                 }
@@ -524,7 +533,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     roles: List<BackendRole>,
     onDismiss: () -> Unit,
     onSave: (String, String?, String, String, Map<String, Boolean>, (Boolean, String?) -> Unit) -> Unit,
-    onDelete: (((Boolean, String?) -> Unit) -> Unit)
+    onDelete: (((Boolean, String?) -> Unit) -> Unit),
+    onResetPassword: (((Boolean, String?) -> Unit) -> Unit)
 ) {
     var name by remember(user.id) { mutableStateOf(user.display_name) }
     var phone by remember(user.id) { mutableStateOf(user.phone.orEmpty()) }
@@ -594,6 +604,22 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 Spacer(Modifier.height(8.dp))
                 Text(Strings.roleDescription, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Text(Strings.localizeRoleDescription(role, roleOptions.firstOrNull { it.role_name == role }?.description), fontSize = 12.sp, color = Color.Gray)
+                Spacer(Modifier.height(8.dp))
+                if (user.must_change_password) {
+                    Text(Strings.passwordChangeRequiredBadge, fontSize = 12.sp, color = Color(0xFFD84315))
+                    Spacer(Modifier.height(8.dp))
+                }
+                OutlinedButton(
+                    onClick = {
+                        submitting = true
+                        error = null
+                        onResetPassword { ok, msg ->
+                            submitting = false
+                            if (!ok) error = msg ?: Strings.passwordResetFailed
+                        }
+                    },
+                    enabled = !submitting
+                ) { Text(Strings.resetPasswordToDefault) }
                 Spacer(Modifier.height(8.dp))
                 Text(Strings.roleControlsPermissionsHint, fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
@@ -689,11 +715,10 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 @Composable private fun BackendUserCreateDialog(
     roles: List<BackendRole>,
     onDismiss: () -> Unit,
-    onCreate: (String, String, String, String, (Boolean, String?) -> Unit) -> Unit
+    onCreate: (String, String, String, (Boolean, String?) -> Unit) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("manager") }
     var rE by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
@@ -713,12 +738,12 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(email, { email = it; error = null }, label = { Text(Strings.email) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(password, { password = it; error = null }, label = { Text(Strings.password) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting)
-                Spacer(Modifier.height(8.dp))
                 SDrop(Strings.role, Strings.localizeRole(role), rE, { if (!submitting) rE = it }, roleOptions.map { Strings.localizeRole(it.role_name) }) {
                     role = roleOptions[it].role_name
                     rE = false
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(Strings.defaultPasswordInfo, fontSize = 12.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
                 Text(Strings.roleDescription, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Text(Strings.localizeRoleDescription(role, selectedRole?.description), fontSize = 12.sp, color = Color.Gray)
@@ -737,12 +762,12 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 onClick = {
                     submitting = true
                     error = null
-                    onCreate(name, email, password, role) { ok, msg ->
+                    onCreate(name, email, role) { ok, msg ->
                         submitting = false
                         if (ok) onDismiss() else error = msg ?: Strings.createUserFailed
                     }
                 },
-                enabled = !submitting && name.isNotBlank() && email.isNotBlank() && password.isNotBlank()
+                enabled = !submitting && name.isNotBlank() && email.isNotBlank()
             ) { Text(if (submitting) "${Strings.processing}" else Strings.create) }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !submitting) { Text(Strings.cancel) } }

@@ -2319,9 +2319,17 @@ class SecretaryViewModel : ViewModel() {
             is String -> value.toLongOrNull()
             else -> null
         }
+        val displayName = source["display_name"]?.toString()
+        val email = source["email"]?.toString()
         val role = source["role"]?.toString()
             ?: source["role_name"]?.toString()
         val permissions = extractPermissionMap(source["permissions"])
+        val mustChangePassword = when (val value = source["must_change_password"] ?: user["must_change_password"]) {
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            is String -> value.equals("true", ignoreCase = true) || value == "1"
+            else -> false
+        }
         settingsManager?.setCurrentBackendUser(userId, role)
         val preferredLang = source["preferred_language_code"]?.toString()?.takeIf { it.isNotBlank() }
         val resolvedLang = settingsManager?.getAppLanguageForUser(userId, preferredLang ?: settingsManager?.appLanguage ?: "cs")
@@ -2332,8 +2340,11 @@ class SecretaryViewModel : ViewModel() {
         settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
         _uiState.value = _uiState.value.copy(
             currentUserId = userId,
+            currentUserDisplayName = displayName,
+            currentUserEmail = email,
             currentUserRole = role,
-            currentUserPermissions = permissions
+            currentUserPermissions = permissions,
+            mustChangePassword = mustChangePassword
         )
     }
 
@@ -2358,6 +2369,23 @@ class SecretaryViewModel : ViewModel() {
                     val res = api.authMe("Bearer $token")
                     if (res.isSuccessful) {
                         applyCurrentUserData(res.body())
+                        if (_uiState.value.mustChangePassword) {
+                            settingsManager?.accessToken = null
+                            settingsManager?.refreshToken = null
+                            settingsManager?.clearCurrentBackendUser()
+                            _uiState.value = _uiState.value.copy(
+                                loggedIn = false,
+                                firstLoginUsers = emptyList(),
+                                currentUserId = null,
+                                currentUserDisplayName = null,
+                                currentUserEmail = null,
+                                currentUserRole = null,
+                                currentUserPermissions = emptyMap(),
+                                mustChangePassword = false,
+                                loginNotice = Strings.firstLoginPasswordChangeRequired
+                            )
+                            return@launch
+                        }
                         _uiState.value = _uiState.value.copy(loggedIn = true)
                         loadTenantConfig()
                         checkOnboardingStatus()
@@ -2370,6 +2398,23 @@ class SecretaryViewModel : ViewModel() {
                         val refreshed = api.authMe("Bearer ${settingsManager?.accessToken}")
                         if (refreshed.isSuccessful) {
                             applyCurrentUserData(refreshed.body())
+                            if (_uiState.value.mustChangePassword) {
+                                settingsManager?.accessToken = null
+                                settingsManager?.refreshToken = null
+                                settingsManager?.clearCurrentBackendUser()
+                                _uiState.value = _uiState.value.copy(
+                                    loggedIn = false,
+                                    firstLoginUsers = emptyList(),
+                                    currentUserId = null,
+                                    currentUserDisplayName = null,
+                                    currentUserEmail = null,
+                                    currentUserRole = null,
+                                    currentUserPermissions = emptyMap(),
+                                    mustChangePassword = false,
+                                    loginNotice = Strings.firstLoginPasswordChangeRequired
+                                )
+                                return@launch
+                            }
                             _uiState.value = _uiState.value.copy(loggedIn = true)
                             loadTenantConfig()
                             checkOnboardingStatus()
@@ -2382,14 +2427,20 @@ class SecretaryViewModel : ViewModel() {
             settingsManager?.clearCurrentBackendUser()
             _uiState.value = _uiState.value.copy(
                 loggedIn = false,
+                firstLoginUsers = emptyList(),
                 currentUserId = null,
+                currentUserDisplayName = null,
+                currentUserEmail = null,
                 currentUserRole = null,
-                currentUserPermissions = emptyMap()
+                currentUserPermissions = emptyMap(),
+                mustChangePassword = false,
+                awaitingBiometricEnrollment = false
             )
+            loadFirstLoginUsers()
         }
     }
 
-    fun login(email: String, password: String, onError: (String?) -> Unit) {
+    fun login(email: String, password: String, fromBiometric: Boolean = false, onError: (String?) -> Unit) {
         viewModelScope.launch {
             try {
                 val res = api.authLogin(mapOf("email" to email, "password" to password))
@@ -2398,22 +2449,54 @@ class SecretaryViewModel : ViewModel() {
                     settingsManager?.accessToken = body?.get("access_token")?.toString()
                     settingsManager?.refreshToken = body?.get("refresh_token")?.toString()
                     applyCurrentUserData(body)
-                    _uiState.value = _uiState.value.copy(loggedIn = true)
+                    if (_uiState.value.mustChangePassword) {
+                        loadFirstLoginUsers()
+                        _uiState.value = _uiState.value.copy(
+                            loggedIn = false,
+                            awaitingBiometricEnrollment = false,
+                            loginNotice = Strings.firstLoginPasswordChangeRequired
+                        )
+                        onError(null)
+                        return@launch
+                    }
+                    if (fromBiometric) {
+                        _uiState.value = _uiState.value.copy(
+                            loggedIn = true,
+                            awaitingBiometricEnrollment = false,
+                            loginNotice = null
+                        )
+                        loadTenantConfig()
+                        checkOnboardingStatus()
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            loggedIn = false,
+                            firstLoginUsers = _uiState.value.firstLoginUsers.filterNot { it.email.equals(email, ignoreCase = true) },
+                            awaitingBiometricEnrollment = true,
+                            loginNotice = null
+                        )
+                    }
                     onError(null) // signal success to caller
-                    loadTenantConfig()
-                    checkOnboardingStatus()
                 } else {
-                    onError("Neplatné přihlašovací údaje")
+                    onError(parseAuthError(res.code(), res.errorBody()?.string()))
                 }
             } catch (e: Exception) {
-                onError("Chyba připojení: ${e.message}")
+                onError(e.message?.let { Strings.connectionProblem(it) } ?: Strings.connectionError)
             }
         }
     }
 
+    fun finalizeLoginAfterCredentialSetup() {
+        _uiState.value = _uiState.value.copy(
+            loggedIn = true,
+            awaitingBiometricEnrollment = false,
+            loginNotice = null
+        )
+        loadTenantConfig()
+        checkOnboardingStatus()
+    }
+
     fun createBackendUser(
         email: String,
-        password: String,
         displayName: String,
         role: String,
         onDone: (Boolean, String?) -> Unit
@@ -2423,7 +2506,6 @@ class SecretaryViewModel : ViewModel() {
                 val res = api.registerUser(
                     RegisterRequest(
                         email = email.trim(),
-                        password = password,
                         display_name = displayName.trim(),
                         role = role
                     )
@@ -2450,6 +2532,19 @@ class SecretaryViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("ViewModel", "Backend roles load error", e)
+            }
+        }
+    }
+
+    fun loadFirstLoginUsers() {
+        viewModelScope.launch {
+            try {
+                val res = api.getFirstLoginUsers()
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(firstLoginUsers = res.body() ?: emptyList())
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "First login users load error", e)
             }
         }
     }
@@ -2519,6 +2614,24 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun resetBackendUserPassword(userId: Long, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.updateAuthUser(userId, mapOf("reset_password_to_default" to true))
+                if (res.isSuccessful) {
+                    loadBackendUsers()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    onDone(false, parseBackendAdminError(res.code(), rawError, Strings.passwordResetFailed))
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Backend user password reset error", e)
+                onDone(false, e.message ?: Strings.passwordResetFailed)
+            }
+        }
+    }
+
     fun deleteBackendUser(userId: Long, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
@@ -2554,8 +2667,28 @@ class SecretaryViewModel : ViewModel() {
             normalized?.contains("user not found") == true -> Strings.backendUserNotFound()
             normalized?.contains("unknown role") == true -> Strings.backendUnknownRole()
             normalized?.contains("nothing to update") == true -> Strings.backendNothingToUpdate()
+            normalized?.contains("default password") == true -> Strings.passwordMustDifferFromDefault
             !detail.isNullOrBlank() -> detail
             else -> Strings.backendActionFailed(fallbackAction, code)
+        }
+    }
+
+    private fun parseAuthError(code: Int, rawError: String?): String {
+        val detail = rawError?.let {
+            try {
+                org.json.JSONObject(it).optString("detail").ifBlank { it }
+            } catch (_: Exception) {
+                it
+            }
+        }?.trim()
+        val normalized = detail?.lowercase(Locale.ROOT)
+        return when {
+            code == 401 || normalized?.contains("invalid credentials") == true -> Strings.invalidCredentials
+            normalized?.contains("old password incorrect") == true -> Strings.oldPasswordIncorrect
+            normalized?.contains("at least 6 characters") == true -> Strings.passwordMinLength
+            normalized?.contains("different from the default password") == true -> Strings.passwordMustDifferFromDefault
+            !detail.isNullOrBlank() -> detail
+            else -> Strings.serverError(code)
         }
     }
 
@@ -2592,13 +2725,20 @@ class SecretaryViewModel : ViewModel() {
             tenantConfig = null,
             backendUsers = emptyList(),
             backendRoles = emptyList(),
+            firstLoginUsers = emptyList(),
             backendUsersLoading = false,
             backendUsersError = null,
             calendarFeed = emptyList(),
             currentUserId = null,
+            currentUserDisplayName = null,
+            currentUserEmail = null,
             currentUserRole = null,
-            currentUserPermissions = emptyMap()
+            currentUserPermissions = emptyMap(),
+            mustChangePassword = false,
+            awaitingBiometricEnrollment = false,
+            loginNotice = null
         )
+        loadFirstLoginUsers()
     }
 
     fun tryRefreshToken(): Boolean {
@@ -2873,6 +3013,45 @@ class SecretaryViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            }
+        }
+    }
+
+    fun completeFirstPasswordChange(
+        oldPassword: String,
+        newPassword: String,
+        onDone: (Boolean, String?) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val response = api.changePassword(
+                    mapOf(
+                        "old_password" to oldPassword,
+                        "new_password" to newPassword
+                    )
+                )
+                if (response.isSuccessful) {
+                    settingsManager?.accessToken?.let { token ->
+                        try {
+                            val me = api.authMe("Bearer $token")
+                            if (me.isSuccessful) applyCurrentUserData(me.body())
+                        } catch (_: Exception) {}
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        mustChangePassword = false,
+                        loggedIn = false,
+                        firstLoginUsers = _uiState.value.firstLoginUsers.filterNot {
+                            it.email.equals(_uiState.value.currentUserEmail ?: "", ignoreCase = true)
+                        },
+                        awaitingBiometricEnrollment = true,
+                        loginNotice = null
+                    )
+                    onDone(true, null)
+                } else {
+                    onDone(false, parseAuthError(response.code(), response.errorBody()?.string()))
+                }
+            } catch (e: Exception) {
+                onDone(false, e.message?.let { Strings.connectionProblem(it) } ?: Strings.connectionError)
             }
         }
     }
@@ -4105,6 +4284,7 @@ data class UiState(
     val contextEntityId: Long? = null,
     val contextType: String? = null,
     val connectionStatus: ConnectionStatus = ConnectionStatus.UNKNOWN,
+    val firstLoginUsers: List<FirstLoginUser> = emptyList(),
     val backendUsers: List<BackendUser> = emptyList(),
     val backendRoles: List<BackendRole> = emptyList(),
     val backendUsersLoading: Boolean = false,
@@ -4132,7 +4312,12 @@ data class UiState(
     val onboardingComplete: Boolean? = null,
     val tenantConfig: Map<String, Any?>? = null,
     val currentUserId: Long? = null,
+    val currentUserDisplayName: String? = null,
+    val currentUserEmail: String? = null,
     val currentUserRole: String? = null,
     val currentUserPermissions: Map<String, Boolean> = emptyMap(),
+    val mustChangePassword: Boolean = false,
+    val awaitingBiometricEnrollment: Boolean = false,
+    val loginNotice: String? = null,
     val loggedIn: Boolean? = null
 )

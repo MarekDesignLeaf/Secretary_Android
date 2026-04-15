@@ -30,6 +30,13 @@ data class SavedSignature(
     val content: String = ""
 )
 
+data class BiometricProfile(
+    val userId: Long? = null,
+    val displayName: String = "",
+    val email: String = "",
+    val password: String = ""
+)
+
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("secretary_settings", Context.MODE_PRIVATE)
     private val gson = Gson()
@@ -204,6 +211,64 @@ class SettingsManager(context: Context) {
             return prefs.getString("app_language_user_$resolved", fallback) ?: fallback
         }
         return fallback
+    }
+
+    fun getBiometricProfiles(): List<BiometricProfile> {
+        val json = prefs.getString("biometric_profiles", null)
+        val profiles = try {
+            if (json.isNullOrBlank()) emptyList() else gson.fromJson<List<BiometricProfile>>(json, object : TypeToken<List<BiometricProfile>>() {}.type) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (profiles.isNotEmpty()) return profiles.distinctBy { it.email.lowercase() }
+        val legacyEmail = prefs.getString("saved_email", null)
+        val legacyPassword = prefs.getString("saved_pass", null)
+        return if (!legacyEmail.isNullOrBlank() && !legacyPassword.isNullOrBlank()) {
+            listOf(BiometricProfile(email = legacyEmail, password = legacyPassword, displayName = legacyEmail.substringBefore("@")))
+        } else {
+            emptyList()
+        }
+    }
+
+    fun saveBiometricProfile(profile: BiometricProfile) {
+        val updated = getBiometricProfiles()
+            .filterNot { it.email.equals(profile.email, ignoreCase = true) }
+            .plus(profile)
+        prefs.edit {
+            putString("biometric_profiles", gson.toJson(updated))
+            putString("last_biometric_email", profile.email)
+            remove("saved_email")
+            remove("saved_pass")
+        }
+    }
+
+    fun removeBiometricProfile(email: String) {
+        val updated = getBiometricProfiles().filterNot { it.email.equals(email, ignoreCase = true) }
+        prefs.edit {
+            putString("biometric_profiles", gson.toJson(updated))
+            if ((prefs.getString("last_biometric_email", null) ?: "").equals(email, ignoreCase = true)) {
+                remove("last_biometric_email")
+            }
+            remove("saved_email")
+            remove("saved_pass")
+        }
+    }
+
+    fun clearBiometricProfiles() {
+        prefs.edit {
+            remove("biometric_profiles")
+            remove("last_biometric_email")
+            remove("saved_email")
+            remove("saved_pass")
+        }
+    }
+
+    fun getLastBiometricEmail(): String? = prefs.getString("last_biometric_email", null)
+
+    fun setLastBiometricEmail(email: String?) {
+        prefs.edit {
+            if (email.isNullOrBlank()) remove("last_biometric_email") else putString("last_biometric_email", email)
+        }
     }
 
     // Utility

@@ -7,7 +7,7 @@ import retrofit2.http.*
 
 data class RegisterRequest(
     val email: String,
-    val password: String,
+    val password: String = "",
     val display_name: String,
     val role: String
 )
@@ -268,6 +268,9 @@ interface SecretaryApi {
     @POST("auth/register")
     suspend fun registerUser(@Body request: RegisterRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    @GET("auth/first-login-users")
+    suspend fun getFirstLoginUsers(@Query("tenant_id") tenantId: Int = 1): Response<List<FirstLoginUser>>
+
     @GET("auth/roles")
     suspend fun getAuthRoles(): Response<List<BackendRole>>
 
@@ -285,6 +288,9 @@ interface SecretaryApi {
 
     @GET("auth/me")
     suspend fun authMe(@retrofit2.http.Header("Authorization") token: String): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @PUT("auth/change-password")
+    suspend fun changePassword(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === INVOICE ITEMS ===
     @GET("crm/invoices/{invoiceId}/items")
