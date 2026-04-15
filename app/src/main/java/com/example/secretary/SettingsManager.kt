@@ -41,28 +41,96 @@ class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("secretary_settings", Context.MODE_PRIVATE)
     private val gson = Gson()
 
+    private fun scopedKey(base: String, userId: Long = currentBackendUserId): String? =
+        if (userId > 0L) "${base}_user_$userId" else null
+
+    private fun getScopedBoolean(base: String, default: Boolean): Boolean {
+        val scoped = scopedKey(base)
+        return if (scoped != null && prefs.contains(scoped)) prefs.getBoolean(scoped, default) else prefs.getBoolean(base, default)
+    }
+
+    private fun setScopedBoolean(base: String, value: Boolean) {
+        val scoped = scopedKey(base)
+        prefs.edit {
+            if (scoped != null) putBoolean(scoped, value) else putBoolean(base, value)
+        }
+    }
+
+    private fun getScopedString(base: String, default: String): String {
+        val scoped = scopedKey(base)
+        return when {
+            scoped != null && prefs.contains(scoped) -> prefs.getString(scoped, default) ?: default
+            else -> prefs.getString(base, default) ?: default
+        }
+    }
+
+    private fun setScopedString(base: String, value: String) {
+        val scoped = scopedKey(base)
+        prefs.edit {
+            if (scoped != null) putString(scoped, value) else putString(base, value)
+        }
+    }
+
+    private fun getScopedFloat(base: String, default: Float): Float {
+        val scoped = scopedKey(base)
+        return if (scoped != null && prefs.contains(scoped)) prefs.getFloat(scoped, default) else prefs.getFloat(base, default)
+    }
+
+    private fun setScopedFloat(base: String, value: Float) {
+        val scoped = scopedKey(base)
+        prefs.edit {
+            if (scoped != null) putFloat(scoped, value) else putFloat(base, value)
+        }
+    }
+
+    private fun getScopedLong(base: String, default: Long): Long {
+        val scoped = scopedKey(base)
+        return if (scoped != null && prefs.contains(scoped)) prefs.getLong(scoped, default) else prefs.getLong(base, default)
+    }
+
+    private fun setScopedLong(base: String, value: Long) {
+        val scoped = scopedKey(base)
+        prefs.edit {
+            if (scoped != null) putLong(scoped, value) else putLong(base, value)
+        }
+    }
+
     // 1. Hlasove ovladani
     var hotwordEnabled: Boolean
-        get() = prefs.getBoolean("hotword_enabled", true)
-        set(v) = prefs.edit { putBoolean("hotword_enabled", v) }
+        get() = getScopedBoolean("hotword_enabled", true)
+        set(v) = setScopedBoolean("hotword_enabled", v)
     var activationWord: String
-        get() = prefs.getString("activation_word", "hej kundo") ?: "hej kundo"
-        set(v) = prefs.edit { putString("activation_word", v) }
+        get() = getScopedString("activation_word", "hej kundo")
+        set(v) = setScopedString("activation_word", v)
     var recognitionLanguage: String
-        get() = prefs.getString("recognition_lang", "cs-CZ") ?: "cs-CZ"
-        set(v) = prefs.edit { putString("recognition_lang", v) }
+        get() = getScopedString("recognition_lang", "cs-CZ")
+        set(v) = setScopedString("recognition_lang", v)
     var ttsRate: Float
-        get() = prefs.getFloat("tts_rate", 1.0f)
-        set(v) = prefs.edit { putFloat("tts_rate", v) }
+        get() = getScopedFloat("tts_rate", 1.0f)
+        set(v) = setScopedFloat("tts_rate", v)
     var ttsPitch: Float
-        get() = prefs.getFloat("tts_pitch", 1.0f)
-        set(v) = prefs.edit { putFloat("tts_pitch", v) }
+        get() = getScopedFloat("tts_pitch", 1.0f)
+        set(v) = setScopedFloat("tts_pitch", v)
     var silenceLength: Long
-        get() = prefs.getLong("silence_length", 3500L)
-        set(v) = prefs.edit { putLong("silence_length", v) }
+        get() = getScopedLong("silence_length", 3500L)
+        set(v) = setScopedLong("silence_length", v)
     var pendingVoiceSessionId: String?
-        get() = prefs.getString("pending_voice_session", null)
-        set(v) = prefs.edit { if (v == null) remove("pending_voice_session") else putString("pending_voice_session", v) }
+        get() {
+            val scoped = scopedKey("pending_voice_session")
+            return when {
+                scoped != null && prefs.contains(scoped) -> prefs.getString(scoped, null)
+                else -> prefs.getString("pending_voice_session", null)
+            }
+        }
+        set(v) = prefs.edit {
+            val scoped = scopedKey("pending_voice_session")
+            when {
+                scoped != null && v == null -> remove(scoped)
+                scoped != null -> putString(scoped, v)
+                v == null -> remove("pending_voice_session")
+                else -> putString("pending_voice_session", v)
+            }
+        }
 
     // === JWT AUTH TOKENS ===
     var accessToken: String?
@@ -107,14 +175,14 @@ class SettingsManager(context: Context) {
 
     // 5. Pracovni profil
     var workHoursEnabled: Boolean
-        get() = prefs.getBoolean("work_hours_enabled", false)
-        set(v) = prefs.edit { putBoolean("work_hours_enabled", v) }
+        get() = getScopedBoolean("work_hours_enabled", false)
+        set(v) = setScopedBoolean("work_hours_enabled", v)
     var workHoursStart: String
-        get() = prefs.getString("work_start", "07:00") ?: "07:00"
-        set(v) = prefs.edit { putString("work_start", v) }
+        get() = getScopedString("work_start", "07:00")
+        set(v) = setScopedString("work_start", v)
     var workHoursEnd: String
-        get() = prefs.getString("work_end", "19:00") ?: "19:00"
-        set(v) = prefs.edit { putString("work_end", v) }
+        get() = getScopedString("work_end", "19:00")
+        set(v) = setScopedString("work_end", v)
     var defaultTaskPriority: String
         get() = prefs.getString("default_priority", "normal") ?: "normal"
         set(v) = prefs.edit { putString("default_priority", v) }
