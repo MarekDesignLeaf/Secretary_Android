@@ -1,7 +1,14 @@
 package com.example.secretary
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,11 +39,19 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
+import com.skydoves.landscapist.ImageOptions
+import com.skydoves.landscapist.coil.CoilImage
 import kotlinx.coroutines.delay
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private data class PlantCaptureSlot(
     val id: Int,
@@ -77,6 +92,45 @@ private fun slotLabel(slotId: Int, mode: String): String = when {
     else -> Strings.plantFlowerOrFruit
 }
 
+private fun formatHistoryTimestamp(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    return raw.replace("T", " ").replace("Z", "").take(16)
+}
+
+private fun formatHistoryCoordinates(entry: RecognitionHistoryEntry): String {
+    val lat = entry.latitude ?: return Strings.coordinatesUnavailable
+    val lon = entry.longitude ?: return Strings.coordinatesUnavailable
+    val coords = String.format(Locale.US, "%.5f, %.5f", lat, lon)
+    val accuracy = entry.accuracy_meters?.let { " ±${it.toInt()}m" } ?: ""
+    return coords + accuracy
+}
+
+@SuppressLint("MissingPermission")
+private fun buildRecognitionCaptureContext(context: Context): RecognitionCaptureContext {
+    val capturedAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.UK).format(Date())
+    val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    if (!hasFine && !hasCoarse) return RecognitionCaptureContext(capturedAt = capturedAt)
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        ?: return RecognitionCaptureContext(capturedAt = capturedAt)
+    val providers = buildList {
+        if (hasFine) add(LocationManager.GPS_PROVIDER)
+        add(LocationManager.NETWORK_PROVIDER)
+        add(LocationManager.PASSIVE_PROVIDER)
+    }
+    val bestLocation: Location? = providers
+        .distinct()
+        .mapNotNull { provider -> runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull() }
+        .maxByOrNull { it.time }
+    return RecognitionCaptureContext(
+        capturedAt = capturedAt,
+        latitude = bestLocation?.latitude,
+        longitude = bestLocation?.longitude,
+        accuracyMeters = bestLocation?.takeIf { it.hasAccuracy() }?.accuracy,
+        locationSource = bestLocation?.provider
+    )
+}
+
 @Composable
 fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
     val context = LocalContext.current
@@ -113,10 +167,11 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
         val shouldAutoIdentify = success && isVoiceCaptureActive && autoReadyPhotos.isNotEmpty()
         viewModel.consumePendingPlantCaptureRequest(resumeHotword = !shouldAutoIdentify)
         if (shouldAutoIdentify) {
+            val captureContext = buildRecognitionCaptureContext(context)
             when {
-                isMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos)
-                isHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos)
-                else -> viewModel.identifyPlant(autoReadyPhotos)
+                isMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos, captureContext)
+                isHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos, captureContext)
+                else -> viewModel.identifyPlant(autoReadyPhotos, captureContext)
             }
         }
     }
@@ -138,10 +193,11 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
         val shouldAutoIdentify = uri != null && isVoiceCaptureActive && autoReadyPhotos.isNotEmpty()
         viewModel.consumePendingPlantCaptureRequest(resumeHotword = !shouldAutoIdentify)
         if (shouldAutoIdentify) {
+            val captureContext = buildRecognitionCaptureContext(context)
             when {
-                isMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos)
-                isHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos)
-                else -> viewModel.identifyPlant(autoReadyPhotos)
+                isMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos, captureContext)
+                isHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos, captureContext)
+                else -> viewModel.identifyPlant(autoReadyPhotos, captureContext)
             }
         }
     }
@@ -293,10 +349,11 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
+                            val captureContext = buildRecognitionCaptureContext(context)
                             when {
-                                isMushroomMode -> viewModel.identifyMushroom(readyPhotos)
-                                isHealthMode -> viewModel.assessPlantHealth(readyPhotos)
-                                else -> viewModel.identifyPlant(readyPhotos)
+                                isMushroomMode -> viewModel.identifyMushroom(readyPhotos, captureContext)
+                                isHealthMode -> viewModel.assessPlantHealth(readyPhotos, captureContext)
+                                else -> viewModel.identifyPlant(readyPhotos, captureContext)
                             }
                         },
                         enabled = readyPhotos.isNotEmpty()
@@ -434,6 +491,53 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                             result.suggestions.drop(1).forEach { suggestion ->
                                 HorizontalDivider()
                                 Text("${suggestion.name} ${(suggestion.probability * 100).toInt()}%")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(8.dp))
+            Text(Strings.recognitionHistoryTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            if (state.recognitionHistory.isEmpty()) {
+                Text(Strings.recognitionHistoryEmpty, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        items(state.recognitionHistory, key = { it.id }) { entry ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(Strings.localizeRecognitionType(entry.recognition_type), fontWeight = FontWeight.Bold)
+                    Text(entry.display_name.ifBlank { entry.scientific_name }, style = MaterialTheme.typography.titleMedium)
+                    if (entry.scientific_name.isNotBlank() && entry.display_name != entry.scientific_name) {
+                        Text(entry.scientific_name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (entry.confidence > 0.0) {
+                        Text("${Strings.confidence}: ${(entry.confidence * 100).toInt()}%")
+                    }
+                    Text("${Strings.capturedAtLabel}: ${formatHistoryTimestamp(entry.captured_at)}")
+                    Text("${Strings.savedAtLabel}: ${formatHistoryTimestamp(entry.created_at)}")
+                    Text("${Strings.locationLabel}: ${formatHistoryCoordinates(entry)}")
+                    entry.guidance?.takeIf { it.isNotBlank() }?.let { Text(it) }
+                    if (entry.photos.isNotEmpty()) {
+                        Text(Strings.photosLabel, fontWeight = FontWeight.SemiBold)
+                        entry.photos.chunked(3).forEach { row ->
+                            Row(Modifier.fillMaxWidth()) {
+                                row.forEach { photo ->
+                                    Box(Modifier.weight(1f).aspectRatio(1f).padding(4.dp)) {
+                                        CoilImage(
+                                            imageModel = { photo.url },
+                                            imageOptions = ImageOptions(contentScale = ContentScale.Crop),
+                                            modifier = Modifier.fillMaxSize().clip(MaterialTheme.shapes.medium)
+                                        )
+                                    }
+                                }
+                                repeat(3 - row.size) {
+                                    Spacer(Modifier.weight(1f))
+                                }
                             }
                         }
                     }

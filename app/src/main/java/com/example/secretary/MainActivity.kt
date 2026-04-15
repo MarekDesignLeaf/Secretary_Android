@@ -118,7 +118,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             Manifest.permission.READ_CALENDAR,
             Manifest.permission.WRITE_CALENDAR,
             Manifest.permission.READ_CONTACTS,
-            Manifest.permission.CALL_PHONE
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) perms.add(Manifest.permission.POST_NOTIFICATIONS)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) perms.add(Manifest.permission.FOREGROUND_SERVICE_MICROPHONE)
@@ -2718,6 +2720,11 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    private fun optionalMultipartText(value: Any?): okhttp3.RequestBody? {
+        val text = value?.toString()?.takeIf { it.isNotBlank() } ?: return null
+        return text.toRequestBody("text/plain".toMediaType())
+    }
+
     fun logout() {
         settingsManager?.accessToken = null
         settingsManager?.refreshToken = null
@@ -3059,7 +3066,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun identifyPlant(photos: List<PlantPhotoUpload>) {
+    fun identifyPlant(photos: List<PlantPhotoUpload>, captureContext: RecognitionCaptureContext? = null) {
         val voiceTriggered = _uiState.value.isPlantVoiceCaptureActive
         if (photos.isEmpty()) {
             _uiState.value = _uiState.value.copy(plantRecognitionError = Strings.plantNeedsPhoto)
@@ -3084,7 +3091,16 @@ class SecretaryViewModel : ViewModel() {
                 val textType = "text/plain".toMediaType()
                 val organsJson = org.json.JSONArray(photos.map { it.organ }).toString().toRequestBody(textType)
                 val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
-                val response = api.identifyPlant(imageParts, organsJson, language)
+                val response = api.identifyPlant(
+                    imageParts,
+                    organsJson,
+                    language,
+                    optionalMultipartText(captureContext?.capturedAt),
+                    optionalMultipartText(captureContext?.latitude),
+                    optionalMultipartText(captureContext?.longitude),
+                    optionalMultipartText(captureContext?.accuracyMeters),
+                    optionalMultipartText(captureContext?.locationSource)
+                )
                 if (response.isSuccessful) {
                     val result = response.body()
                     _uiState.value = _uiState.value.copy(
@@ -3093,6 +3109,7 @@ class SecretaryViewModel : ViewModel() {
                         selectedPlantRecognition = result,
                         isPlantVoiceCaptureActive = false
                     )
+                    loadNatureHistory()
                     val spoken = result?.spoken_summary ?: result?.display_name ?: Strings.plantRecognitionTitle
                     if (voiceTriggered) voiceManager?.speak(spoken, expectReply = false)
                 } else {
@@ -3116,7 +3133,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun assessPlantHealth(photos: List<PlantPhotoUpload>) {
+    fun assessPlantHealth(photos: List<PlantPhotoUpload>, captureContext: RecognitionCaptureContext? = null) {
         val voiceTriggered = _uiState.value.isPlantVoiceCaptureActive
         if (photos.isEmpty()) {
             _uiState.value = _uiState.value.copy(plantDiseaseError = Strings.plantNeedsPhoto)
@@ -3140,7 +3157,15 @@ class SecretaryViewModel : ViewModel() {
                 }
                 val textType = "text/plain".toMediaType()
                 val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
-                val response = api.assessPlantHealth(imageParts, language)
+                val response = api.assessPlantHealth(
+                    imageParts,
+                    language,
+                    optionalMultipartText(captureContext?.capturedAt),
+                    optionalMultipartText(captureContext?.latitude),
+                    optionalMultipartText(captureContext?.longitude),
+                    optionalMultipartText(captureContext?.accuracyMeters),
+                    optionalMultipartText(captureContext?.locationSource)
+                )
                 if (response.isSuccessful) {
                     val result = response.body()
                     _uiState.value = _uiState.value.copy(
@@ -3149,6 +3174,7 @@ class SecretaryViewModel : ViewModel() {
                         selectedPlantDisease = result,
                         isPlantVoiceCaptureActive = false
                     )
+                    loadNatureHistory()
                     val spoken = result?.spoken_summary ?: result?.top_issue_name ?: Strings.plantHealthTitle
                     if (voiceTriggered) voiceManager?.speak(spoken, expectReply = false)
                 } else {
@@ -3172,7 +3198,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun identifyMushroom(photos: List<PlantPhotoUpload>) {
+    fun identifyMushroom(photos: List<PlantPhotoUpload>, captureContext: RecognitionCaptureContext? = null) {
         val voiceTriggered = _uiState.value.isPlantVoiceCaptureActive
         if (photos.isEmpty()) {
             _uiState.value = _uiState.value.copy(mushroomRecognitionError = Strings.plantNeedsPhoto)
@@ -3196,7 +3222,15 @@ class SecretaryViewModel : ViewModel() {
                 }
                 val textType = "text/plain".toMediaType()
                 val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
-                val response = api.identifyMushroom(imageParts, language)
+                val response = api.identifyMushroom(
+                    imageParts,
+                    language,
+                    optionalMultipartText(captureContext?.capturedAt),
+                    optionalMultipartText(captureContext?.latitude),
+                    optionalMultipartText(captureContext?.longitude),
+                    optionalMultipartText(captureContext?.accuracyMeters),
+                    optionalMultipartText(captureContext?.locationSource)
+                )
                 if (response.isSuccessful) {
                     val result = response.body()
                     _uiState.value = _uiState.value.copy(
@@ -3205,6 +3239,7 @@ class SecretaryViewModel : ViewModel() {
                         selectedMushroomRecognition = result,
                         isPlantVoiceCaptureActive = false
                     )
+                    loadNatureHistory()
                     val spoken = result?.spoken_summary ?: result?.display_name ?: Strings.mushroomRecognitionTitle
                     if (voiceTriggered) voiceManager?.speak(spoken, expectReply = false)
                 } else {
@@ -3303,6 +3338,20 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun loadNatureHistory() {
+        viewModelScope.launch {
+            try {
+                val language = settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()
+                val res = api.getNatureHistory(limit = 30, language = language)
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(recognitionHistory = res.body() ?: emptyList())
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Nature history load error", e)
+            }
+        }
+    }
+
     fun refreshCrmData() {
         viewModelScope.launch {
             try {
@@ -3314,6 +3363,8 @@ class SecretaryViewModel : ViewModel() {
                 val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
                 val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
                 val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
+                val language = settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()
+                val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
@@ -3332,6 +3383,8 @@ class SecretaryViewModel : ViewModel() {
                 val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
                 val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
                 val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
+                val language = settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()
+                val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
@@ -4378,6 +4431,7 @@ data class UiState(
     val selectedPlantRecognition: PlantRecognitionResponse? = null,
     val selectedPlantDisease: PlantDiseaseResponse? = null,
     val selectedMushroomRecognition: MushroomRecognitionResponse? = null,
+    val recognitionHistory: List<RecognitionHistoryEntry> = emptyList(),
     val plantRecognitionLoading: Boolean = false,
     val plantRecognitionError: String? = null,
     val plantDiseaseLoading: Boolean = false,

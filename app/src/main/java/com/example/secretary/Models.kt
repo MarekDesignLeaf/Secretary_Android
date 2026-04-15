@@ -159,6 +159,14 @@ data class PlantPhotoUpload(
     val label: String
 )
 
+data class RecognitionCaptureContext(
+    val capturedAt: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracyMeters: Float? = null,
+    val locationSource: String? = null
+)
+
 data class PlantRecognitionSuggestion(
     val display_name: String = "",
     val scientific_name: String = "",
@@ -241,6 +249,31 @@ data class MushroomRecognitionResponse(
     val guidance: String? = null,
     val spoken_summary: String? = null,
     val suggestions: List<MushroomRecognitionSuggestion> = emptyList()
+)
+
+data class RecognitionHistoryPhoto(
+    val filename: String = "",
+    val photo_type: String = "capture",
+    val url: String = ""
+)
+
+data class RecognitionHistoryEntry(
+    val id: Long = 0,
+    val recognition_type: String = "",
+    val recognition_label: String = "",
+    val display_name: String = "",
+    val scientific_name: String = "",
+    val confidence: Double = 0.0,
+    val guidance: String? = null,
+    val database: String? = null,
+    val captured_at: String? = null,
+    val created_at: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracy_meters: Double? = null,
+    val location_source: String? = null,
+    val photos: List<RecognitionHistoryPhoto> = emptyList(),
+    val result: Map<String, @JvmSuppressWildcards Any?> = emptyMap()
 )
 
 data class ImportableSharedContact(

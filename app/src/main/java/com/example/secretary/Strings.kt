@@ -183,6 +183,13 @@ object Strings {
     val optionalPhoto get() = t("Optional", "Volitelné", "Opcjonalne")
     val requiredPhoto get() = t("Required", "Povinné", "Wymagane")
     val familyLabel get() = t("Family", "Čeleď", "Rodzina")
+    val recognitionHistoryTitle get() = t("Recognition history", "Historie rozpoznávání", "Historia rozpoznań")
+    val recognitionHistoryEmpty get() = t("No history yet", "Zatím bez historie", "Brak historii")
+    val capturedAtLabel get() = t("Captured", "Pořízeno", "Ujęto")
+    val savedAtLabel get() = t("Saved", "Uloženo", "Zapisano")
+    val locationLabel get() = t("Location", "Místo", "Lokalizacja")
+    val photosLabel get() = t("Photos", "Fotografie", "Zdjęcia")
+    val coordinatesUnavailable get() = t("Location unavailable", "Poloha není k dispozici", "Lokalizacja niedostępna")
     val edibilityLabel get() = t("Edibility", "Jedlost", "Jadalność")
     val psychoactiveLabel get() = t("Psychoactivity", "Psychoaktivita", "Psychoaktywność")
     val lookAlikesLabel get() = t("Similar mushrooms", "Podobné houby", "Podobne grzyby")
@@ -925,6 +932,12 @@ object Strings {
         true -> t("Potentially psychoactive", "Potenciálně psychoaktivní", "Potencjalnie psychoaktywny")
         false -> t("No psychoactive signal", "Bez známky psychoaktivity", "Brak sygnału psychoaktywności")
         null -> ""
+    }
+    fun localizeRecognitionType(type: String): String = when (type.lowercase()) {
+        "plant_identification" -> plantRecognitionTitle
+        "plant_health_assessment" -> plantHealthTitle
+        "mushroom_identification" -> mushroomRecognitionTitle
+        else -> type
     }
     fun localizePermission(code: String, fallback: String = code): String = when (code.lowercase()) {
         "crm_read" -> t("View CRM", "Čtení CRM", "Podgląd CRM")

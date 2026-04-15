@@ -23,22 +23,44 @@ interface SecretaryApi {
     suspend fun identifyPlant(
         @Part images: List<MultipartBody.Part>,
         @Part("organs_json") organsJson: RequestBody,
-        @Part("language") language: RequestBody
+        @Part("language") language: RequestBody,
+        @Part("captured_at") capturedAt: RequestBody?,
+        @Part("latitude") latitude: RequestBody?,
+        @Part("longitude") longitude: RequestBody?,
+        @Part("accuracy_meters") accuracyMeters: RequestBody?,
+        @Part("location_source") locationSource: RequestBody?
     ): Response<PlantRecognitionResponse>
 
     @Multipart
     @POST("plants/health-assessment")
     suspend fun assessPlantHealth(
         @Part images: List<MultipartBody.Part>,
-        @Part("language") language: RequestBody
+        @Part("language") language: RequestBody,
+        @Part("captured_at") capturedAt: RequestBody?,
+        @Part("latitude") latitude: RequestBody?,
+        @Part("longitude") longitude: RequestBody?,
+        @Part("accuracy_meters") accuracyMeters: RequestBody?,
+        @Part("location_source") locationSource: RequestBody?
     ): Response<PlantDiseaseResponse>
 
     @Multipart
     @POST("mushrooms/identify")
     suspend fun identifyMushroom(
         @Part images: List<MultipartBody.Part>,
-        @Part("language") language: RequestBody
+        @Part("language") language: RequestBody,
+        @Part("captured_at") capturedAt: RequestBody?,
+        @Part("latitude") latitude: RequestBody?,
+        @Part("longitude") longitude: RequestBody?,
+        @Part("accuracy_meters") accuracyMeters: RequestBody?,
+        @Part("location_source") locationSource: RequestBody?
     ): Response<MushroomRecognitionResponse>
+
+    @GET("nature/history")
+    suspend fun getNatureHistory(
+        @Query("limit") limit: Int = 30,
+        @Query("recognition_type") recognitionType: String? = null,
+        @Query("language") language: String? = null,
+    ): Response<List<RecognitionHistoryEntry>>
 
     // === CLIENTS ===
     @GET("crm/clients")
