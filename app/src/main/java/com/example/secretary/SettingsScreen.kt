@@ -40,6 +40,9 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         item { NotificationSection(sm) }
         item { WorkProfileSection(sm) }
         item { UsersSection(sm, viewModel) }
+        if (state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin") {
+            item { AdminActivitySection(viewModel) }
+        }
         item { DataSection(sm, viewModel) }
         item { AboutSection() }
         item { VersionHistorySection() }
@@ -316,6 +319,87 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
             { sE = it },
             sorts.map { Strings.localizeClientSortOrder(it) }
         ) { sm.clientSortOrder = sorts[it]; sE = false }
+    }
+}
+
+@Composable private fun AdminActivitySection(viewModel: SecretaryViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    var exp by remember { mutableStateOf(false) }
+    var selectedActor by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(exp) {
+        if (exp) viewModel.loadAdminActivityLog()
+    }
+    val actors = state.adminActivityLog.map { entry ->
+        val key = entry.actor_user_id?.toString() ?: entry.actor_email.ifBlank { entry.actor_display_name }
+        key to entry.actor_display_name.ifBlank { entry.actor_email.ifBlank { Strings.unknown } }
+    }.filter { it.first.isNotBlank() }.distinctBy { it.first }
+    val effectiveActor = selectedActor?.takeIf { selected -> actors.any { it.first == selected } }
+    val filteredLogs = if (effectiveActor == null) {
+        state.adminActivityLog
+    } else {
+        state.adminActivityLog.filter { entry ->
+            val key = entry.actor_user_id?.toString() ?: entry.actor_email.ifBlank { entry.actor_display_name }
+            key == effectiveActor
+        }
+    }
+    fun fmt(ts: String?) = ts?.replace("T", " ")?.replace("Z", "")?.take(16).orEmpty()
+
+    SCard(Strings.adminUsageLogs, Icons.Default.Visibility, exp, { exp = !exp }) {
+        Text(Strings.adminUsageLogsHint, fontSize = 12.sp, color = Color.Gray)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = { viewModel.loadAdminActivityLog() }) {
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(Strings.reload)
+            }
+        }
+        when {
+            state.adminActivityLoading -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Strings.processing, fontSize = 12.sp, color = Color.Gray)
+                }
+            }
+            !state.adminActivityError.isNullOrBlank() -> {
+                Text(state.adminActivityError ?: Strings.adminLogsLoadFailed, color = Color.Red, fontSize = 12.sp)
+            }
+            else -> {
+                if (actors.isNotEmpty()) {
+                    ScrollableTabRow(
+                        selectedTabIndex = if (effectiveActor == null) 0 else actors.indexOfFirst { it.first == effectiveActor } + 1,
+                        edgePadding = 0.dp
+                    ) {
+                        Tab(selected = effectiveActor == null, onClick = { selectedActor = null }, text = { Text(Strings.allUsersLabel) })
+                        actors.forEach { actor ->
+                            Tab(selected = effectiveActor == actor.first, onClick = { selectedActor = actor.first }, text = { Text(actor.second) })
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (filteredLogs.isEmpty()) {
+                    Text(Strings.noAdminLogs, color = Color.Gray)
+                } else {
+                    filteredLogs.forEach { entry ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(entry.description, fontWeight = FontWeight.SemiBold)
+                                Text("${Strings.logActorLabel}: ${entry.actor_display_name.ifBlank { entry.actor_email.ifBlank { Strings.unknown } }}", fontSize = 12.sp, color = Color.Gray)
+                                Text("${Strings.logActionLabel}: ${Strings.localizeAdminLogAction(entry.action)}", fontSize = 12.sp, color = Color.Gray)
+                                Text("${Strings.logSourceLabel}: ${Strings.localizeAdminLogSource(entry.source_channel)}", fontSize = 12.sp, color = Color.Gray)
+                                Text("${Strings.savedAtLabel}: ${fmt(entry.created_at)}", fontSize = 12.sp, color = Color.Gray)
+                                if (entry.details.isNotEmpty()) {
+                                    Text(Strings.logDetailsLabel, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                    entry.details.entries.forEach { detail ->
+                                        Text("${detail.key}: ${detail.value}", fontSize = 11.sp, color = Color.DarkGray)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

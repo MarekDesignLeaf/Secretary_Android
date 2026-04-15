@@ -195,6 +195,20 @@ object Strings {
     val familyLabel get() = t("Family", "Čeleď", "Rodzina")
     val recognitionHistoryTitle get() = t("Recognition history", "Historie rozpoznávání", "Historia rozpoznań")
     val recognitionHistoryEmpty get() = t("No history yet", "Zatím bez historie", "Brak historii")
+    val allUsersLabel get() = t("All users", "Všichni uživatelé", "Wszyscy użytkownicy")
+    val capturedByLabel get() = t("Captured by", "Pořídil", "Wykonał")
+    val adminUsageLogs get() = t("Admin usage logs", "Admin logy používání", "Logi użycia administratora")
+    val adminUsageLogsHint get() = t(
+        "Admin can see all recorded actions, changes and assistant queries grouped by user.",
+        "Administrátor vidí všechny zaznamenané akce, změny a dotazy na asistentku rozdělené podle uživatelů.",
+        "Administrator widzi wszystkie zapisane akcje, zmiany i zapytania do asystentki podzielone według użytkowników."
+    )
+    val logActorLabel get() = t("User", "Uživatel", "Użytkownik")
+    val logActionLabel get() = t("Action", "Akce", "Akcja")
+    val logSourceLabel get() = t("Source", "Zdroj", "Źródło")
+    val logDetailsLabel get() = t("Details", "Detaily", "Szczegóły")
+    val noAdminLogs get() = t("No logs yet", "Zatím bez logů", "Brak logów")
+    val adminLogsLoadFailed get() = t("Failed to load admin logs", "Nepodařilo se načíst admin logy", "Nie udało się wczytać logów administratora")
     val capturedAtLabel get() = t("Captured", "Pořízeno", "Ujęto")
     val savedAtLabel get() = t("Saved", "Uloženo", "Zapisano")
     val locationLabel get() = t("Location", "Místo", "Lokalizacja")
@@ -948,6 +962,21 @@ object Strings {
         "plant_health_assessment" -> plantHealthTitle
         "mushroom_identification" -> mushroomRecognitionTitle
         else -> type
+    }
+    fun localizeAdminLogAction(action: String): String = when (action.lowercase()) {
+        "assistant_query" -> t("Assistant query", "Dotaz na asistentku", "Zapytanie do asystentki")
+        "voice_session_start" -> t("Voice session start", "Start hlasové relace", "Start sesji głosowej")
+        "voice_session_input" -> t("Voice input", "Hlasový vstup", "Wejście głosowe")
+        "update_user" -> t("User updated", "Uživatel upraven", "Użytkownik zaktualizowany")
+        "delete_user" -> t("User deleted", "Uživatel smazán", "Użytkownik usunięty")
+        "update_languages" -> t("Language settings updated", "Nastavení jazyků upraveno", "Zaktualizowano ustawienia języków")
+        else -> action.replace("_", " ")
+    }
+    fun localizeAdminLogSource(source: String): String = when (source.lowercase()) {
+        "text" -> t("Text", "Text", "Tekst")
+        "voice" -> t("Voice", "Hlas", "Głos")
+        "settings" -> t("Settings", "Nastavení", "Ustawienia")
+        else -> source.ifBlank { unknown }
     }
     private fun normalizeCommandText(text: String): String {
         return Normalizer.normalize(text.lowercase(), Normalizer.Form.NFD)

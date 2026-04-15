@@ -272,8 +272,25 @@ data class RecognitionHistoryEntry(
     val longitude: Double? = null,
     val accuracy_meters: Double? = null,
     val location_source: String? = null,
+    val owner_user_id: Long? = null,
+    val owner_display_name: String = "",
+    val owner_email: String = "",
     val photos: List<RecognitionHistoryPhoto> = emptyList(),
     val result: Map<String, @JvmSuppressWildcards Any?> = emptyMap()
+)
+
+data class AdminActivityLogEntry(
+    val id: Long = 0,
+    val entity_type: String = "",
+    val entity_id: String = "",
+    val action: String = "",
+    val description: String = "",
+    val source_channel: String = "",
+    val created_at: String = "",
+    val actor_user_id: Long? = null,
+    val actor_display_name: String = "",
+    val actor_email: String = "",
+    val details: Map<String, @JvmSuppressWildcards Any?> = emptyMap()
 )
 
 data class ImportableSharedContact(

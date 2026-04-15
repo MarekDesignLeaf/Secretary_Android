@@ -2620,6 +2620,35 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun loadAdminActivityLog(actorUserId: Long? = null) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(adminActivityLoading = true, adminActivityError = null)
+            try {
+                val res = api.getAdminActivityLog(limit = 300, actorUserId = actorUserId)
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        adminActivityLog = res.body() ?: emptyList(),
+                        adminActivityLoading = false,
+                        adminActivityError = null
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        adminActivityLog = emptyList(),
+                        adminActivityLoading = false,
+                        adminActivityError = Strings.adminLogsLoadFailed
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Admin activity load error", e)
+                _uiState.value = _uiState.value.copy(
+                    adminActivityLog = emptyList(),
+                    adminActivityLoading = false,
+                    adminActivityError = e.message ?: Strings.adminLogsLoadFailed
+                )
+            }
+        }
+    }
+
     fun resetBackendUserPassword(userId: Long, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
@@ -2781,6 +2810,9 @@ class SecretaryViewModel : ViewModel() {
             tenantConfig = null,
             backendUsers = emptyList(),
             backendRoles = emptyList(),
+            adminActivityLog = emptyList(),
+            adminActivityLoading = false,
+            adminActivityError = null,
             firstLoginUsers = emptyList(),
             backendUsersLoading = false,
             backendUsersError = null,
@@ -4468,6 +4500,9 @@ data class UiState(
     val backendRoles: List<BackendRole> = emptyList(),
     val backendUsersLoading: Boolean = false,
     val backendUsersError: String? = null,
+    val adminActivityLog: List<AdminActivityLogEntry> = emptyList(),
+    val adminActivityLoading: Boolean = false,
+    val adminActivityError: String? = null,
     val pendingImport: Map<String, String>? = null,
     val pendingCall: String? = null,
     val pendingPhotoTaskId: String? = null,

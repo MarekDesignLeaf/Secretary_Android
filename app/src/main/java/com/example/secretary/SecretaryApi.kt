@@ -62,6 +62,12 @@ interface SecretaryApi {
         @Query("language") language: String? = null,
     ): Response<List<RecognitionHistoryEntry>>
 
+    @GET("admin/activity-log")
+    suspend fun getAdminActivityLog(
+        @Query("limit") limit: Int = 200,
+        @Query("actor_user_id") actorUserId: Long? = null,
+    ): Response<List<AdminActivityLogEntry>>
+
     // === CLIENTS ===
     @GET("crm/clients")
     suspend fun getClients(): Response<List<Client>>

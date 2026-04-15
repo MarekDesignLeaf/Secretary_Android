@@ -29,6 +29,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -138,11 +140,13 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
     val mode = state.plantCaptureMode
     val isHealthMode = mode == "health"
     val isMushroomMode = mode == "mushroom"
+    val canManageNatureHistory = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
     var slots by remember(mode) { mutableStateOf(defaultPlantSlots(mode)) }
     var targetSlotId by remember { mutableStateOf<Int?>(null) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
     var organMenuSlotId by remember { mutableStateOf<Int?>(null) }
     var lastAutoLaunchRequestId by remember { mutableStateOf<Long?>(null) }
+    var selectedHistoryOwner by remember { mutableStateOf<String?>(null) }
     val isVoiceCaptureActive by rememberUpdatedState(state.isPlantVoiceCaptureActive)
     val currentMode by rememberUpdatedState(mode)
     val currentIsHealthMode by rememberUpdatedState(isHealthMode)
@@ -245,6 +249,24 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
 
     val readyPhotos = slots.mapNotNull { slot ->
         slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, mode)) }
+    }
+    val historyOwners = state.recognitionHistory
+        .map { entry ->
+            val key = entry.owner_user_id?.toString() ?: entry.owner_email.ifBlank { entry.owner_display_name }
+            key to (entry.owner_display_name.ifBlank { entry.owner_email.ifBlank { Strings.unknown } })
+        }
+        .filter { it.first.isNotBlank() }
+        .distinctBy { it.first }
+    val effectiveHistoryOwner = selectedHistoryOwner?.takeIf { selected ->
+        historyOwners.any { it.first == selected }
+    }
+    val filteredHistory = if (!canManageNatureHistory || effectiveHistoryOwner == null) {
+        state.recognitionHistory
+    } else {
+        state.recognitionHistory.filter { entry ->
+            val key = entry.owner_user_id?.toString() ?: entry.owner_email.ifBlank { entry.owner_display_name }
+            key == effectiveHistoryOwner
+        }
     }
 
     LazyColumn(
@@ -526,12 +548,32 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
             Spacer(Modifier.height(8.dp))
             Text(Strings.recognitionHistoryTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
-            if (state.recognitionHistory.isEmpty()) {
+            if (canManageNatureHistory && historyOwners.isNotEmpty()) {
+                ScrollableTabRow(
+                    selectedTabIndex = if (effectiveHistoryOwner == null) 0 else historyOwners.indexOfFirst { it.first == effectiveHistoryOwner } + 1,
+                    edgePadding = 0.dp
+                ) {
+                    Tab(
+                        selected = effectiveHistoryOwner == null,
+                        onClick = { selectedHistoryOwner = null },
+                        text = { Text(Strings.allUsersLabel) }
+                    )
+                    historyOwners.forEach { owner ->
+                        Tab(
+                            selected = effectiveHistoryOwner == owner.first,
+                            onClick = { selectedHistoryOwner = owner.first },
+                            text = { Text(owner.second) }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            if (filteredHistory.isEmpty()) {
                 Text(Strings.recognitionHistoryEmpty, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
-        items(state.recognitionHistory, key = { it.id }) { entry ->
+        items(filteredHistory, key = { it.id }) { entry ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(Strings.localizeRecognitionType(entry.recognition_type), fontWeight = FontWeight.Bold)
@@ -541,6 +583,10 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                     }
                     if (entry.confidence > 0.0) {
                         Text("${Strings.confidence}: ${(entry.confidence * 100).toInt()}%")
+                    }
+                    if (canManageNatureHistory) {
+                        val ownerText = entry.owner_display_name.ifBlank { entry.owner_email.ifBlank { Strings.unknown } }
+                        Text("${Strings.capturedByLabel}: $ownerText")
                     }
                     Text("${Strings.capturedAtLabel}: ${formatHistoryTimestamp(entry.captured_at)}")
                     Text("${Strings.savedAtLabel}: ${formatHistoryTimestamp(entry.created_at)}")
