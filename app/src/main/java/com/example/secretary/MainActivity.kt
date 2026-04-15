@@ -233,8 +233,8 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
     var showAddClientDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.pendingPlantCaptureRequestId, currentRoute) {
-        if (state.pendingPlantCaptureRequestId != null && currentRoute != Screen.Crm.route) {
-            navController.navigate(Screen.Crm.route) {
+        if (state.pendingPlantCaptureRequestId != null && currentRoute != Screen.Tools.route) {
+            navController.navigate(Screen.Tools.route) {
                 popUpTo(navController.graph.startDestinationId)
                 launchSingleTop = true
             }
@@ -289,6 +289,10 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                 LaunchedEffect(Unit) { viewModel.updateContext(null, null) }
                 CalendarScreen(viewModel) 
             }
+            composable(Screen.Tools.route) {
+                LaunchedEffect(Unit) { viewModel.updateContext(null, null) }
+                ToolsScreen(viewModel)
+            }
             composable(Screen.Settings.route) { 
                 LaunchedEffect(Unit) { 
                     viewModel.updateContext(null, null)
@@ -322,6 +326,12 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
             }
         }
     }
+}
+
+@Composable
+fun ToolsScreen(viewModel: SecretaryViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    PlantRecognitionTab(state, viewModel)
 }
 
 @Composable
@@ -573,14 +583,9 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
     var showAddSharedContact by remember { mutableStateOf(false) }
     var showEditLead by remember { mutableStateOf<Lead?>(null) }
     var showInvoiceStatus by remember { mutableStateOf<Invoice?>(null) }
-    val tabs = listOf(Strings.today, Strings.clients, Strings.jobs, Strings.tasks, Strings.leads, Strings.quotes, Strings.invoices, Strings.workReports, Strings.contactsDirectory, Strings.plants, Strings.communications)
+    val tabs = listOf(Strings.today, Strings.clients, Strings.jobs, Strings.tasks, Strings.leads, Strings.quotes, Strings.invoices, Strings.workReports, Strings.contactsDirectory, Strings.communications)
 
     LaunchedEffect(Unit) { viewModel.refreshCrmData() }
-    LaunchedEffect(state.pendingPlantCaptureRequestId) {
-        if (state.pendingPlantCaptureRequestId != null) {
-            selectedTab = 9
-        }
-    }
 
     Scaffold(
         floatingActionButton = {
@@ -592,7 +597,7 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
                 6 -> FloatingActionButton(onClick = { showAddInvoice = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Faktura") }
                 7 -> FloatingActionButton(onClick = { showAddWorkReport = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Výkaz") }
                 8 -> FloatingActionButton(onClick = { showAddSharedContact = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Kontakt") }
-                10 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Komunikace") }
+                9 -> FloatingActionButton(onClick = { showLogComm = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Komunikace") }
                 else -> {}
             }
         }
@@ -623,8 +628,7 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
                     }
                     7 -> WorkReportsTab(state.workReports, viewModel, navController)
                     8 -> ContactsDirectoryTab(state, viewModel)
-                    9 -> PlantRecognitionTab(state, viewModel)
-                    10 -> CommunicationTab(state, viewModel, navController)
+                    9 -> CommunicationTab(state, viewModel, navController)
                 }
             }
         }

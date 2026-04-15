@@ -22,6 +22,7 @@ object Strings {
     val crm get() = t("CRM", "CRM", "CRM")
     val tasks get() = t("Tasks", "Úkoly", "Zadania")
     val calendar get() = t("Calendar", "Kalendář", "Kalendarz")
+    val tools get() = t("Tools", "Nástroje", "Narzędzia")
     val settings get() = t("Settings", "Nastavení", "Ustawienia")
 
     // === DASHBOARD ===

@@ -7,12 +7,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 sealed class Screen(val route: String, val titleKey: String, val icon: ImageVector) {
     val title: String get() = when(titleKey) {
         "home" -> Strings.home; "crm" -> Strings.crm; "tasks" -> Strings.tasks
-        "calendar" -> Strings.calendar; "settings" -> Strings.settings; else -> titleKey
+        "calendar" -> Strings.calendar; "tools" -> Strings.tools; "settings" -> Strings.settings; else -> titleKey
     }
     object Home : Screen("home", "home", Icons.Default.Home)
     object Crm : Screen("crm", "crm", Icons.Default.Person)
     object Tasks : Screen("tasks", "tasks", Icons.Default.List)
     object Calendar : Screen("calendar", "calendar", Icons.Default.DateRange)
+    object Tools : Screen("tools", "tools", Icons.Default.Build)
     object Settings : Screen("settings", "settings", Icons.Default.Settings)
     
     object ClientDetail : Screen("client/{clientId}", Strings.editClient, Icons.Default.Person)
@@ -25,5 +26,6 @@ val navItems = listOf(
     Screen.Crm,
     Screen.Tasks,
     Screen.Calendar,
+    Screen.Tools,
     Screen.Settings
 )
