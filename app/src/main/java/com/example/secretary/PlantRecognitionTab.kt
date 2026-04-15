@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.aspectRatio
@@ -143,12 +144,17 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
     var organMenuSlotId by remember { mutableStateOf<Int?>(null) }
     var lastAutoLaunchRequestId by remember { mutableStateOf<Long?>(null) }
     val isVoiceCaptureActive by rememberUpdatedState(state.isPlantVoiceCaptureActive)
+    val currentMode by rememberUpdatedState(mode)
+    val currentIsHealthMode by rememberUpdatedState(isHealthMode)
+    val currentIsMushroomMode by rememberUpdatedState(isMushroomMode)
+    var launcherError by remember(mode) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(mode) {
         slots = defaultPlantSlots(mode)
         targetSlotId = null
         pendingCameraFile = null
         organMenuSlotId = null
+        launcherError = null
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -162,15 +168,15 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
             }
         }
         val autoReadyPhotos = updatedSlots.mapNotNull { slot ->
-            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, mode)) }
+            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, currentMode)) }
         }
         val shouldAutoIdentify = success && isVoiceCaptureActive && autoReadyPhotos.isNotEmpty()
         viewModel.consumePendingPlantCaptureRequest(resumeHotword = !shouldAutoIdentify)
         if (shouldAutoIdentify) {
             val captureContext = buildRecognitionCaptureContext(context)
             when {
-                isMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos, captureContext)
-                isHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos, captureContext)
+                currentIsMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos, captureContext)
+                currentIsHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos, captureContext)
                 else -> viewModel.identifyPlant(autoReadyPhotos, captureContext)
             }
         }
@@ -188,40 +194,52 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
             slots = updatedSlots
         }
         val autoReadyPhotos = updatedSlots.mapNotNull { slot ->
-            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, mode)) }
+            slot.file?.let { file -> PlantPhotoUpload(file = file, organ = slot.organ, label = slotLabel(slot.id, currentMode)) }
         }
         val shouldAutoIdentify = uri != null && isVoiceCaptureActive && autoReadyPhotos.isNotEmpty()
         viewModel.consumePendingPlantCaptureRequest(resumeHotword = !shouldAutoIdentify)
         if (shouldAutoIdentify) {
             val captureContext = buildRecognitionCaptureContext(context)
             when {
-                isMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos, captureContext)
-                isHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos, captureContext)
+                currentIsMushroomMode -> viewModel.identifyMushroom(autoReadyPhotos, captureContext)
+                currentIsHealthMode -> viewModel.assessPlantHealth(autoReadyPhotos, captureContext)
                 else -> viewModel.identifyPlant(autoReadyPhotos, captureContext)
             }
         }
     }
 
-    fun launchCamera(slotId: Int) {
+    fun launchCamera(slotId: Int): Boolean {
         val file = File(context.cacheDir, "plant_photo_${System.currentTimeMillis()}.jpg")
         targetSlotId = slotId
         pendingCameraFile = file
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-        cameraLauncher.launch(uri)
+        launcherError = null
+        return try {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            cameraLauncher.launch(uri)
+            true
+        } catch (error: Throwable) {
+            Log.e("PlantRecognitionTab", "Failed to launch camera for mode=$currentMode slot=$slotId", error)
+            launcherError = Strings.cameraOpenFailed
+            false
+        }
     }
 
     fun launchGallery(slotId: Int) {
         targetSlotId = slotId
+        launcherError = null
         galleryLauncher.launch("image/*")
     }
 
-    LaunchedEffect(state.pendingPlantCaptureRequestId) {
+    LaunchedEffect(state.pendingPlantCaptureRequestId, mode) {
         val requestId = state.pendingPlantCaptureRequestId
         if (requestId != null && requestId != lastAutoLaunchRequestId) {
             lastAutoLaunchRequestId = requestId
-            delay(350)
+            delay(500)
             val nextSlot = slots.firstOrNull { it.file == null } ?: slots.last()
-            launchCamera(nextSlot.id)
+            val launched = launchCamera(nextSlot.id)
+            if (!launched) {
+                viewModel.consumePendingPlantCaptureRequest(resumeHotword = true)
+            }
         }
     }
 
@@ -373,6 +391,12 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
                         Text(Strings.cancel)
                     }
                 }
+            }
+        }
+
+        launcherError?.let { error ->
+            item {
+                Text(error, color = MaterialTheme.colorScheme.error)
             }
         }
 

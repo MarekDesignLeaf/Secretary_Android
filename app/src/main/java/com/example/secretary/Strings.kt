@@ -3,6 +3,7 @@ package com.example.secretary
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.text.Normalizer
 
 object Strings {
     enum class Lang { EN, CS, PL }
@@ -181,6 +182,11 @@ object Strings {
     val mushroomRecognitionNetworkError get() = t("Mushroom recognition network error.", "Síťová chyba při rozpoznání houby.", "Błąd sieci podczas rozpoznawania grzyba.")
     val plantTooManyPhotos get() = t("Use at most 5 photos.", "Použij maximálně 5 fotografií.", "Użyj maksymalnie 5 zdjęć.")
     val plantEmptyPhoto get() = t("One of the photos is empty.", "Jedna z fotografií je prázdná.", "Jedno ze zdjęć jest puste.")
+    val cameraOpenFailed get() = t(
+        "I couldn't open the camera. Check camera availability or use the gallery.",
+        "Nepodařilo se otevřít fotoaparát. Zkontroluj dostupnost fotoaparátu nebo použij galerii.",
+        "Nie udało się otworzyć aparatu. Sprawdź dostępność aparatu albo użyj galerii."
+    )
     val skipPhoto get() = t("Skip", "Přeskočit", "Pomiń")
     val removePhoto get() = t("Remove photo", "Odebrat fotku", "Usuń zdjęcie")
     val optionalPhoto get() = t("Optional", "Volitelné", "Opcjonalne")
@@ -942,6 +948,13 @@ object Strings {
         "mushroom_identification" -> mushroomRecognitionTitle
         else -> type
     }
+    private fun normalizeCommandText(text: String): String {
+        return Normalizer.normalize(text.lowercase(), Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+            .replace("[^\\p{L}\\p{Nd}\\s]".toRegex(), " ")
+            .replace("\\s+".toRegex(), " ")
+            .trim()
+    }
     fun localizePermission(code: String, fallback: String = code): String = when (code.lowercase()) {
         "crm_read" -> t("View CRM", "Čtení CRM", "Podgląd CRM")
         "crm_write" -> t("Edit CRM", "Úpravy CRM", "Edycja CRM")
@@ -981,25 +994,36 @@ object Strings {
             normalized.contains("wyloguj")
     }
     fun matchesPlantRecognitionCommand(text: String): Boolean {
-        val normalized = text.lowercase().trim()
+        val normalized = normalizeCommandText(text)
         val phrases = listOf(
             "co je to za rostlinu",
+            "co to je za rostlinu",
+            "co to za rostlinu",
             "rozpoznej rostlinu",
             "poznej rostlinu",
             "identifikuj rostlinu",
             "what plant is this",
+            "what is this plant",
+            "what kind of plant is this",
             "identify this plant",
             "identify plant",
+            "co to jest za roslina",
+            "co to jest za rosline",
             "jaka to roslina",
+            "jaka to jest roslina",
             "rozpoznaj roślinę",
-            "rozpoznaj rosline"
+            "rozpoznaj rosline",
+            "zidentyfikuj roślinę",
+            "zidentyfikuj rosline"
         )
         return phrases.any { normalized.contains(it) }
     }
     fun matchesPlantHealthCommand(text: String): Boolean {
-        val normalized = text.lowercase().trim()
+        val normalized = normalizeCommandText(text)
         val phrases = listOf(
             "co je to za chorobu",
+            "co to je za chorobu",
+            "co to za choroba",
             "co je rostline",
             "co je rostlině",
             "co ji je",
@@ -1020,11 +1044,15 @@ object Strings {
             "jak ošetřit tuto rostlinu",
             "plant disease",
             "what disease is this",
+            "what is this disease",
             "what is wrong with this plant",
+            "what is happening to this plant",
             "how do i treat this plant",
             "how to treat this plant",
             "how to save this plant",
             "check plant disease",
+            "co to za choroba rosliny",
+            "co to za choroba rośliny",
             "jaka to choroba",
             "co dolega roslinie",
             "co dolega roślinie",
@@ -1038,19 +1066,28 @@ object Strings {
         return phrases.any { normalized.contains(it) }
     }
     fun matchesMushroomRecognitionCommand(text: String): Boolean {
-        val normalized = text.lowercase().trim()
+        val normalized = normalizeCommandText(text)
         val phrases = listOf(
             "co je to za houbu",
+            "co to je za houbu",
             "co je to za houba",
+            "co to je za houba",
+            "co to za houbu",
+            "co to za houba",
             "rozpoznej houbu",
             "identifikuj houbu",
             "urci houbu",
             "urči houbu",
             "what mushroom is this",
+            "what is this mushroom",
+            "what kind of mushroom is this",
             "identify this mushroom",
             "identify mushroom",
             "what fungus is this",
+            "co to za grzyb",
+            "co to jest za grzyb",
             "jaki to grzyb",
+            "jaki to jest grzyb",
             "rozpoznaj grzyba",
             "rozpoznaj grzyb",
             "zidentyfikuj grzyba"
