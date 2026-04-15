@@ -2703,10 +2703,13 @@ class SecretaryViewModel : ViewModel() {
         val normalized = detail?.lowercase(Locale.ROOT)
         return when {
             detail.isNullOrBlank() -> Strings.connectionError
+            detail.contains("not configured", ignoreCase = true) && detail.contains("mushroom", ignoreCase = true) -> Strings.mushroomRecognitionUnavailable
             detail.contains("not configured", ignoreCase = true) && detail.contains("disease", ignoreCase = true) -> Strings.plantHealthUnavailable
             detail.contains("not configured", ignoreCase = true) -> Strings.plantRecognitionUnavailable
+            normalized?.contains("network error") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionNetworkError
             normalized?.contains("network error") == true && normalized.contains("disease") -> Strings.plantHealthNetworkError
             normalized?.contains("network error") == true -> Strings.plantRecognitionNetworkError
+            normalized?.contains("failed") == true && normalized.contains("mushroom") -> Strings.mushroomRecognitionFailed
             normalized?.contains("failed") == true && normalized.contains("disease") -> Strings.plantHealthFailed
             normalized?.contains("failed") == true && normalized.contains("plant") -> Strings.plantRecognitionFailed
             normalized?.contains("maximum of 5") == true || normalized?.contains("maximálně 5") == true || normalized?.contains("maksymalnie 5") == true -> Strings.plantTooManyPhotos
@@ -3169,10 +3172,75 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun identifyMushroom(photos: List<PlantPhotoUpload>) {
+        val voiceTriggered = _uiState.value.isPlantVoiceCaptureActive
+        if (photos.isEmpty()) {
+            _uiState.value = _uiState.value.copy(mushroomRecognitionError = Strings.plantNeedsPhoto)
+            if (voiceTriggered) voiceManager?.speak(Strings.plantNeedsPhoto, expectReply = false)
+            return
+        }
+        viewModelScope.launch {
+            try {
+                _uiState.value = _uiState.value.copy(
+                    mushroomRecognitionLoading = true,
+                    mushroomRecognitionError = null
+                )
+                val mediaType = "image/*".toMediaType()
+                val imageParts = photos.mapIndexed { index, photo ->
+                    val requestFile = photo.file.asRequestBody(mediaType)
+                    okhttp3.MultipartBody.Part.createFormData(
+                        "images",
+                        photo.file.name.ifBlank { "mushroom_${index + 1}.jpg" },
+                        requestFile
+                    )
+                }
+                val textType = "text/plain".toMediaType()
+                val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
+                val response = api.identifyMushroom(imageParts, language)
+                if (response.isSuccessful) {
+                    val result = response.body()
+                    _uiState.value = _uiState.value.copy(
+                        mushroomRecognitionLoading = false,
+                        mushroomRecognitionError = null,
+                        selectedMushroomRecognition = result,
+                        isPlantVoiceCaptureActive = false
+                    )
+                    val spoken = result?.spoken_summary ?: result?.display_name ?: Strings.mushroomRecognitionTitle
+                    if (voiceTriggered) voiceManager?.speak(spoken, expectReply = false)
+                } else {
+                    val errorText = parseApiError(response.errorBody()?.string())
+                    _uiState.value = _uiState.value.copy(
+                        mushroomRecognitionLoading = false,
+                        mushroomRecognitionError = errorText,
+                        isPlantVoiceCaptureActive = false
+                    )
+                    if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
+                }
+            } catch (e: Exception) {
+                val message = e.message?.takeIf { it.isNotBlank() } ?: Strings.connectionError
+                _uiState.value = _uiState.value.copy(
+                    mushroomRecognitionLoading = false,
+                    mushroomRecognitionError = message,
+                    isPlantVoiceCaptureActive = false
+                )
+                if (voiceTriggered) voiceManager?.speak(message, expectReply = false)
+            }
+        }
+    }
+
     fun requestPlantCaptureFromVoice(mode: String = "identify") {
         val isHealthMode = mode == "health"
-        val reply = if (isHealthMode) Strings.plantHealthVoiceGuide else Strings.plantRecognitionVoiceGuide
-        val title = if (isHealthMode) Strings.plantHealthTitle else Strings.plantRecognitionTitle
+        val isMushroomMode = mode == "mushroom"
+        val reply = when {
+            isMushroomMode -> Strings.mushroomRecognitionVoiceGuide
+            isHealthMode -> Strings.plantHealthVoiceGuide
+            else -> Strings.plantRecognitionVoiceGuide
+        }
+        val title = when {
+            isMushroomMode -> Strings.mushroomRecognitionTitle
+            isHealthMode -> Strings.plantHealthTitle
+            else -> Strings.plantRecognitionTitle
+        }
         _uiState.value = _uiState.value.copy(
             history = (_uiState.value.history + ChatMessage("user", title) + ChatMessage("assistant", reply)).takeLast(30),
             lastAiReply = reply,
@@ -3183,7 +3251,9 @@ class SecretaryViewModel : ViewModel() {
             plantRecognitionError = null,
             selectedPlantRecognition = null,
             plantDiseaseError = null,
-            selectedPlantDisease = null
+            selectedPlantDisease = null,
+            mushroomRecognitionError = null,
+            selectedMushroomRecognition = null
         )
         voiceManager?.speak(reply, expectReply = false, stayIdle = true)
     }
@@ -3193,10 +3263,13 @@ class SecretaryViewModel : ViewModel() {
             plantCaptureMode = mode,
             selectedPlantRecognition = null,
             selectedPlantDisease = null,
+            selectedMushroomRecognition = null,
             plantRecognitionError = null,
             plantDiseaseError = null,
+            mushroomRecognitionError = null,
             plantRecognitionLoading = false,
-            plantDiseaseLoading = false
+            plantDiseaseLoading = false,
+            mushroomRecognitionLoading = false
         )
     }
 
@@ -3215,10 +3288,13 @@ class SecretaryViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(
             selectedPlantRecognition = null,
             selectedPlantDisease = null,
+            selectedMushroomRecognition = null,
             plantRecognitionError = null,
             plantDiseaseError = null,
+            mushroomRecognitionError = null,
             plantRecognitionLoading = false,
             plantDiseaseLoading = false,
+            mushroomRecognitionLoading = false,
             isPlantVoiceCaptureActive = false,
             pendingPlantCaptureRequestId = null
         )
@@ -4010,6 +4086,10 @@ class SecretaryViewModel : ViewModel() {
             requestPlantCaptureFromVoice("health")
             return
         }
+        if (Strings.matchesMushroomRecognitionCommand(lower)) {
+            requestPlantCaptureFromVoice("mushroom")
+            return
+        }
         if (Strings.matchesPlantRecognitionCommand(lower)) {
             requestPlantCaptureFromVoice("identify")
             return
@@ -4297,10 +4377,13 @@ data class UiState(
     val plantCaptureMode: String = "identify",
     val selectedPlantRecognition: PlantRecognitionResponse? = null,
     val selectedPlantDisease: PlantDiseaseResponse? = null,
+    val selectedMushroomRecognition: MushroomRecognitionResponse? = null,
     val plantRecognitionLoading: Boolean = false,
     val plantRecognitionError: String? = null,
     val plantDiseaseLoading: Boolean = false,
     val plantDiseaseError: String? = null,
+    val mushroomRecognitionLoading: Boolean = false,
+    val mushroomRecognitionError: String? = null,
     val isPlantVoiceCaptureActive: Boolean = false,
     val isBackgroundActive: Boolean = true,
     val voiceSessionId: String? = null,

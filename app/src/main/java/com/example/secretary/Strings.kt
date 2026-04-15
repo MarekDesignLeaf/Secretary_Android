@@ -38,7 +38,7 @@ object Strings {
     val today get() = t("Today", "Dnes", "Dziś")
     val clients get() = t("Clients", "Klienti", "Klienci")
     val contactsDirectory get() = t("Contacts", "Kontakty", "Kontakty")
-    val plants get() = t("Plants", "Rostliny", "Rośliny")
+    val plants get() = t("Plants & fungi", "Rostliny a houby", "Rośliny i grzyby")
     val employeesSection get() = t("Employees", "Zaměstnanci", "Pracownicy")
     val subcontractorsSection get() = t("Subcontractors", "Subkontraktoři", "Podwykonawcy")
     val materialSuppliersSection get() = t("Material suppliers", "Dodavatelé materiálu", "Dostawcy materiałów")
@@ -92,8 +92,10 @@ object Strings {
     // === PLANT RECOGNITION ===
     val plantRecognitionTitle get() = t("Plant recognition", "Rozpoznávání rostlin", "Rozpoznawanie roślin")
     val plantHealthTitle get() = t("Plant diseases", "Choroby rostlin", "Choroby roślin")
+    val mushroomRecognitionTitle get() = t("Mushroom recognition", "Rozpoznávání hub", "Rozpoznawanie grzybów")
     val plantModeRecognition get() = t("Identify plant", "Rozpoznat rostlinu", "Rozpoznaj roślinę")
     val plantModeHealth get() = t("Check disease", "Zjistit chorobu", "Sprawdź chorobę")
+    val mushroomModeRecognition get() = t("Identify mushroom", "Rozpoznat houbu", "Rozpoznaj grzyb")
     val plantRecognitionHint get() = t(
         "Take at least 1 photo. For better results, add the whole plant, a leaf detail, and flower or fruit if available. Optional shots can be skipped.",
         "Pořiď alespoň 1 fotografii. Pro lepší výsledek přidej celou rostlinu, detail listu a pokud je k dispozici, květ nebo plod. Volitelné snímky lze přeskočit.",
@@ -103,6 +105,11 @@ object Strings {
         "Take at least 1 clear photo of the damaged part. For better diagnosis, add the whole plant, a close leaf detail, and any spots, mold, pests or stem damage.",
         "Pořiď alespoň 1 jasnou fotografii poškozené části. Pro lepší diagnózu přidej celou rostlinu, detail listu a případné skvrny, plíseň, škůdce nebo poškození stonku.",
         "Zrób co najmniej 1 wyraźne zdjęcie uszkodzonej części. Dla lepszej diagnozy dodaj całą roślinę, zbliżenie liścia oraz plamy, pleśń, szkodniki lub uszkodzenia łodygi."
+    )
+    val mushroomRecognitionHint get() = t(
+        "Take at least 1 photo. For better results, add the whole mushroom, underside with gills or pores, and stem or base. Habitat shots are helpful but optional.",
+        "Pořiď alespoň 1 fotografii. Pro lepší výsledek přidej celou houbu, spodní stranu s lupeny nebo póry a třeň či bázi. Fotka stanoviště je užitečná, ale volitelná.",
+        "Zrób co najmniej 1 zdjęcie. Dla lepszego wyniku dodaj cały grzyb, spód z blaszkami lub porami oraz trzon albo podstawę. Zdjęcie siedliska jest pomocne, ale opcjonalne."
     )
     val plantRecognitionVoiceGuide get() = t(
         "Take at least 1 photo. Whole plant, leaf detail, and flower or fruit are recommended, but you can skip optional shots.",
@@ -114,21 +121,35 @@ object Strings {
         "Pořiď alespoň 1 fotografii nemocné části. Doporučená je celá rostlina, detail poškozeného listu a viditelná plíseň, hmyz nebo poškození stonku. Volitelné snímky můžeš přeskočit.",
         "Zrób co najmniej 1 zdjęcie chorej części. Zalecane są: cała roślina, zbliżenie uszkodzonego liścia oraz widoczna pleśń, owady lub uszkodzenia łodygi. Zdjęcia opcjonalne możesz pominąć."
     )
+    val mushroomRecognitionVoiceGuide get() = t(
+        "Take at least 1 photo. Whole mushroom, underside, and stem or base are recommended. Habitat can help, but optional shots may be skipped.",
+        "Pořiď alespoň 1 fotografii. Doporučená je celá houba, spodní strana a třeň nebo báze. Stanoviště může pomoci, ale volitelné snímky můžeš přeskočit.",
+        "Zrób co najmniej 1 zdjęcie. Zalecany jest cały grzyb, spód oraz trzon lub podstawa. Siedlisko może pomóc, ale zdjęcia opcjonalne możesz pominąć."
+    )
     val plantWholePlant get() = t("Whole plant", "Celá rostlina", "Cała roślina")
     val plantLeafDetail get() = t("Leaf detail", "Detail listu", "Detal liścia")
     val plantFlowerOrFruit get() = t("Flower, fruit or bark", "Květ, plod nebo kůra", "Kwiat, owoc lub kora")
     val plantDiseaseCloseup get() = t("Damaged part", "Poškozená část", "Uszkodzona część")
     val plantDiseaseLeafDetail get() = t("Damaged leaf detail", "Detail poškozeného listu", "Detal uszkodzonego liścia")
     val plantDiseaseContext get() = t("Whole plant or stem context", "Celá rostlina nebo stonek", "Cała roślina lub łodyga")
+    val mushroomWhole get() = t("Whole mushroom", "Celá houba", "Cały grzyb")
+    val mushroomUnderside get() = t("Underside with gills or pores", "Spodní strana s lupeny nebo póry", "Spód z blaszkami lub porami")
+    val mushroomStemBase get() = t("Stem or base", "Třeň nebo báze", "Trzon lub podstawa")
+    val mushroomHabitat get() = t("Habitat or surrounding area", "Stanoviště nebo okolí", "Siedlisko lub otoczenie")
     val identifyPlantAction get() = t("Identify plant", "Rozpoznat rostlinu", "Rozpoznaj roślinę")
     val assessPlantHealthAction get() = t("Check disease", "Zjistit chorobu", "Sprawdź chorobę")
+    val identifyMushroomAction get() = t("Identify mushroom", "Rozpoznat houbu", "Rozpoznaj grzyb")
     val plantRecognitionLoading get() = t("Identifying plant...", "Rozpoznávám rostlinu...", "Rozpoznaję roślinę...")
     val plantHealthLoading get() = t("Checking plant disease...", "Zjišťuji chorobu rostliny...", "Sprawdzam chorobę rośliny...")
+    val mushroomRecognitionLoading get() = t("Identifying mushroom...", "Rozpoznávám houbu...", "Rozpoznaję grzyb...")
     val plantNoResultYet get() = t("No identification yet", "Zatím bez rozpoznání", "Brak identyfikacji")
     val plantHealthNoResultYet get() = t("No disease assessment yet", "Zatím bez posouzení choroby", "Brak oceny choroby")
+    val mushroomNoResultYet get() = t("No mushroom identification yet", "Zatím bez rozpoznání houby", "Brak rozpoznania grzyba")
     val plantBestMatch get() = t("Best match", "Nejlepší shoda", "Najlepsze dopasowanie")
     val plantGuidance get() = t("Description and care", "Popis a nároky", "Opis i wymagania")
     val plantAlternatives get() = t("Other likely matches", "Další pravděpodobné shody", "Inne prawdopodobne dopasowania")
+    val mushroomGuidance get() = t("Description and safety", "Popis a bezpečnost", "Opis i bezpieczeństwo")
+    val mushroomAlternatives get() = t("Other likely mushrooms", "Další pravděpodobné houby", "Inne prawdopodobne grzyby")
     val plantHealthBestMatch get() = t("Most likely issue", "Nejpravděpodobnější problém", "Najbardziej prawdopodobny problem")
     val plantHealthSummary get() = t("Diagnosis and treatment", "Diagnóza a léčba", "Diagnoza i leczenie")
     val plantHealthAlternatives get() = t("Other possible issues", "Další možné problémy", "Inne możliwe problemy")
@@ -148,10 +169,13 @@ object Strings {
     val plantCaptureReady get() = t("Camera is ready for the next plant photo.", "Fotoaparát je připraven pro další fotografii rostliny.", "Aparat jest gotowy na kolejne zdjęcie rośliny.")
     val plantRecognitionUnavailable get() = t("Plant recognition service is not configured yet.", "Služba pro rozpoznávání rostlin ještě není nastavená.", "Usługa rozpoznawania roślin nie jest jeszcze skonfigurowana.")
     val plantHealthUnavailable get() = t("Plant disease service is not configured yet.", "Služba pro choroby rostlin ještě není nastavená.", "Usługa chorób roślin nie jest jeszcze skonfigurowana.")
+    val mushroomRecognitionUnavailable get() = t("Mushroom recognition service is not configured yet.", "Služba pro rozpoznávání hub ještě není nastavená.", "Usługa rozpoznawania grzybów nie jest jeszcze skonfigurowana.")
     val plantRecognitionFailed get() = t("Plant recognition failed. Try another photo.", "Rozpoznání rostliny se nepodařilo. Zkus jinou fotografii.", "Rozpoznanie rośliny nie powiodło się. Spróbuj innego zdjęcia.")
     val plantHealthFailed get() = t("Plant disease assessment failed. Try another photo.", "Posouzení choroby rostliny se nepodařilo. Zkus jinou fotografii.", "Ocena choroby rośliny nie powiodła się. Spróbuj innego zdjęcia.")
+    val mushroomRecognitionFailed get() = t("Mushroom recognition failed. Try another photo.", "Rozpoznání houby se nepodařilo. Zkus jinou fotografii.", "Rozpoznanie grzyba nie powiodło się. Spróbuj innego zdjęcia.")
     val plantRecognitionNetworkError get() = t("Plant recognition network error.", "Síťová chyba při rozpoznání rostliny.", "Błąd sieci podczas rozpoznawania rośliny.")
     val plantHealthNetworkError get() = t("Plant disease network error.", "Síťová chyba při zjišťování choroby rostliny.", "Błąd sieci podczas sprawdzania choroby rośliny.")
+    val mushroomRecognitionNetworkError get() = t("Mushroom recognition network error.", "Síťová chyba při rozpoznání houby.", "Błąd sieci podczas rozpoznawania grzyba.")
     val plantTooManyPhotos get() = t("Use at most 5 photos.", "Použij maximálně 5 fotografií.", "Użyj maksymalnie 5 zdjęć.")
     val plantEmptyPhoto get() = t("One of the photos is empty.", "Jedna z fotografií je prázdná.", "Jedno ze zdjęć jest puste.")
     val skipPhoto get() = t("Skip", "Přeskočit", "Pomiń")
@@ -159,6 +183,15 @@ object Strings {
     val optionalPhoto get() = t("Optional", "Volitelné", "Opcjonalne")
     val requiredPhoto get() = t("Required", "Povinné", "Wymagane")
     val familyLabel get() = t("Family", "Čeleď", "Rodzina")
+    val edibilityLabel get() = t("Edibility", "Jedlost", "Jadalność")
+    val psychoactiveLabel get() = t("Psychoactivity", "Psychoaktivita", "Psychoaktywność")
+    val lookAlikesLabel get() = t("Similar mushrooms", "Podobné houby", "Podobne grzyby")
+    val characteristicsLabel get() = t("Visible features", "Viditelné znaky", "Widoczne cechy")
+    val mushroomSafetyNote get() = t(
+        "Never rely only on photo recognition before eating a wild mushroom.",
+        "Na jedlost volně rostoucí houby se nikdy nespoléhej jen podle fotky.",
+        "Nigdy nie opieraj decyzji o zjedzeniu dzikiego grzyba wyłącznie na rozpoznaniu ze zdjęcia."
+    )
 
     // === ACTIONS ===
     val save get() = t("Save", "Uložit", "Zapisz")
@@ -873,7 +906,25 @@ object Strings {
         "flower" -> t("Flower", "Květ", "Kwiat")
         "fruit" -> t("Fruit", "Plod", "Owoc")
         "bark" -> t("Bark", "Kůra", "Kora")
+        "cap" -> t("Cap", "Klobouk", "Kapelusz")
+        "underside" -> t("Underside", "Spodní strana", "Spód")
+        "stem" -> t("Stem or base", "Třeň nebo báze", "Trzon lub podstawa")
+        "habitat" -> t("Habitat", "Stanoviště", "Siedlisko")
         else -> organ
+    }
+    fun localizeMushroomEdibility(edibility: String?): String = when ((edibility ?: "").lowercase()) {
+        "choice" -> t("Choice edible", "Vysoce ceněná jedlá houba", "Grzyb wysoko ceniony kulinarnie")
+        "edible" -> t("Edible", "Jedlá", "Jadalny")
+        "edible when cooked" -> t("Edible when cooked", "Jedlá po tepelné úpravě", "Jadalny po ugotowaniu")
+        "caution" -> t("Use caution", "S opatrností", "Z ostrożnością")
+        "poisonous" -> t("Poisonous", "Jedovatá", "Trujący")
+        "not edible" -> t("Not edible", "Nejedlá", "Niejadalny")
+        else -> edibility ?: ""
+    }
+    fun localizeMushroomPsychoactive(value: Boolean?): String = when (value) {
+        true -> t("Potentially psychoactive", "Potenciálně psychoaktivní", "Potencjalnie psychoaktywny")
+        false -> t("No psychoactive signal", "Bez známky psychoaktivity", "Brak sygnału psychoaktywności")
+        null -> ""
     }
     fun localizePermission(code: String, fallback: String = code): String = when (code.lowercase()) {
         "crm_read" -> t("View CRM", "Čtení CRM", "Podgląd CRM")
@@ -967,6 +1018,26 @@ object Strings {
             "jak leczyć tę roślinę",
             "jak uratowac te rosline",
             "jak uratować tę roślinę"
+        )
+        return phrases.any { normalized.contains(it) }
+    }
+    fun matchesMushroomRecognitionCommand(text: String): Boolean {
+        val normalized = text.lowercase().trim()
+        val phrases = listOf(
+            "co je to za houbu",
+            "co je to za houba",
+            "rozpoznej houbu",
+            "identifikuj houbu",
+            "urci houbu",
+            "urči houbu",
+            "what mushroom is this",
+            "identify this mushroom",
+            "identify mushroom",
+            "what fungus is this",
+            "jaki to grzyb",
+            "rozpoznaj grzyba",
+            "rozpoznaj grzyb",
+            "zidentyfikuj grzyba"
         )
         return phrases.any { normalized.contains(it) }
     }

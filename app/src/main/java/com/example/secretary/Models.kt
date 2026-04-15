@@ -210,6 +210,39 @@ data class PlantDiseaseResponse(
     val suggestions: List<PlantDiseaseSuggestion> = emptyList()
 )
 
+data class MushroomRecognitionSuggestion(
+    val name: String = "",
+    val common_names: List<String> = emptyList(),
+    val probability: Double = 0.0,
+    val description: String? = null,
+    val url: String? = null,
+    val edibility: String? = null,
+    val psychoactive: Boolean? = null,
+    val family: String? = null,
+    val genus: String? = null,
+    val look_alikes: List<String> = emptyList(),
+    val characteristics: List<String> = emptyList()
+)
+
+data class MushroomRecognitionResponse(
+    val database: String = "mushroom.id",
+    val display_name: String = "",
+    val scientific_name: String = "",
+    val common_names: List<String> = emptyList(),
+    val probability: Double = 0.0,
+    val description: String? = null,
+    val url: String? = null,
+    val edibility: String? = null,
+    val psychoactive: Boolean? = null,
+    val family: String? = null,
+    val genus: String? = null,
+    val look_alikes: List<String> = emptyList(),
+    val characteristics: List<String> = emptyList(),
+    val guidance: String? = null,
+    val spoken_summary: String? = null,
+    val suggestions: List<MushroomRecognitionSuggestion> = emptyList()
+)
+
 data class ImportableSharedContact(
     val contact_key: String = "",
     val name: String = "",

@@ -33,6 +33,13 @@ interface SecretaryApi {
         @Part("language") language: RequestBody
     ): Response<PlantDiseaseResponse>
 
+    @Multipart
+    @POST("mushrooms/identify")
+    suspend fun identifyMushroom(
+        @Part images: List<MultipartBody.Part>,
+        @Part("language") language: RequestBody
+    ): Response<MushroomRecognitionResponse>
+
     // === CLIENTS ===
     @GET("crm/clients")
     suspend fun getClients(): Response<List<Client>>
