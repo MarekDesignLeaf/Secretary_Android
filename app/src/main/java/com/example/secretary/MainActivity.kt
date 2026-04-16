@@ -136,7 +136,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 val navController = rememberNavController()
                 
                 LaunchedEffect(Unit) {
-                    vm.setManagers(null, calendarManager, contactManager, mailManager, settingsManager)
+                    vm.setManagers(null, calendarManager, contactManager, mailManager, settingsManager, applicationContext)
                     vm.setOnShutdown {
                         if (serviceBound) { unbindService(serviceConnection); serviceBound = false }
                         val intent = Intent(this@MainActivity, VoiceService::class.java)
@@ -210,7 +210,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             onStatusChange = { status -> viewModel.setStatus(status) }
         )
         service.voiceManager?.let { vm ->
-            viewModel.setManagers(vm, calendarManager, contactManager, mailManager, settingsManager)
+            viewModel.setManagers(vm, calendarManager, contactManager, mailManager, settingsManager, applicationContext)
         }
     }
 
@@ -2381,8 +2381,10 @@ class SecretaryViewModel : ViewModel() {
         )
     }
 
-    fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager) {
-        voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
+    private var appContext: android.content.Context? = null
+
+    fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager, ctx: android.content.Context? = null) {
+        appContext = ctx; voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
@@ -3498,6 +3500,18 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun loadCalendarFeed(days: Int = 30) {
+        // A16: guard against missing READ_CALENDAR permission
+        val ctx = appContext
+        if (ctx != null) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                ctx, android.Manifest.permission.READ_CALENDAR
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                android.util.Log.w("Secretary", "READ_CALENDAR permission not granted, skipping calendar feed")
+                _uiState.value = _uiState.value.copy(calendarFeed = emptyList())
+                return
+            }
+        }
         viewModelScope.launch {
             loadCalendarFeedFromServer(days)
         }
