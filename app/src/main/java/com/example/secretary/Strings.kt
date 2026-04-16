@@ -730,6 +730,7 @@ object Strings {
     }
 
     fun biometricError(err: String): String = t("Biometric error: $err", "Chyba biometrie: $err", "Błąd biometrii: $err")
+    val biometricLockedOut get() = t("Too many failed attempts. Please use password.", "Příliš mnoho neúspěšných pokusů. Použijte heslo.", "Zbyt wiele nieudanych prób. Użyj hasła.") // A14
     fun connectionProblem(message: String): String = t(
         "Connection error: $message",
         "Chyba připojení: $message",

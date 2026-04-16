@@ -453,14 +453,22 @@ private fun tryBiometricLogin(
         }
 
         override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-            if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
-                errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON
-            ) {
-                onError(Strings.biometricError(errString.toString()))
+            Log.w("LoginScreen", "Biometric error $errorCode: $errString") // A14
+            when (errorCode) {
+                BiometricPrompt.ERROR_USER_CANCELED,
+                BiometricPrompt.ERROR_NEGATIVE_BUTTON -> { /* user dismissed */ }
+                BiometricPrompt.ERROR_LOCKOUT,
+                BiometricPrompt.ERROR_LOCKOUT_PERMANENT -> {
+                    // A14: biometric locked out – fall back to password automatically
+                    onError(Strings.biometricLockedOut)
+                }
+                else -> onError(Strings.biometricError(errString.toString()))
             }
         }
 
-        override fun onAuthenticationFailed() {}
+        override fun onAuthenticationFailed() {
+            Log.d("LoginScreen", "Biometric attempt failed (wrong finger/face)") // A14
+        }
     })
 
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
