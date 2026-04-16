@@ -10,15 +10,34 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import java.util.*
 
-class CalendarManager(context: Context) {
+class CalendarManager(
+    context: Context,
+    // FIX A3: inject SettingsManager to resolve current user's email dynamically
+    private val settingsManager: SettingsManager? = null
+) {
     private val TAG = "CalendarManager"
     private val appContext = context.applicationContext
     private val planningMarkerPrefix = "SECRETARY_KEY:"
 
-    private val MY_EMAILS = listOf("hutrat05@gmail.com", "marek@designleaf.co.uk", "hutrat@seznam.cz")
+    // FIX A3: removed hardcoded MY_EMAILS list - use dynamic lookup instead
+    // Previously: private val MY_EMAILS = listOf("hutrat05@gmail.com", "marek@designleaf.co.uk", "hutrat@seznam.cz")
 
     private fun hasReadPermission() = ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
     private fun hasWritePermission() = ContextCompat.checkSelfPermission(appContext, Manifest.permission.WRITE_CALENDAR) == PackageManager.PERMISSION_GRANTED
+
+    // FIX A3: dynamically resolve the logged-in user's calendar email
+    private fun getUserCalendarEmail(): String? {
+        // Prefer explicitly stored login email, fall back to last biometric profile email
+        val loginEmail = settingsManager?.loginEmail?.takeIf { it.isNotBlank() }
+        if (loginEmail != null) return loginEmail
+        return settingsManager?.getLastBiometricEmail()?.takeIf { it.isNotBlank() }
+    }
+
+    // FIX A3: check if a calendar owner matches the current user
+    private fun isUserCalendar(ownerOrAccount: String): Boolean {
+        val userEmail = getUserCalendarEmail() ?: return false
+        return ownerOrAccount.equals(userEmail, ignoreCase = true)
+    }
 
     fun addEvent(summary: String, startTimeMillis: Long, endTimeMillis: Long, description: String? = null): Boolean {
         if (!hasWritePermission()) {
@@ -89,7 +108,7 @@ class CalendarManager(context: Context) {
             start?.let { values.put(CalendarContract.Events.DTSTART, it) }
             end?.let { values.put(CalendarContract.Events.DTEND, it) }
             description?.let { values.put(CalendarContract.Events.DESCRIPTION, it) }
-            
+
             val updateUri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId)
             val rows = appContext.contentResolver.update(updateUri, values, null, null)
             rows > 0
@@ -99,9 +118,12 @@ class CalendarManager(context: Context) {
         }
     }
 
+    // FIX A13: track per-entry sync errors instead of silently ignoring them
     fun syncPlanningEntries(entries: List<CalendarFeedEntry>): Boolean {
         if (!hasReadPermission() || !hasWritePermission()) return false
         val calendarId = getDefaultCalendarId() ?: return false
+        val syncErrors = mutableListOf<String>()
+        var syncedCount = 0
         return try {
             val activeKeys = entries
                 .filter { it.calendar_sync_enabled && !it.planned_start_at.isNullOrBlank() }
@@ -133,42 +155,73 @@ class CalendarManager(context: Context) {
                 .forEach { deleteEvent(it) }
 
             entries.forEach { entry ->
-                val start = parseCalendarDateTime(entry.planned_start_at, entry.planned_date) ?: return@forEach
-                val end = parseCalendarDateTime(entry.planned_end_at, null) ?: (start + 60 * 60 * 1000L)
-                val title = buildPlanningTitle(entry)
-                val description = buildPlanningDescription(entry)
-                val existingId = existing[entry.entry_key]
-                if (existingId != null) {
-                    updateEvent(existingId, title, start, end, description)
-                } else {
-                    addEvent(title, start, end, description)
+                try {
+                    val start = parseCalendarDateTime(entry.planned_start_at, entry.planned_date)
+                    if (start == null) {
+                        syncErrors.add("${entry.entry_key}: invalid date '${entry.planned_start_at}'")
+                        return@forEach
+                    }
+                    val end = parseCalendarDateTime(entry.planned_end_at, null) ?: (start + 60 * 60 * 1000L)
+                    val title = buildPlanningTitle(entry)
+                    val description = buildPlanningDescription(entry)
+                    val existingId = existing[entry.entry_key]
+                    val ok = if (existingId != null) {
+                        updateEvent(existingId, title, start, end, description)
+                    } else {
+                        addEvent(title, start, end, description)
+                    }
+                    if (ok) syncedCount++ else syncErrors.add("${entry.entry_key}: write failed")
+                } catch (e: Exception) {
+                    syncErrors.add("${entry.entry_key}: ${e.message}")
                 }
             }
-            true
+
+            if (syncErrors.isNotEmpty()) {
+                Log.w(TAG, "Planning sync completed with ${syncErrors.size} error(s): $syncErrors")
+            } else {
+                Log.d(TAG, "Planning sync OK: $syncedCount entries synced")
+            }
+            // Return true if at least partial sync succeeded; false only if nothing could be done
+            syncErrors.size < entries.size || syncedCount > 0
         } catch (e: Exception) {
             Log.e(TAG, "ERR: Planning sync failed", e)
             false
         }
     }
 
+    // FIX A17: use java.time (thread-safe, API 26+) instead of SimpleDateFormat
     private fun parseCalendarDateTime(dateTime: String?, fallbackDate: String?): Long? {
         val candidates = listOfNotNull(dateTime, fallbackDate)
         for (candidate in candidates) {
             val trimmed = candidate.trim()
-            val patterns = listOf(
-                "yyyy-MM-dd'T'HH:mm:ss",
-                "yyyy-MM-dd HH:mm:ss",
-                "yyyy-MM-dd HH:mm",
-                "yyyy-MM-dd"
-            )
-            for (pattern in patterns) {
-                try {
-                    val sdf = java.text.SimpleDateFormat(pattern, Locale.getDefault())
-                    val parsed = sdf.parse(trimmed) ?: continue
-                    return if (pattern == "yyyy-MM-dd") parsed.time + 9 * 3600000L else parsed.time
-                } catch (_: Exception) {
+            // Try ISO datetime formats first, then date-only
+            val parsedMillis = tryParseIso(trimmed)
+            if (parsedMillis != null) return parsedMillis
+        }
+        return null
+    }
+
+    private fun tryParseIso(value: String): Long? {
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "yyyy-MM-dd"
+        )
+        for (pattern in patterns) {
+            try {
+                val formatter = java.time.format.DateTimeFormatter.ofPattern(pattern)
+                return if (pattern == "yyyy-MM-dd") {
+                    val date = java.time.LocalDate.parse(value, formatter)
+                    date.atTime(9, 0)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .toInstant().toEpochMilli()
+                } else {
+                    val dt = java.time.LocalDateTime.parse(value, formatter)
+                    dt.atZone(java.time.ZoneId.systemDefault())
+                        .toInstant().toEpochMilli()
                 }
-            }
+            } catch (_: Exception) { }
         }
         return null
     }
@@ -201,7 +254,7 @@ class CalendarManager(context: Context) {
             val now = Calendar.getInstance()
             val beginTime = now.timeInMillis
             val endTime = beginTime + (days * 24 * 60 * 60 * 1000L)
-            
+
             val builder = CalendarContract.Instances.CONTENT_URI.buildUpon()
             ContentUris.appendId(builder, beginTime)
             ContentUris.appendId(builder, endTime)
@@ -212,18 +265,25 @@ class CalendarManager(context: Context) {
                 null, null,
                 CalendarContract.Instances.BEGIN + " ASC"
             )?.use { cursor ->
+                // FIX A17: use thread-safe DateTimeFormatter instead of SimpleDateFormat
+                val formatter = java.time.format.DateTimeFormatter.ofPattern(
+                    "dd.MM. HH:mm",
+                    java.util.Locale("cs", "CZ")
+                )
                 while (cursor.moveToNext()) {
                     val calId = cursor.getLong(3)
                     if (calId in excludedCalendars) continue
                     val title = cursor.getString(1) ?: "Bez názvu"
                     val start = cursor.getLong(2)
-                    val date = java.text.SimpleDateFormat("dd.MM. HH:mm", Locale("cs", "CZ")).format(Date(start))
+                    val date = java.time.Instant.ofEpochMilli(start)
+                        .atZone(java.time.ZoneId.systemDefault())
+                        .format(formatter)
                     events.add("$title ($date)")
                 }
             }
-        } catch (e: Exception) { 
+        } catch (e: Exception) {
             Log.e(TAG, "ERR: Čtení selhalo: ${e.message}")
-            return "CHYBA: ${e.message}" 
+            return "CHYBA: ${e.message}"
         }
 
         return if (events.isEmpty()) "Kalendář je prázdný na příštích $days dní."
@@ -254,7 +314,7 @@ class CalendarManager(context: Context) {
 
     private fun getDefaultCalendarId(): Long? {
         if (!hasReadPermission()) return null
-        
+
         val projection = arrayOf(
             CalendarContract.Calendars._ID,
             CalendarContract.Calendars.ACCOUNT_NAME,
@@ -282,28 +342,31 @@ class CalendarManager(context: Context) {
 
                     Log.d(TAG, "KALENDÁŘ: ID=$id, Účet=$acc, Majitel=$owner, Primární=$isPrimary, Jméno=$disp")
 
-                    // Kontrola shody - vlastnik musi byt nas email (ne holiday kalendare)
-                    val isHoliday = owner.contains("holiday", ignoreCase = true) || owner.contains("birthday", ignoreCase = true) || disp.contains("svátek", ignoreCase = true) || disp.contains("holiday", ignoreCase = true)
-                    if (!isHoliday && MY_EMAILS.any { it.equals(owner, ignoreCase = true) }) {
+                    val isHoliday = owner.contains("holiday", ignoreCase = true) ||
+                        owner.contains("birthday", ignoreCase = true) ||
+                        disp.contains("svátek", ignoreCase = true) ||
+                        disp.contains("holiday", ignoreCase = true)
+
+                    // FIX A3: use dynamic user email instead of hardcoded MY_EMAILS list
+                    if (!isHoliday && isUserCalendar(owner)) {
                         Log.d(TAG, ">>> VYBRÁN OSOBNÍ KALENDÁŘ: $owner (ID=$id)")
                         return id
                     }
-                    // Kontrola uctu (account_name) - jen pokud neni holiday
-                    if (!isHoliday && MY_EMAILS.any { it.equals(acc, ignoreCase = true) }) {
+                    if (!isHoliday && isUserCalendar(acc)) {
                         Log.d(TAG, ">>> VYBRÁN ÚČET: $acc (ID=$id)")
                         return id
                     }
                     if (isPrimary) primaryId = id
                     allCalendars.add(id)
                 }
-                
-                // Pokud nenašel e-mail, vezmi primární nebo první dostupný
+
+                // If no email match, fall back to primary or first available calendar
                 val finalId = primaryId ?: allCalendars.firstOrNull()
-                Log.d(TAG, ">>> FALLBACK: Vybráno ID=$finalId")
+                Log.d(TAG, ">>> FALLBACK: Vybráno ID=$finalId (uživatelský email: ${getUserCalendarEmail() ?: "neznámý"})")
                 return finalId
             }
-        } catch (e: Exception) { 
-            Log.e(TAG, "ERR: Detekce selhala", e) 
+        } catch (e: Exception) {
+            Log.e(TAG, "ERR: Detekce selhala", e)
         }
         return null
     }
