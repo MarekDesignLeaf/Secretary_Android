@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import android.Manifest
 import android.content.ComponentName
@@ -58,6 +58,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.secretary.ui.theme.SecretaryTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -106,10 +107,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        calendarManager = CalendarManager(this)
+        settingsManager = SettingsManager(this)
+        calendarManager = CalendarManager(this, settingsManager)
         contactManager = ContactManager(this)
         mailManager = MailManager(this)
-        settingsManager = SettingsManager(this)
         Strings.setLanguage(settingsManager.getCurrentAppLanguage())
         viewModel = androidx.lifecycle.ViewModelProvider(this)[SecretaryViewModel::class.java]
 
@@ -2275,14 +2276,24 @@ class SecretaryViewModel : ViewModel() {
     private var mailManager: MailManager? = null
     private var settingsManager: SettingsManager? = null
     
+    // Bug A1 – Token refresh: extracted as named property so interceptor can reference it
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
-            val original = chain.request()
-            val token = settingsManager?.accessToken
-            val request = if (token != null) {
-                original.newBuilder().header("Authorization", "Bearer $token").build()
-            } else original
-            chain.proceed(request)
+            val request = chain.request().newBuilder()
+                .header("Authorization", "Bearer ${settingsManager?.accessToken ?: ""}")
+                .build()
+            var response = chain.proceed(request)
+            if (response.code == 401) {
+                response.close()
+                val refreshed = runBlocking { tryRefreshToken() }
+                if (refreshed) {
+                    val newRequest = chain.request().newBuilder()
+                        .header("Authorization", "Bearer ${settingsManager?.accessToken ?: ""}")
+                        .build()
+                    response = chain.proceed(newRequest)
+                }
+            }
+            response
         }
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -2290,14 +2301,25 @@ class SecretaryViewModel : ViewModel() {
         .retryOnConnectionFailure(true)
         .build()
 
-    internal val api by lazy {
-        val url = settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
-        Retrofit.Builder()
-        .baseUrl(url)
-        .client(okHttpClient)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-        .create(SecretaryApi::class.java) }
+    // Bug A11 – Retrofit URL not reloadable: replaced `by lazy` with invalidatable computed property
+    private var _apiInstance: SecretaryApi? = null
+    private var _lastApiUrl: String? = null
+
+    internal val api: SecretaryApi
+        get() {
+            val currentUrl = settingsManager?.apiUrl?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.BASE_URL
+            if (_apiInstance == null || _lastApiUrl != currentUrl) {
+                _lastApiUrl = currentUrl
+                _apiInstance = Retrofit.Builder()
+                    .baseUrl(currentUrl)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .client(okHttpClient)
+                    .build()
+                    .create(SecretaryApi::class.java)
+            }
+            return _apiInstance!!
+        }
 
     private fun extractPermissionMap(raw: Any?): Map<String, Boolean> {
         val map = raw as? Map<*, *> ?: return emptyMap()
@@ -2336,7 +2358,7 @@ class SecretaryViewModel : ViewModel() {
             is String -> value.equals("true", ignoreCase = true) || value == "1"
             else -> false
         }
-        settingsManager?.setCurrentBackendUser(userId, role)
+        settingsManager?.setCurrentBackendUser(userId, role, displayName, email)
         val preferredLang = source["preferred_language_code"]?.toString()?.takeIf { it.isNotBlank() }
         val resolvedLang = settingsManager?.getAppLanguageForUser(userId, preferredLang ?: settingsManager?.appLanguage ?: "cs")
             ?: preferredLang
@@ -3045,7 +3067,7 @@ class SecretaryViewModel : ViewModel() {
         val newTask = Task(
             id = taskId, title = title, taskType = taskType, priority = priority,
             status = "novy", createdAt = now, deadline = deadline,
-            clientId = clientId, clientName = clientName, createdBy = "Marek"
+            clientId = clientId, clientName = clientName, createdBy = (_uiState.value.currentUserDisplayName ?: settingsManager?.getCurrentUserEmail() ?: "Unknown")
         )
         _uiState.value = _uiState.value.copy(tasks = _uiState.value.tasks + newTask)
         viewModelScope.launch {
@@ -3054,7 +3076,7 @@ class SecretaryViewModel : ViewModel() {
                     "id" to taskId, "title" to title, "task_type" to taskType,
                     "priority" to priority, "deadline" to deadline,
                     "client_id" to clientId, "client_name" to clientName,
-                    "created_by" to "Marek", "source" to "manualne"
+                    "created_by" to (_uiState.value.currentUserDisplayName ?: settingsManager?.getCurrentUserEmail() ?: "Unknown"), "source" to "manualne"
                 ))
             } catch (e: Exception) { Log.e("Task", "Create sync error", e) }
         }
@@ -3072,7 +3094,6 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf(
-                    "job_id" to jobId.toString(),
                     "action_type" to actionType,
                     "description" to description
                 )
@@ -4192,6 +4213,11 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun onVoiceInput(text: String) {
+        // Bug A8 – Race condition: ignore voice input when not logged in
+        if (_uiState.value.loggedIn != true) {
+            Log.w("Secretary", "Voice input received while not logged in - ignoring")
+            return
+        }
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
         if (Strings.matchesLogoutCommand(lower)) {
@@ -4373,7 +4399,7 @@ class SecretaryViewModel : ViewModel() {
                     planningNote = data["planning_note"]?.toString(),
                     clientName = data["client_name"]?.toString(),
                     clientId = (data["client_id"] as? Number)?.toLong(),
-                    createdBy = data["created_by"]?.toString() ?: "Marek",
+                    createdBy = data["created_by"]?.toString() ?: (_uiState.value.currentUserDisplayName ?: settingsManager?.getCurrentUserEmail() ?: "Unknown"),
                     calendarSyncEnabled = data["calendar_sync_enabled"] as? Boolean ?: true
                 )
                 _uiState.value = _uiState.value.copy(tasks = _uiState.value.tasks + newTask)
