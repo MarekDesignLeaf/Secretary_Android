@@ -263,8 +263,9 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                             selected = currentRoute == screen.route,
                             onClick = {
                                 navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.startDestinationId)
+                                    popUpTo(navController.graph.startDestinationId) { saveState = true } // A10
                                     launchSingleTop = true
+                                    restoreState = true // A10
                                 }
                             }
                         )
@@ -676,12 +677,14 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
         )
     }
     if (showEditLead != null) {
-        EditLeadDialog(lead = showEditLead!!, onDismiss = { showEditLead = null },
-            onSave = { data -> viewModel.updateLead(showEditLead!!.id, data); showEditLead = null })
+        val lead = showEditLead!! // A6: capture before lambda
+        EditLeadDialog(lead = lead, onDismiss = { showEditLead = null },
+            onSave = { data -> viewModel.updateLead(lead.id, data); showEditLead = null })
     }
     if (showInvoiceStatus != null) {
-        InvoiceStatusDialog(currentStatus = showInvoiceStatus!!.status, onDismiss = { showInvoiceStatus = null },
-            onSelect = { status -> viewModel.updateInvoiceStatus(showInvoiceStatus!!.id, status); showInvoiceStatus = null })
+        val inv = showInvoiceStatus!! // A6: capture before lambda
+        InvoiceStatusDialog(currentStatus = inv.status, onDismiss = { showInvoiceStatus = null },
+            onSelect = { status -> viewModel.updateInvoiceStatus(inv.id, status); showInvoiceStatus = null })
     }
 }
 
@@ -840,8 +843,9 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
 fun JobsListTab(jobs: List<Job>, navController: NavHostController, viewModel: SecretaryViewModel) {
     var editJob by remember { mutableStateOf<Job?>(null) }
     if (editJob != null) {
-        JobEditDialog(job = editJob!!, onDismiss = { editJob = null },
-            onSave = { data -> viewModel.updateJob(editJob!!.id, data); editJob = null })
+        val job = editJob!! // A6: capture before lambda
+        JobEditDialog(job = job, onDismiss = { editJob = null },
+            onSave = { data -> viewModel.updateJob(job.id, data); editJob = null })
     }
     if (jobs.isEmpty()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noJobs, color = Color.Gray) }
@@ -1326,7 +1330,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                     ) { Icon(imageVector = Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.call, fontSize = 12.sp) }
                     Button(onClick = {
-                        val phone = c.phone_primary!!.replace("+","").replace(" ","").replace("-","")
+                        val phone = (c.phone_primary ?: return@Button).replace("+","").replace(" ","").replace("-","") // A6: null safe
                         val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$phone"))
                         ctx.startActivity(waIntent)
                     }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
@@ -2201,8 +2205,9 @@ fun TasksTab(state: UiState, viewModel: SecretaryViewModel) {
         else { LazyColumn { items(filtered) { t -> TaskRow(t, viewModel, onEdit = { editTask = it }); HorizontalDivider() } } }
     }
     if (editTask != null) {
-        TaskEditDialog(task = editTask!!, onDismiss = { editTask = null }, onSave = { data ->
-            viewModel.updateTask(editTask!!.id, data); editTask = null
+        val task = editTask!! // A6: capture before lambda
+        TaskEditDialog(task = task, onDismiss = { editTask = null }, onSave = { data ->
+            viewModel.updateTask(task.id, data); editTask = null
         })
     }
 }
@@ -2261,7 +2266,7 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
             viewModel.logCommunication(null, null, type, subject, msg, dir)
             showAddDialog = false
             scope.launch {
-                try { comms.value = viewModel.loadAllCommunications() } catch (_: Exception) {}
+                try { comms.value = viewModel.loadAllCommunications() } catch (e: Exception) { Log.w("Secretary", "loadCommunications failed", e) } // A12
             }
         })
     }
@@ -2419,7 +2424,7 @@ class SecretaryViewModel : ViewModel() {
                         checkOnboardingStatus()
                         return@launch
                     }
-                } catch (_: Exception) {}
+                } catch (e: Exception) { Log.e("Secretary", "Onboarding/token check failed", e) } // A12
                 // Token invalid — try refresh
                 if (tryRefreshToken()) {
                     try {
@@ -3013,6 +3018,7 @@ class SecretaryViewModel : ViewModel() {
             setStatus(Strings.noCalendarEntries)
             return
         }
+        // A16: guard – calendarManager returns false if permission not granted
         val synced = calendarManager?.syncPlanningEntries(entries) == true
         setStatus(if (synced) Strings.planningCalendarSynced(entries.size) else Strings.planningCalendarSyncFailed)
     }
@@ -3144,7 +3150,7 @@ class SecretaryViewModel : ViewModel() {
                         try {
                             val me = api.authMe("Bearer $token")
                             if (me.isSuccessful) applyCurrentUserData(me.body())
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) { Log.w("Secretary", "Post-login /me failed", e) } // A12
                     }
                     _uiState.value = _uiState.value.copy(
                         mustChangePassword = false,
@@ -3631,7 +3637,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf("name" to name, "email" to email, "phone" to phone)
                 val res = api.createClient(data)
                 if (res.isSuccessful) refreshCrmData()
-            } catch (e: Exception) { }
+            } catch (e: Exception) { Log.e("Secretary", "createClientManual failed", e) } // A12
         }
     }
 
@@ -4349,7 +4355,7 @@ class SecretaryViewModel : ViewModel() {
                         start = date?.time
                         val duration = (data["duration"] as? Double)?.toLong() ?: 60L
                         if (start != null) end = start + (duration * 60000)
-                    } catch (e: Exception) { }
+                    } catch (e: Exception) { Log.w("Secretary", "Calendar date parse failed", e) } // A12
                 }
                 calendarManager?.updateEvent(eventId, title, start, end)
             }
@@ -4426,7 +4432,7 @@ class SecretaryViewModel : ViewModel() {
 
     fun updateDefaultRates(rates: Map<String, Any?>) {
         viewModelScope.launch {
-            try { api.updateDefaultRates(rates) } catch (_: Exception) {}
+            try { api.updateDefaultRates(rates) } catch (e: Exception) { Log.e("Secretary", "updateDefaultRates failed", e) } // A12
         }
     }
 
