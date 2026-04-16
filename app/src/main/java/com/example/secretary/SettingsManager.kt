@@ -140,6 +140,11 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("jwt_refresh_token", null)
         set(v) = prefs.edit { if (v == null) remove("jwt_refresh_token") else putString("jwt_refresh_token", v) }
 
+    // FIX A9/A3: store the email used at login so CalendarManager and task creation can use it
+    var loginEmail: String
+        get() = prefs.getString("login_email", "") ?: ""
+        set(v) = prefs.edit { if (v.isBlank()) remove("login_email") else putString("login_email", v) }
+
     // 2. Server
     var apiUrl: String
         get() {
@@ -183,18 +188,22 @@ class SettingsManager(context: Context) {
     var workHoursEnd: String
         get() = getScopedString("work_end", "19:00")
         set(v) = setScopedString("work_end", v)
+    // FIX A4: store timezone for work hours so check is correct when user travels
+    var workHoursTimezone: String
+        get() = getScopedString("work_hours_timezone", java.util.TimeZone.getDefault().id)
+        set(v) = setScopedString("work_hours_timezone", v)
     var defaultTaskPriority: String
         get() = prefs.getString("default_priority", "normal") ?: "normal"
         set(v) = prefs.edit { putString("default_priority", v) }
     var emailSignature: String
-        get() = prefs.getString("email_signature", "Marek\nDesignLeaf\n07395 813008\nmarek@designleaf.co.uk\nwww.designleaf.co.uk") ?: ""
+        get() = prefs.getString("email_signature", "") ?: ""
         set(v) = prefs.edit { putString("email_signature", v) }
     var activeSignatureId: String
         get() = prefs.getString("active_signature_id", "") ?: ""
         set(v) = prefs.edit { putString("active_signature_id", v) }
 
     fun getSavedSignatures(): List<SavedSignature> {
-        val json = prefs.getString("saved_signatures", null) ?: return listOf(SavedSignature(id = "default", name = "DesignLeaf", content = emailSignature))
+        val json = prefs.getString("saved_signatures", null) ?: return emptyList()
         return try { gson.fromJson(json, object : TypeToken<List<SavedSignature>>() {}.type) } catch (e: Exception) { emptyList() }
     }
     fun saveSignatures(s: List<SavedSignature>) = prefs.edit { putString("saved_signatures", gson.toJson(s)) }
@@ -222,11 +231,11 @@ class SettingsManager(context: Context) {
         set(v) = prefs.edit { putString("active_user_id", v) }
 
     fun getUserProfiles(): List<UserProfile> {
-        val json = prefs.getString("user_profiles", null) ?: return listOf(UserProfile(id = "admin", name = "Marek Sima", role = "admin"))
-        return try { gson.fromJson(json, object : TypeToken<List<UserProfile>>() {}.type) } catch (e: Exception) { listOf(UserProfile(id = "admin", name = "Marek Sima", role = "admin")) }
+        val json = prefs.getString("user_profiles", null) ?: return listOf(UserProfile(id = "admin", name = "Admin", role = "admin"))
+        return try { gson.fromJson(json, object : TypeToken<List<UserProfile>>() {}.type) } catch (e: Exception) { listOf(UserProfile(id = "admin", name = "Admin", role = "admin")) }
     }
     fun saveUserProfiles(p: List<UserProfile>) = prefs.edit { putString("user_profiles", gson.toJson(p)) }
-    fun getActiveProfile(): UserProfile = getUserProfiles().find { it.id == activeUserId } ?: UserProfile(id = "admin", name = "Marek Sima", role = "admin")
+    fun getActiveProfile(): UserProfile = getUserProfiles().find { it.id == activeUserId } ?: UserProfile(id = "admin", name = "Admin", role = "admin")
     fun hasPermission(p: String): Boolean = getActiveProfile().permissions[p] ?: false
     fun verifyPassword(pwd: String): Boolean { val h = adminPasswordHash; return h.isBlank() || hashPassword(pwd) == h }
     fun setAdminPassword(pwd: String) { adminPasswordHash = if (pwd.isBlank()) "" else hashPassword(pwd) }
@@ -237,7 +246,7 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("theme_mode", "system") ?: "system"
         set(v) = prefs.edit { putString("theme_mode", v) }
 
-    // 9. Jazyk / Language
+    // 9. Jazyk / Language + Backend user
     var currentBackendUserId: Long
         get() = prefs.getLong("current_backend_user_id", -1L)
         set(v) = prefs.edit {
@@ -248,16 +257,24 @@ class SettingsManager(context: Context) {
         set(v) = prefs.edit {
             if (v.isBlank()) remove("current_backend_user_role") else putString("current_backend_user_role", v)
         }
+    var currentUserDisplayName: String
+        get() = prefs.getString("current_user_display_name", "") ?: ""
+        set(v) = prefs.edit { if (v.isBlank()) remove("current_user_display_name") else putString("current_user_display_name", v) }
     var appLanguage: String
         get() = prefs.getString("app_language", "cs") ?: "cs"
         set(v) = prefs.edit { putString("app_language", v) }
-    fun setCurrentBackendUser(userId: Long?, role: String?) {
+    fun setCurrentBackendUser(userId: Long?, role: String?, displayName: String? = null, email: String? = null) {
         currentBackendUserId = if ((userId ?: 0L) > 0L) userId!! else -1L
         currentBackendUserRole = role.orEmpty()
+        if (!displayName.isNullOrBlank()) currentUserDisplayName = displayName
+        // FIX A9/A3: persist login email for use in CalendarManager and task creation
+        if (!email.isNullOrBlank()) loginEmail = email
     }
     fun clearCurrentBackendUser() {
         currentBackendUserId = -1L
         currentBackendUserRole = ""
+        currentUserDisplayName = ""
+        // Do NOT clear loginEmail on logout so CalendarManager can still find the calendar
     }
     fun getCurrentAppLanguage(): String {
         val userId = currentBackendUserId
@@ -341,12 +358,18 @@ class SettingsManager(context: Context) {
 
     // Utility
     fun resetAll() = prefs.edit { clear() }
+
+    // FIX A4: use stored timezone so work hours check is correct when user travels
     fun isWithinWorkHours(): Boolean {
         if (!workHoursEnabled) return true
         return try {
-            val now = java.util.Calendar.getInstance(); val cur = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
-            val sp = workHoursStart.split(":"); val start = sp[0].toInt() * 60 + sp.getOrElse(1) { "0" }.toInt()
-            val ep = workHoursEnd.split(":"); val end = ep[0].toInt() * 60 + ep.getOrElse(1) { "0" }.toInt()
+            val tz = java.util.TimeZone.getTimeZone(workHoursTimezone)
+            val now = java.util.Calendar.getInstance(tz)
+            val cur = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+            val sp = workHoursStart.split(":")
+            val start = sp[0].toInt() * 60 + sp.getOrElse(1) { "0" }.toInt()
+            val ep = workHoursEnd.split(":")
+            val end = ep[0].toInt() * 60 + ep.getOrElse(1) { "0" }.toInt()
             cur in start..end
         } catch (e: Exception) { true }
     }
