@@ -35,6 +35,10 @@ object Strings {
     val newLeads get() = t("New leads", "Nové leady", "Nowe leady")
     val clientsInCrm get() = t("Clients in CRM", "Klienti v CRM", "Klienci w CRM")
     val noActiveTasks get() = t("No active tasks", "Žádné aktivní úkoly", "Brak aktywnych zadań")
+    val clientsWithoutNextAction get() = t("Clients without next action", "Klienti bez další akce", "Klienci bez kolejnej akcji")
+    val jobsWithoutNextAction get() = t("Jobs without next action", "Zakázky bez další akce", "Zlecenia bez kolejnej akcji")
+    val tasksWithoutAssignee get() = t("Tasks without assignee", "Úkoly bez řešitele", "Zadania bez wykonawcy")
+    val tasksWithoutSchedule get() = t("Tasks without schedule", "Úkoly bez termínu", "Zadania bez terminu")
 
     // === CRM TABS ===
     val today get() = t("Today", "Dnes", "Dziś")
@@ -241,6 +245,7 @@ object Strings {
 
     // === CLIENT ===
     val newClientTitle get() = t("New client", "Nový klient", "Nowy klient")
+    val newClientWizardTitle get() = t("New client workflow", "Nový klient a první krok", "Nowy klient i pierwszy krok")
     val editClient get() = t("Edit client", "Upravit klienta", "Edytuj klienta")
     val clientName get() = t("Name", "Jméno", "Imię")
     val email get() = t("Email", "Email", "Email")
@@ -256,6 +261,38 @@ object Strings {
     val no get() = t("No", "Ne", "Nie")
     val client get() = t("Client", "Klient", "Klient")
     val noClient get() = t("No client", "Bez klienta", "Bez klienta")
+    val clientOwner get() = t("Client owner", "Owner klienta", "Opiekun klienta")
+    val hierarchyStatus get() = t("Integrity", "Stav integrity", "Stan integralności")
+    val nextAction get() = t("Next action", "Další krok", "Kolejny krok")
+    val hierarchyValid get() = t("Valid", "V pořádku", "Poprawne")
+    val hierarchyNeedsAttention get() = t("Needs attention", "Vyžaduje kontrolu", "Wymaga kontroli")
+    val hierarchyIssues get() = t("Hierarchy issues", "Problémy hierarchie", "Problemy hierarchii")
+    val hierarchyStatusBlocked get() = t(
+        "Status change is blocked until owner and next action are valid.",
+        "Změna stavu je blokovaná, dokud není owner a další krok platný.",
+        "Zmiana statusu jest zablokowana, dopóki opiekun i kolejny krok nie są prawidłowe."
+    )
+    val hierarchyReportLoadFailed get() = t(
+        "Failed to load hierarchy report",
+        "Nepodařilo se načíst report hierarchie",
+        "Nie udało się wczytać raportu hierarchii"
+    )
+    val ownerRequired get() = t("Select an active owner.", "Vyber aktivního ownera.", "Wybierz aktywnego opiekuna.")
+    val firstActionRequired get() = t("Fill in the first follow-up action.", "Vyplň první navazující akci.", "Uzupełnij pierwszą kolejną akcję.")
+    val assigneeRequired get() = t("Select an active assignee.", "Vyber aktivního řešitele.", "Wybierz aktywnego wykonawcę.")
+    val planningRequired get() = t("Set planned start or deadline.", "Nastav plánovaný začátek nebo termín.", "Ustaw planowany start albo termin.")
+    val workflowBasicsStep get() = t("Basics", "Základ", "Podstawy")
+    val workflowOwnerStep get() = t("Owner", "Owner", "Opiekun")
+    val workflowActionStep get() = t("First action", "První akce", "Pierwsza akcja")
+    val workflowSummaryStep get() = t("Summary", "Souhrn", "Podsumowanie")
+    val selectedOwner get() = t("Selected owner", "Vybraný owner", "Wybrany opiekun")
+    val actionAssignee get() = t("Action assignee", "Řešitel akce", "Wykonawca akcji")
+    val actionTitle get() = t("Action title", "Název akce", "Tytuł akcji")
+    val openClientWizardHint get() = t(
+        "Client can be saved only with an active owner and the first planned next action.",
+        "Klienta lze uložit jen s aktivním ownerem a první naplánovanou další akcí.",
+        "Klienta można zapisać tylko z aktywnym opiekunem i pierwszą zaplanowaną kolejną akcją."
+    )
     val firstName get() = t("First name", "Jméno", "Imię")
     val lastName get() = t("Last name", "Příjmení", "Nazwisko")
     val titleField get() = t("Title", "Titul", "Tytuł")
@@ -276,6 +313,7 @@ object Strings {
 
     // === JOB ===
     val newJob get() = t("New job", "Nová zakázka", "Nowe zlecenie")
+    val newJobWizardTitle get() = t("New job workflow", "Nová zakázka a první krok", "Nowe zlecenie i pierwszy krok")
     val jobTitle get() = t("Job title", "Název zakázky", "Tytuł zlecenia")
     val noJobs get() = t("No jobs", "Žádné zakázky", "Brak zleceń")
     val jobNumber get() = t("Job number", "Číslo zakázky", "Numer zlecenia")
@@ -287,6 +325,12 @@ object Strings {
     val handoverNote get() = t("Handover note", "Poznámka k předání", "Notatka przekazania")
     val noTermin get() = t("no date", "bez termínu", "bez terminu")
     val changeStatus get() = t("Change status", "Změnit stav", "Zmień status")
+    val jobOwner get() = t("Job owner", "Owner zakázky", "Opiekun zlecenia")
+    val openJobWizardHint get() = t(
+        "Job can be saved only with an active owner and the first planned next action.",
+        "Zakázku lze uložit jen s aktivním ownerem a první naplánovanou další akcí.",
+        "Zlecenie można zapisać tylko z aktywnym opiekunem i pierwszą zaplanowaną kolejną akcją."
+    )
 
     // === TASK ===
     val newTask get() = t("New task", "Nový úkol", "Nowe zadanie")
@@ -315,6 +359,29 @@ object Strings {
     val createdBy get() = t("Created by", "Vytvořil", "Utworzył")
     val sourceLabel get() = t("Source", "Zdroj", "Źródło")
     val selectClient get() = t("Select client", "Vyberte klienta", "Wybierz klienta")
+    val setAsNextAction get() = t("Set as next action", "Nastavit jako další krok", "Ustaw jako kolejną akcję")
+    val taskPlanningHint get() = t(
+        "Every task needs an assignee and planned start or deadline.",
+        "Každý úkol potřebuje řešitele a plánovaný začátek nebo termín.",
+        "Każde zadanie potrzebuje wykonawcy oraz planowanego startu albo terminu."
+    )
+    val currentNextActionDialogTitle get() = t("Replace current next action", "Nahradit aktuální další krok", "Zastąp bieżącą kolejną akcję")
+    val currentNextActionDialogBody get() = t(
+        "This task is currently the next action. Select another open task or create a replacement before completion.",
+        "Tento úkol je aktuální další krok. Před dokončením vyber jiný otevřený úkol nebo vytvoř náhradu.",
+        "To zadanie jest bieżącą kolejną akcją. Przed zakończeniem wybierz inne otwarte zadanie albo utwórz zastępstwo."
+    )
+    val replacementExistingTask get() = t("Use existing task", "Použít existující úkol", "Użyj istniejącego zadania")
+    val replacementCreateTask get() = t("Create replacement task", "Vytvořit náhradní úkol", "Utwórz zadanie zastępcze")
+    val replacementTaskRequired get() = t(
+        "Choose an open task or fill in the replacement task.",
+        "Vyber otevřený úkol nebo vyplň náhradní úkol.",
+        "Wybierz otwarte zadanie albo uzupełnij zadanie zastępcze."
+    )
+    val noReplacementCandidates get() = t("No open planned replacement tasks", "Žádné otevřené plánované náhradní úkoly", "Brak otwartych zaplanowanych zadań zastępczych")
+    val completeWithReplacement get() = t("Complete with replacement", "Dokončit s náhradou", "Zakończ z zastępstwem")
+    val hierarchyActionFailed get() = t("Workflow action failed", "Workflow akce selhala", "Akcja workflow nie powiodła się")
+    val createReplacementTaskLabel get() = t("Replacement task", "Náhradní úkol", "Zadanie zastępcze")
 
     // === TASK TYPES (for AddTaskDialog) ===
     val call get() = t("Call", "Zavolat", "Zadzwonić")
@@ -1124,6 +1191,39 @@ object Strings {
             "zidentyfikuj grzyba"
         )
         return phrases.any { normalized.contains(it) }
+    }
+    fun localizeHierarchyIssue(raw: String): String = when (raw.lowercase()) {
+        "missing_owner", "owner_inactive", "missing_or_inactive_owner" -> t(
+            "Owner is missing or inactive",
+            "Owner chybí nebo není aktivní",
+            "Brakuje opiekuna albo jest nieaktywny"
+        )
+        "missing_next_action", "invalid_next_action", "missing_or_invalid_next_action" -> t(
+            "Next action is missing or invalid",
+            "Další krok chybí nebo je neplatný",
+            "Brakuje kolejnego kroku albo jest nieprawidłowy"
+        )
+        "next_action_wrong_client", "next_action_wrong_job" -> t(
+            "Next action belongs to another record",
+            "Další krok patří k jiné kartě",
+            "Kolejny krok należy do innego rekordu"
+        )
+        "next_action_not_open" -> t(
+            "Next action is already closed",
+            "Další krok je už uzavřený",
+            "Kolejny krok jest już zamknięty"
+        )
+        "next_action_missing_planning", "missing_planning" -> t(
+            "Next action is missing planned time or deadline",
+            "Dalšímu kroku chybí plánovaný čas nebo termín",
+            "Kolejnemu krokowi brakuje planowanego czasu albo terminu"
+        )
+        "next_action_missing_assignee", "missing_or_inactive_assignee" -> t(
+            "Next action is missing an active assignee",
+            "Dalšímu kroku chybí aktivní řešitel",
+            "Kolejnemu krokowi brakuje aktywnego wykonawcy"
+        )
+        else -> raw.replace('_', ' ')
     }
     fun loggingOutMessage(): String = t("Logging you out. Goodbye!", "Odhlašuji vás. Na shledanou!", "Wylogowuję Cię. Do widzenia!")
 

@@ -60,6 +60,49 @@ data class FirstLoginUser(
     val email: String = ""
 )
 
+data class WorkflowActionDraft(
+    val title: String = "",
+    val assignedUserId: Long? = null,
+    val assignedTo: String? = null,
+    val plannedStartAt: String? = null,
+    val deadline: String? = null,
+    val priority: String = "bezna",
+    val planningNote: String? = null
+)
+
+data class ClientCreationDraft(
+    val name: String = "",
+    val email: String = "",
+    val phone: String = "",
+    val ownerUserId: Long? = null,
+    val firstAction: WorkflowActionDraft = WorkflowActionDraft()
+)
+
+data class JobCreationDraft(
+    val title: String = "",
+    val clientId: Long? = null,
+    val clientName: String? = null,
+    val assignedUserId: Long? = null,
+    val assignedTo: String? = null,
+    val startDate: String? = null,
+    val firstAction: WorkflowActionDraft = WorkflowActionDraft()
+)
+
+data class TaskCreationDraft(
+    val title: String = "",
+    val taskType: String = "interni_poznamka",
+    val priority: String = "bezna",
+    val clientId: Long? = null,
+    val clientName: String? = null,
+    val jobId: Long? = null,
+    val assignedUserId: Long? = null,
+    val assignedTo: String? = null,
+    val plannedStartAt: String? = null,
+    val deadline: String? = null,
+    val planningNote: String? = null,
+    val setAsNextAction: Boolean = false
+)
+
 // === CLIENT — matches DB: clients table (schema.sql) ===
 data class Client(
     val id: Long = 0,
@@ -84,6 +127,9 @@ data class Client(
     val billing_country: String? = "GB",
     val status: String? = "active",
     val is_commercial: Boolean = false,
+    val owner_user_id: Long? = null,
+    val next_action_task_id: String? = null,
+    val hierarchy_status: String? = null,
     val created_at: String? = null,
     val updated_at: String? = null,
     val tenant_id: Int? = 1,
@@ -293,6 +339,57 @@ data class AdminActivityLogEntry(
     val details: Map<String, @JvmSuppressWildcards Any?> = emptyMap()
 )
 
+data class HierarchyIntegritySummary(
+    val orphan_clients: Int = 0,
+    val orphan_jobs: Int = 0,
+    val orphan_tasks: Int = 0,
+    val blocked_user_deactivations: Int = 0,
+    val next_action_mismatches: Int = 0
+)
+
+data class HierarchyEntityIssue(
+    val id: Long = 0,
+    val display_name: String? = null,
+    val job_title: String? = null,
+    val client_id: Long? = null,
+    val owner_user_id: Long? = null,
+    val assigned_user_id: Long? = null,
+    val next_action_task_id: String? = null,
+    val issues: List<String> = emptyList(),
+    val entity_type: String? = null
+)
+
+data class HierarchyTaskIssue(
+    val id: String = "",
+    val title: String = "",
+    val client_id: Long? = null,
+    val job_id: Long? = null,
+    val assigned_user_id: Long? = null,
+    val status: String? = null,
+    val issues: List<String> = emptyList()
+)
+
+data class BlockedUserDeactivation(
+    val id: Long = 0,
+    val display_name: String = "",
+    val email: String = "",
+    val owns_clients: Boolean = false,
+    val owns_jobs: Boolean = false,
+    val has_open_tasks: Boolean = false,
+    val is_client_next_action_assignee: Boolean = false,
+    val is_job_next_action_assignee: Boolean = false
+)
+
+data class HierarchyIntegrityReport(
+    val tenant_id: Int = 0,
+    val orphan_clients: List<HierarchyEntityIssue> = emptyList(),
+    val orphan_jobs: List<HierarchyEntityIssue> = emptyList(),
+    val orphan_tasks: List<HierarchyTaskIssue> = emptyList(),
+    val blocked_user_deactivations: List<BlockedUserDeactivation> = emptyList(),
+    val next_action_mismatches: List<HierarchyEntityIssue> = emptyList(),
+    val summary: HierarchyIntegritySummary = HierarchyIntegritySummary()
+)
+
 data class ImportableSharedContact(
     val contact_key: String = "",
     val name: String = "",
@@ -332,6 +429,8 @@ data class Job(
     val planned_end_at: String? = null,
     val assigned_user_id: Long? = null,
     val assigned_to: String? = null,
+    val next_action_task_id: String? = null,
+    val hierarchy_status: String? = null,
     val handover_note: String? = null,
     val handed_over_by: String? = null,
     val handed_over_at: String? = null,

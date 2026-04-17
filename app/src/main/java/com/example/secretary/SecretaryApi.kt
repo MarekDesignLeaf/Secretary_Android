@@ -68,6 +68,9 @@ interface SecretaryApi {
         @Query("actor_user_id") actorUserId: Long? = null,
     ): Response<List<AdminActivityLogEntry>>
 
+    @GET("admin/hierarchy-integrity")
+    suspend fun getHierarchyIntegrity(): Response<HierarchyIntegrityReport>
+
     // === CLIENTS ===
     @GET("crm/clients")
     suspend fun getClients(): Response<List<Client>>
@@ -79,7 +82,7 @@ interface SecretaryApi {
     suspend fun getClientDetail(@Path("id") id: Long): Response<ClientDetail>
 
     @POST("crm/clients")
-    suspend fun createClient(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun createClient(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @PUT("crm/clients/{id}")
     suspend fun updateClient(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
