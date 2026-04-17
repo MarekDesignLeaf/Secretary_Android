@@ -27,6 +27,10 @@ class VoiceManager(
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    // FIX A2: track permanent TTS init failure so speak() can skip audio but continue state machine
+    private var ttsFailedPermanently = false
+    // FIX A7: guard against zombie recognizer callbacks after destroy()
+    @Volatile private var isDestroyed = false
     private var isSpeaking = false
     private var expectReplyAfterSpeak = false
     private var stayIdleAfterSpeak = false
@@ -142,7 +146,8 @@ class VoiceManager(
     fun speak(text: String, expectReply: Boolean = false, stayIdle: Boolean = false) {
         expectReplyAfterSpeak = expectReply
         stayIdleAfterSpeak = stayIdle
-        if (!isTtsReady) {
+        // FIX A2: if TTS failed permanently or is not ready, skip audio and continue state machine
+        if (!isTtsReady || ttsFailedPermanently) {
             handler.post {
                 when {
                     stayIdleAfterSpeak -> stop()
@@ -171,6 +176,8 @@ class VoiceManager(
     }
 
     fun destroy() {
+        // FIX A7: set flag first so any pending handler posts abort immediately
+        isDestroyed = true
         stop()
         recognizer?.destroy()
         recognizer = null
@@ -180,6 +187,8 @@ class VoiceManager(
 
     private fun ensureRecognizerAndListen() {
         handler.post {
+            // FIX A7: abort if VoiceManager was destroyed between posting and executing
+            if (isDestroyed) return@post
             try {
                 Log.d(TAG, "ensureRecognizerAndListen: mode=$mode isSpeaking=$isSpeaking")
                 if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -214,7 +223,7 @@ class VoiceManager(
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, mode == ListenMode.HOTWORD)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             // Do NOT use EXTRA_PREFER_OFFLINE — breaks recognizer if no offline model
-            
+
             val silence = settings.silenceLength
             putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", silence)
             putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", silence + 1000L)
@@ -231,6 +240,8 @@ class VoiceManager(
 
     private fun scheduleRestart(delayMs: Long) {
         handler.postDelayed({
+            // FIX A7: abort if destroyed
+            if (isDestroyed) return@postDelayed
             if (mode != ListenMode.IDLE && !isSpeaking) ensureRecognizerAndListen()
         }, delayMs)
     }
@@ -331,8 +342,16 @@ class VoiceManager(
                 val result = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
                 Log.d(TAG, "TTS setLanguage($activeRecognitionLanguage) result=$result")
                 if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Log.w(TAG, "TTS language $activeRecognitionLanguage not available (result=$result), falling back to en-GB")
-                    tts?.setLanguage(Locale.forLanguageTag("en-GB"))
+                    Log.w(TAG, "TTS language $activeRecognitionLanguage not available, falling back to en-GB")
+                    // FIX A18: verify fallback language is actually available
+                    val fallbackResult = tts?.setLanguage(Locale.forLanguageTag("en-GB"))
+                    if (fallbackResult == TextToSpeech.LANG_MISSING_DATA || fallbackResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        Log.e(TAG, "TTS fallback en-GB also unavailable – disabling voice output")
+                        isTtsReady = false
+                        ttsFailedPermanently = true
+                        onStatusChange("Hlasový výstup není dostupný – nainstalujte TTS data v nastavení systému")
+                        return@TextToSpeech
+                    }
                 } else {
                     Log.d(TAG, "TTS language set to $activeRecognitionLanguage OK")
                 }
@@ -342,6 +361,7 @@ class VoiceManager(
                         isSpeaking = false
                         Log.d(TAG, "TTS onDone: $id")
                         handler.post {
+                            if (isDestroyed) return@post  // FIX A7: guard in callback
                             when {
                                 stayIdleAfterSpeak -> stop()
                                 expectReplyAfterSpeak -> startListening()
@@ -353,11 +373,13 @@ class VoiceManager(
                         isSpeaking = false
                         Log.e(TAG, "TTS onError: $id")
                         handler.post {
+                            if (isDestroyed) return@post  // FIX A7: guard in callback
                             if (stayIdleAfterSpeak) stop() else startHotwordLoop()
                         }
                     }
                 })
                 isTtsReady = true
+                ttsFailedPermanently = false
                 // Force audio to speaker with USAGE_MEDIA
                 val audioAttrs = android.media.AudioAttributes.Builder()
                     .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
@@ -366,6 +388,12 @@ class VoiceManager(
                     .build()
                 tts?.setAudioAttributes(audioAttrs)
                 Log.d(TAG, "TTS ready with USAGE_MEDIA audio attributes")
+            } else {
+                // FIX A2: TTS engine failed to initialise – mark permanently and notify UI
+                Log.e(TAG, "TTS initialisation failed with status $status")
+                isTtsReady = false
+                ttsFailedPermanently = true
+                onStatusChange("TTS se nenačetlo (status=$status) – hlasové odpovědi jsou vypnuté")
             }
         }, "com.google.android.tts")  // explicit Google TTS
     }
