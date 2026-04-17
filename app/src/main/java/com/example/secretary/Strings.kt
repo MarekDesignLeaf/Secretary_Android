@@ -267,6 +267,19 @@ object Strings {
     val hierarchyValid get() = t("Valid", "V pořádku", "Poprawne")
     val hierarchyNeedsAttention get() = t("Needs attention", "Vyžaduje kontrolu", "Wymaga kontroli")
     val hierarchyIssues get() = t("Hierarchy issues", "Problémy hierarchie", "Problemy hierarchii")
+    val hierarchyIntegrityTitle get() = t("Hierarchy integrity", "Integrita hierarchie", "Integralność hierarchii")
+    val hierarchyIntegrityHint get() = t(
+        "Shows orphan clients, jobs, tasks and users blocked from deactivation because they still hold live responsibility.",
+        "Ukazuje osiřelé klienty, zakázky, úkoly a uživatele blokované pro deaktivaci, protože stále drží živou odpovědnost.",
+        "Pokazuje osieroconych klientów, zlecenia, zadania oraz użytkowników zablokowanych przed dezaktywacją, bo nadal mają aktywną odpowiedzialność."
+    )
+    val orphanClientsLabel get() = t("Orphan clients", "Osiřelí klienti", "Osieroceni klienci")
+    val orphanJobsLabel get() = t("Orphan jobs", "Osiřelé zakázky", "Osierocone zlecenia")
+    val orphanTasksLabel get() = t("Orphan tasks", "Osiřelé úkoly", "Osierocone zadania")
+    val blockedDeactivationsLabel get() = t("Blocked user deactivations", "Blokované deaktivace uživatelů", "Zablokowane dezaktywacje użytkowników")
+    val nextActionMismatchesLabel get() = t("Next action mismatches", "Neshody další akce", "Niezgodności kolejnej akcji")
+    val noIntegrityIssues get() = t("No integrity issues found.", "Nebyl nalezen žádný problém integrity.", "Nie znaleziono problemów integralności.")
+    val openResponsibilitiesLabel get() = t("Open responsibilities", "Aktivní odpovědnosti", "Aktywne odpowiedzialności")
     val hierarchyStatusBlocked get() = t(
         "Status change is blocked until owner and next action are valid.",
         "Změna stavu je blokovaná, dokud není owner a další krok platný.",

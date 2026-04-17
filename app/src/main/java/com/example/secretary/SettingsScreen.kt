@@ -28,6 +28,9 @@ import androidx.compose.ui.platform.LocalContext
 fun SettingsScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     val sm = viewModel.getSettingsManager() ?: return
+    val canManageHierarchy = state.currentUserPermissions["manage_users"] == true ||
+        state.currentUserRole == "admin" ||
+        state.currentUserRole == "manager"
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
         item { Text(Strings.settings, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
         item { CompanyProfileSection(viewModel, sm) }
@@ -40,7 +43,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         item { NotificationSection(sm) }
         item { WorkProfileSection(sm) }
         item { UsersSection(sm, viewModel) }
-        if (state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin") {
+        if (canManageHierarchy) {
+            item { HierarchyIntegritySection(viewModel) }
             item { AdminActivitySection(viewModel) }
         }
         item { DataSection(sm, viewModel) }
@@ -393,6 +397,113 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                                     entry.details.entries.forEach { detail ->
                                         Text("${detail.key}: ${detail.value}", fontSize = 11.sp, color = Color.DarkGray)
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun HierarchyIntegritySection(viewModel: SecretaryViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    var exp by remember { mutableStateOf(false) }
+    LaunchedEffect(exp) {
+        if (exp) viewModel.loadHierarchyIntegrity()
+    }
+
+    fun issueText(issues: List<String>): String =
+        issues.distinct().joinToString("\n") { "\u2022 ${Strings.localizeHierarchyIssue(it)}" }
+
+    fun blockedReasons(entry: BlockedUserDeactivation): String {
+        val reasons = mutableListOf<String>()
+        if (entry.owns_clients) reasons += Strings.orphanClientsLabel
+        if (entry.owns_jobs) reasons += Strings.orphanJobsLabel
+        if (entry.has_open_tasks) reasons += Strings.orphanTasksLabel
+        if (entry.is_client_next_action_assignee) reasons += Strings.nextAction
+        if (entry.is_job_next_action_assignee) reasons += Strings.nextActionMismatchesLabel
+        return reasons.joinToString(", ")
+    }
+
+    SCard(Strings.hierarchyIntegrityTitle, Icons.Default.AccountTree, exp, { exp = !exp }) {
+        Text(Strings.hierarchyIntegrityHint, fontSize = 12.sp, color = Color.Gray)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = { viewModel.loadHierarchyIntegrity() }) {
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(Strings.reload)
+            }
+        }
+        when {
+            state.hierarchyIntegrityLoading -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Strings.processing, fontSize = 12.sp, color = Color.Gray)
+                }
+            }
+            !state.hierarchyIntegrityError.isNullOrBlank() -> {
+                Text(state.hierarchyIntegrityError ?: Strings.hierarchyReportLoadFailed, color = Color.Red, fontSize = 12.sp)
+            }
+            else -> {
+                val report = state.hierarchyIntegrityReport
+                val summary = report?.summary
+                if (report == null) {
+                    Text(Strings.noIntegrityIssues, color = Color.Gray)
+                } else {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(Strings.hierarchyStatus, fontWeight = FontWeight.SemiBold)
+                            Text("${Strings.orphanClientsLabel}: ${summary?.orphan_clients ?: 0}", fontSize = 12.sp)
+                            Text("${Strings.orphanJobsLabel}: ${summary?.orphan_jobs ?: 0}", fontSize = 12.sp)
+                            Text("${Strings.orphanTasksLabel}: ${summary?.orphan_tasks ?: 0}", fontSize = 12.sp)
+                            Text("${Strings.blockedDeactivationsLabel}: ${summary?.blocked_user_deactivations ?: 0}", fontSize = 12.sp)
+                            Text("${Strings.nextActionMismatchesLabel}: ${summary?.next_action_mismatches ?: 0}", fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    if ((summary?.orphan_clients ?: 0) == 0 &&
+                        (summary?.orphan_jobs ?: 0) == 0 &&
+                        (summary?.orphan_tasks ?: 0) == 0 &&
+                        (summary?.blocked_user_deactivations ?: 0) == 0 &&
+                        (summary?.next_action_mismatches ?: 0) == 0
+                    ) {
+                        Text(Strings.noIntegrityIssues, color = Color.Gray)
+                    } else {
+                        report.orphan_clients.forEach { entry ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("${Strings.orphanClientsLabel}: ${entry.display_name ?: entry.id}", fontWeight = FontWeight.SemiBold)
+                                    entry.next_action_task_id?.let { Text("${Strings.nextAction}: $it", fontSize = 12.sp, color = Color.Gray) }
+                                    Text(issueText(entry.issues), fontSize = 12.sp, color = Color.Red)
+                                }
+                            }
+                        }
+                        report.orphan_jobs.forEach { entry ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("${Strings.orphanJobsLabel}: ${entry.job_title ?: entry.id}", fontWeight = FontWeight.SemiBold)
+                                    entry.next_action_task_id?.let { Text("${Strings.nextAction}: $it", fontSize = 12.sp, color = Color.Gray) }
+                                    Text(issueText(entry.issues), fontSize = 12.sp, color = Color.Red)
+                                }
+                            }
+                        }
+                        report.orphan_tasks.forEach { entry ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("${Strings.orphanTasksLabel}: ${entry.title.ifBlank { entry.id }}", fontWeight = FontWeight.SemiBold)
+                                    Text("${Strings.status}: ${Strings.localizeStatus(entry.status)}", fontSize = 12.sp, color = Color.Gray)
+                                    Text(issueText(entry.issues), fontSize = 12.sp, color = Color.Red)
+                                }
+                            }
+                        }
+                        report.blocked_user_deactivations.forEach { entry ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("${Strings.blockedDeactivationsLabel}: ${entry.display_name.ifBlank { entry.email }}", fontWeight = FontWeight.SemiBold)
+                                    Text("${Strings.openResponsibilitiesLabel}: ${blockedReasons(entry)}", fontSize = 12.sp, color = Color.Red)
                                 }
                             }
                         }
