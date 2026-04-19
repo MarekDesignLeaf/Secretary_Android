@@ -20,6 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.core.content.FileProvider
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil.CoilImage
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -111,6 +112,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         mailManager = MailManager(this)
         settingsManager = SettingsManager(this)
         Strings.setLanguage(settingsManager.getCurrentAppLanguage())
+        settingsManager.recognitionLanguage = Strings.getRecognitionLocale()
         viewModel = androidx.lifecycle.ViewModelProvider(this)[SecretaryViewModel::class.java]
 
         val perms = mutableListOf(
@@ -157,6 +159,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                         stopService(Intent(this@MainActivity, VoiceService::class.java))
                         voiceServiceStarted = false
                     }
+                }
+
+                LaunchedEffect(state.pendingNavigationAddress) {
+                    val address = state.pendingNavigationAddress?.trim()?.takeIf(String::isNotBlank) ?: return@LaunchedEffect
+                    val opened = openNavigation(this@MainActivity, address)
+                    vm.onNavigationLaunchHandled(opened, address)
                 }
                 
                 when (state.loggedIn) {
@@ -333,45 +341,180 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
 @Composable
 fun ToolsScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
-    PlantRecognitionTab(state, viewModel)
+    var selectedToolMode by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(state.pendingPlantCaptureRequestId) {
+        if (state.pendingPlantCaptureRequestId != null) {
+            selectedToolMode = state.plantCaptureMode
+        }
+    }
+
+    if (selectedToolMode == null) {
+        ToolsHubScreen { mode ->
+            viewModel.setPlantCaptureMode(mode)
+            selectedToolMode = mode
+        }
+    } else {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { selectedToolMode = null }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.back)
+                    Spacer(Modifier.width(4.dp))
+                    Text(Strings.back)
+                }
+                Text(
+                    toolModeTitle(state.plantCaptureMode),
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.End,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            PlantRecognitionTab(
+                state = state,
+                viewModel = viewModel,
+                showModeSwitcher = false,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ToolsHubScreen(onOpenMode: (String) -> Unit) {
+    val tools = listOf(
+        Triple("identify", Strings.plantModeRecognition, Strings.plantRecognitionHint),
+        Triple("health", Strings.plantModeHealth, Strings.plantHealthHint),
+        Triple("mushroom", Strings.mushroomModeRecognition, Strings.mushroomRecognitionHint)
+    )
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(Strings.tools, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                Strings.t(
+                    "Choose a tool section to open.",
+                    "Vyber sekci nástrojů, kterou chceš otevřít.",
+                    "Wybierz sekcję narzędzi, którą chcesz otworzyć."
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        items(tools) { (mode, title, description) ->
+            Button(
+                onClick = { onOpenMode(mode) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
+                contentPadding = PaddingValues(16.dp)
+            ) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(description, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
+}
+
+private fun toolModeTitle(mode: String): String = when (mode) {
+    "health" -> Strings.plantHealthTitle
+    "mushroom" -> Strings.mushroomRecognitionTitle
+    else -> Strings.plantRecognitionTitle
 }
 
 @Composable
 fun CalendarScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     val calendarText = remember { mutableStateOf(Strings.loadingCalendar) }
+    val today = remember { Calendar.getInstance() }
+    var visibleMonth by remember { mutableStateOf(calendarMonthStart(today)) }
+    var selectedDate by remember { mutableStateOf(formatCalendarDayKey(today)) }
     LaunchedEffect(Unit) {
         viewModel.loadCalendarFeed()
         val ctx = viewModel.getCalendarText(7)
         calendarText.value = ctx
     }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    val itemsByDate = remember(state.calendarFeed) {
+        state.calendarFeed.groupBy { calendarEntryDayKey(it) }
+    }
+    val monthDays = remember(visibleMonth, itemsByDate, selectedDate) {
+        buildCalendarMonthCells(visibleMonth, itemsByDate, selectedDate)
+    }
+    val selectedEntries = remember(selectedDate, itemsByDate) {
+        itemsByDate[selectedDate].orEmpty()
+    }
+    val selectedWeek = remember(selectedDate, itemsByDate) {
+        buildCalendarWeekCells(selectedDate, itemsByDate, selectedDate)
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
         Text(Strings.calendar, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
+        }
+        item {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(Strings.sharedPlanningLabel, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
             TextButton(onClick = { viewModel.syncPlanningCalendar() }) { Text(Strings.syncCalendar) }
         }
-        if (state.calendarFeed.isEmpty()) {
-            Text(Strings.noCalendarEntries, color = Color.Gray)
+        }
+        item {
+            CalendarMonthHeader(
+                visibleMonth = visibleMonth,
+                onPrevious = { visibleMonth = shiftCalendarMonth(visibleMonth, -1) },
+                onNext = { visibleMonth = shiftCalendarMonth(visibleMonth, 1) },
+                onToday = {
+                    val now = Calendar.getInstance()
+                    visibleMonth = calendarMonthStart(now)
+                    selectedDate = formatCalendarDayKey(now)
+                }
+            )
+        }
+        item {
+            Text(Strings.calendarWeekLabel, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            CalendarWeekRow(weekDays = selectedWeek) { selectedDate = it.dateKey }
+        }
+        item {
+            Text(Strings.calendarMonthLabel, fontWeight = FontWeight.SemiBold)
+        }
+        item {
+            CalendarMonthGrid(days = monthDays) { day ->
+                selectedDate = day.dateKey
+                visibleMonth = calendarMonthStart(day.calendar)
+            }
+        }
+        item {
+            Text(
+                Strings.calendarSelectedDayLabel(calendarDisplayDate(selectedDate)),
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        if (selectedEntries.isEmpty()) {
+            item {
+                Text(Strings.noCalendarEntriesForDay, color = Color.Gray)
+            }
         } else {
-            state.calendarFeed.forEach { entry ->
+            items(selectedEntries) { entry ->
                 val label = when (entry.display_mode) {
                     "reminder" -> Strings.reminderEntry
                     "info" -> Strings.infoEntry
                     else -> Strings.sharedEntry
                 }
-                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Column(Modifier.padding(12.dp)) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(entry.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                         }
-                        Text(
-                            (entry.planned_start_at ?: entry.planned_date ?: entry.planned_end_at).orEmpty(),
-                            fontSize = 12.sp,
-                            color = Color.Gray
-                        )
+                        Text(calendarEntryDateLabel(entry), fontSize = 12.sp, color = Color.Gray)
                         entry.client_name?.takeIf { it.isNotBlank() }?.let {
                             Text("${Strings.client}: $it", fontSize = 12.sp, color = Color.Gray)
                         }
@@ -384,12 +527,325 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
                     }
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
         }
-        Text(Strings.calendarEventsLabel, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 8.dp))
-        Text(calendarText.value)
+        item {
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        }
+        item {
+            Text(Strings.calendarEventsLabel, fontWeight = FontWeight.SemiBold)
+            Text(calendarText.value)
+        }
     }
 }
+
+private data class CalendarDayCell(
+    val dateKey: String,
+    val dayNumber: Int,
+    val isCurrentMonth: Boolean,
+    val isToday: Boolean,
+    val isSelected: Boolean,
+    val entryCount: Int,
+    val calendar: Calendar
+)
+
+@Composable
+private fun CalendarMonthHeader(
+    visibleMonth: Calendar,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onToday: () -> Unit
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onPrevious) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.back) }
+                Text(calendarMonthTitle(visibleMonth), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                IconButton(onClick = onNext) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = Strings.next) }
+            }
+            TextButton(onClick = onToday, modifier = Modifier.align(Alignment.End)) {
+                Text(Strings.calendarTodayAction)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarWeekRow(
+    weekDays: List<CalendarDayCell>,
+    onSelect: (CalendarDayCell) -> Unit
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        weekDays.forEach { day ->
+            CalendarCompactDayChip(
+                day = day,
+                modifier = Modifier.weight(1f),
+                onClick = { onSelect(day) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalendarMonthGrid(
+    days: List<CalendarDayCell>,
+    onSelect: (CalendarDayCell) -> Unit
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                calendarWeekdayLabels().forEach { label ->
+                    Text(
+                        label,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+            days.chunked(7).forEach { week ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    week.forEach { day ->
+                        CalendarMonthDayCell(
+                            day = day,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onSelect(day) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarCompactDayChip(
+    day: CalendarDayCell,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val container = when {
+        day.isSelected -> MaterialTheme.colorScheme.primary
+        day.isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    }
+    val content = when {
+        day.isSelected -> MaterialTheme.colorScheme.onPrimary
+        day.isCurrentMonth -> MaterialTheme.colorScheme.onSurface
+        else -> Color.Gray
+    }
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(calendarWeekdayShort(day.calendar), fontSize = 11.sp, color = content)
+            Text(day.dayNumber.toString(), fontWeight = FontWeight.Bold, color = content)
+            Text(day.entryCount.toString(), fontSize = 11.sp, color = content.copy(alpha = 0.8f))
+        }
+    }
+}
+
+@Composable
+private fun CalendarMonthDayCell(
+    day: CalendarDayCell,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val container = when {
+        day.isSelected -> MaterialTheme.colorScheme.primary
+        day.isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        else -> MaterialTheme.colorScheme.surface
+    }
+    val content = when {
+        day.isSelected -> MaterialTheme.colorScheme.onPrimary
+        day.isCurrentMonth -> MaterialTheme.colorScheme.onSurface
+        else -> Color.Gray
+    }
+    Card(
+        modifier = modifier
+            .height(72.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Column(
+            Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                day.dayNumber.toString(),
+                fontWeight = if (day.isToday || day.isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = content
+            )
+            if (day.entryCount > 0) {
+                Text(
+                    Strings.calendarItemCount(day.entryCount),
+                    fontSize = 11.sp,
+                    color = content,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+private fun calendarMonthStart(base: Calendar): Calendar =
+    (base.clone() as Calendar).apply {
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+
+private fun shiftCalendarMonth(base: Calendar, delta: Int): Calendar =
+    (base.clone() as Calendar).apply { add(Calendar.MONTH, delta) }.let(::calendarMonthStart)
+
+private fun formatCalendarDayKey(calendar: Calendar): String =
+    SimpleDateFormat("yyyy-MM-dd", Locale.UK).format(calendar.time)
+
+private fun parseCalendarDayKey(dateKey: String?): Calendar {
+    val fallback = Calendar.getInstance()
+    if (dateKey.isNullOrBlank()) return fallback
+    return try {
+        Calendar.getInstance().apply {
+            time = SimpleDateFormat("yyyy-MM-dd", Locale.UK).parse(dateKey) ?: fallback.time
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+    } catch (_: Exception) {
+        fallback
+    }
+}
+
+private fun calendarEntryDayKey(entry: CalendarFeedEntry): String {
+    val candidates = listOf(entry.planned_start_at, entry.planned_date, entry.planned_end_at)
+    for (candidate in candidates) {
+        val parsed = parseFlexibleCalendarDate(candidate)
+        if (parsed != null) return parsed
+    }
+    return formatCalendarDayKey(Calendar.getInstance())
+}
+
+private fun parseFlexibleCalendarDate(raw: String?): String? {
+    val value = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val direct = Regex("""\d{4}-\d{2}-\d{2}""").find(value)?.value
+    if (direct != null) return direct
+    val formats = listOf(
+        "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "yyyy-MM-dd HH:mm",
+        "dd.MM.yyyy",
+        "dd/MM/yyyy"
+    )
+    for (format in formats) {
+        try {
+            val date = SimpleDateFormat(format, Locale.UK).parse(value) ?: continue
+            return SimpleDateFormat("yyyy-MM-dd", Locale.UK).format(date)
+        } catch (_: Exception) {
+        }
+    }
+    return null
+}
+
+private fun calendarEntryDateLabel(entry: CalendarFeedEntry): String =
+    (entry.planned_start_at ?: entry.planned_date ?: entry.planned_end_at).orEmpty()
+
+private fun buildCalendarMonthCells(
+    month: Calendar,
+    itemsByDate: Map<String, List<CalendarFeedEntry>>,
+    selectedDate: String
+): List<CalendarDayCell> {
+    val start = (month.clone() as Calendar).apply {
+        val weekday = get(Calendar.DAY_OF_WEEK)
+        val offset = (weekday + 5) % 7
+        add(Calendar.DAY_OF_MONTH, -offset)
+    }
+    val todayKey = formatCalendarDayKey(Calendar.getInstance())
+    return buildList {
+        repeat(42) {
+            val cellCal = start.clone() as Calendar
+            val key = formatCalendarDayKey(cellCal)
+            add(
+                CalendarDayCell(
+                    dateKey = key,
+                    dayNumber = cellCal.get(Calendar.DAY_OF_MONTH),
+                    isCurrentMonth = cellCal.get(Calendar.MONTH) == month.get(Calendar.MONTH) && cellCal.get(Calendar.YEAR) == month.get(Calendar.YEAR),
+                    isToday = key == todayKey,
+                    isSelected = key == selectedDate,
+                    entryCount = itemsByDate[key]?.size ?: 0,
+                    calendar = cellCal
+                )
+            )
+            start.add(Calendar.DAY_OF_MONTH, 1)
+        }
+    }
+}
+
+private fun buildCalendarWeekCells(
+    selectedDate: String,
+    itemsByDate: Map<String, List<CalendarFeedEntry>>,
+    activeDate: String
+): List<CalendarDayCell> {
+    val selected = parseCalendarDayKey(selectedDate)
+    val offset = (selected.get(Calendar.DAY_OF_WEEK) + 5) % 7
+    selected.add(Calendar.DAY_OF_MONTH, -offset)
+    val todayKey = formatCalendarDayKey(Calendar.getInstance())
+    return buildList {
+        repeat(7) {
+            val cell = selected.clone() as Calendar
+            val key = formatCalendarDayKey(cell)
+            add(
+                CalendarDayCell(
+                    dateKey = key,
+                    dayNumber = cell.get(Calendar.DAY_OF_MONTH),
+                    isCurrentMonth = true,
+                    isToday = key == todayKey,
+                    isSelected = key == activeDate,
+                    entryCount = itemsByDate[key]?.size ?: 0,
+                    calendar = cell
+                )
+            )
+            selected.add(Calendar.DAY_OF_MONTH, 1)
+        }
+    }
+}
+
+private fun calendarMonthTitle(month: Calendar): String =
+    SimpleDateFormat("MMMM yyyy", Strings.currentLocale()).format(month.time)
+        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Strings.currentLocale()) else it.toString() }
+
+private fun calendarDisplayDate(dateKey: String): String =
+    try {
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.UK).parse(dateKey)
+        SimpleDateFormat("dd.MM.yyyy", Locale.UK).format(date ?: Date())
+    } catch (_: Exception) {
+        dateKey
+    }
+
+private fun calendarWeekdayLabels(): List<String> {
+    val base = Calendar.getInstance().apply { set(Calendar.DAY_OF_WEEK, Calendar.MONDAY) }
+    return (0 until 7).map {
+        val label = SimpleDateFormat("EE", Strings.currentLocale()).format(base.time)
+        base.add(Calendar.DAY_OF_MONTH, 1)
+        label.replaceFirstChar { ch -> if (ch.isLowerCase()) ch.titlecase(Strings.currentLocale()) else ch.toString() }
+    }
+}
+
+private fun calendarWeekdayShort(calendar: Calendar): String =
+    SimpleDateFormat("EE", Strings.currentLocale()).format(calendar.time)
+
 
 private fun activeHierarchyUsers(users: List<BackendUser>): List<BackendUser> =
     users.filter { it.status.equals("active", ignoreCase = true) }
@@ -787,6 +1243,19 @@ fun AddTaskDialog(
 fun HomeScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var showNavigationDialog by remember { mutableStateOf(false) }
+    if (showNavigationDialog) {
+        NavigationAddressDialog(
+            onDismiss = { showNavigationDialog = false },
+            onNavigate = { address ->
+                if (openNavigation(context, address)) {
+                    showNavigationDialog = false
+                } else {
+                    viewModel.setStatus(Strings.navigationUnavailable(address))
+                }
+            }
+        )
+    }
     Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(state.status.uppercase(), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (state.isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.height(48.dp))
         Card(Modifier.fillMaxWidth().height(120.dp), colors = CardDefaults.cardColors(containerColor = if (state.isListening) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant)) {
@@ -801,9 +1270,18 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             Card(Modifier.fillMaxWidth()) {
                 Column {
                     state.contactResults.forEach { contact ->
+                        val address = contact["address"]
                         ListItem(
                             headlineContent = { Text(contact["name"] ?: "") },
-                            supportingContent = { Text(contact["phone"] ?: "") },
+                            supportingContent = {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(contact["phone"] ?: "")
+                                    if (!address.isNullOrBlank()) {
+                                        Text(address, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        AddressActionsRow(address = address, viewModel = viewModel)
+                                    }
+                                }
+                            },
                             trailingContent = { 
                                 IconButton(onClick = { 
                                     val phone = contact["phone"] ?: return@IconButton
@@ -828,6 +1306,15 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             )
         ) {
             Icon(imageVector = if (state.isListening) Icons.Default.Refresh else Icons.Default.Call, contentDescription = null, modifier = Modifier.size(48.dp))
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = { showNavigationDialog = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(Strings.startNavigation)
         }
         
         // Ovladaci tlacitka - radek 1
@@ -874,6 +1361,33 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
             }
         }
     }
+}
+
+@Composable
+fun NavigationAddressDialog(onDismiss: () -> Unit, onNavigate: (String) -> Unit) {
+    var address by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(Strings.startNavigation) },
+        text = {
+            OutlinedTextField(
+                value = address,
+                onValueChange = { address = it },
+                label = { Text(Strings.enterAddress) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = false
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onNavigate(address.trim()) },
+                enabled = address.isNotBlank()
+            ) { Text(Strings.navigate) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(Strings.cancel) }
+        }
+    )
 }
 
 @Composable
@@ -1651,6 +2165,61 @@ fun ClientDetailScreen(clientId: Long, viewModel: SecretaryViewModel, navControl
     }
 }
 
+private fun addressFromParts(vararg parts: String?): String =
+    parts.mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
+        .joinToString(", ")
+
+private fun openNavigation(context: Context, address: String): Boolean {
+    val query = address.trim()
+    if (query.isBlank()) return false
+    val encoded = Uri.encode(query)
+    val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$encoded")).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+    }
+    val intents = listOf(
+        Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$encoded")).apply {
+            setPackage("com.google.android.apps.maps")
+        },
+        mapIntent,
+        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$encoded")).apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+        },
+        Intent.createChooser(mapIntent, Strings.navigate)
+    )
+    for (intent in intents) {
+        try {
+            context.startActivity(intent)
+            return true
+        } catch (_: Exception) {
+        }
+    }
+    return false
+}
+
+@Composable
+fun AddressActionsRow(address: String?, viewModel: SecretaryViewModel, modifier: Modifier = Modifier) {
+    val cleanAddress = address?.trim()?.takeIf(String::isNotBlank) ?: return
+    val context = LocalContext.current
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = { viewModel.speakAddress(cleanAddress) },
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(Strings.readAddress, fontSize = 12.sp)
+        }
+        Button(
+            onClick = {
+                if (!openNavigation(context, cleanAddress)) {
+                    viewModel.setStatus(Strings.navigationUnavailable(cleanAddress))
+                }
+            },
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(Strings.navigate, fontSize = 12.sp)
+        }
+    }
+}
+
 @Composable
 fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
@@ -1777,6 +2346,12 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
         }
         if (c.billing_address_line1 != null || c.billing_city != null) {
             item {
+                val billingAddress = addressFromParts(
+                    c.billing_address_line1,
+                    c.billing_city,
+                    c.billing_postcode,
+                    c.billing_country
+                )
                 Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                     Column(Modifier.padding(16.dp)) {
                         Text(Strings.billingAddress, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -1785,6 +2360,8 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                         InfoRow(Strings.city, c.billing_city)
                         InfoRow(Strings.postcode, c.billing_postcode)
                         InfoRow(Strings.country, c.billing_country)
+                        Spacer(Modifier.height(8.dp))
+                        AddressActionsRow(address = billingAddress, viewModel = viewModel)
                     }
                 }
             }
@@ -1792,10 +2369,13 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
         if (detail.properties.isNotEmpty()) {
             item { Text("${Strings.properties} (${detail.properties.size})", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 8.dp)) }
             items(detail.properties) { p ->
+                val propertyAddress = addressFromParts(p.address_line1, p.city, p.postcode, p.country)
                 Card(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(p.property_name, fontWeight = FontWeight.SemiBold)
-                        Text("${p.address_line1}, ${p.city} ${p.postcode}", fontSize = 13.sp, color = Color.Gray)
+                        Text(propertyAddress, fontSize = 13.sp, color = Color.Gray)
+                        Spacer(Modifier.height(8.dp))
+                        AddressActionsRow(address = propertyAddress, viewModel = viewModel)
                     }
                 }
             }
@@ -3113,6 +3693,32 @@ class SecretaryViewModel : ViewModel() {
         }.toMap()
     }
 
+    private fun normalizedAppLanguageCode(langCode: String?): String {
+        val source = langCode?.takeIf { it.isNotBlank() } ?: settingsManager?.appLanguage ?: "cs"
+        return when (Strings.fromCode(source)) {
+            Strings.Lang.EN -> "en"
+            Strings.Lang.CS -> "cs"
+            Strings.Lang.PL -> "pl"
+        }
+    }
+
+    private fun applyAppLanguage(langCode: String?, persist: Boolean, refreshVoice: Boolean = true) {
+        val normalized = normalizedAppLanguageCode(langCode)
+        if (persist) {
+            settingsManager?.setCurrentAppLanguage(normalized)
+        }
+        Strings.setLanguage(normalized)
+        val recognitionLocale = Strings.getRecognitionLocale()
+        settingsManager?.recognitionLanguage = recognitionLocale
+        _uiState.value = _uiState.value.copy(
+            appLanguage = normalized,
+            recognitionLocale = recognitionLocale
+        )
+        if (refreshVoice) {
+            voiceManager?.refreshLanguage()
+        }
+    }
+
     private fun applyCurrentUserData(raw: Map<String, @JvmSuppressWildcards Any?>?) {
         val user = raw ?: emptyMap()
         val nestedUser = user["user"] as? Map<*, *>
@@ -3142,9 +3748,7 @@ class SecretaryViewModel : ViewModel() {
         val resolvedLang = settingsManager?.getAppLanguageForUser(userId, preferredLang ?: settingsManager?.appLanguage ?: "cs")
             ?: preferredLang
             ?: "cs"
-        settingsManager?.setCurrentAppLanguage(resolvedLang)
-        Strings.setLanguage(resolvedLang)
-        settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
+        applyAppLanguage(resolvedLang, persist = true, refreshVoice = false)
         _uiState.value = _uiState.value.copy(
             currentUserId = userId,
             currentUserDisplayName = displayName,
@@ -3157,6 +3761,7 @@ class SecretaryViewModel : ViewModel() {
 
     fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager) {
         voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
+        applyAppLanguage(sm.getCurrentAppLanguage(), persist = false, refreshVoice = false)
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
@@ -3999,6 +4604,25 @@ class SecretaryViewModel : ViewModel() {
     fun setListening(isL: Boolean) { _uiState.value = _uiState.value.copy(isListening = isL) }
     fun startListening() { voiceManager?.startListening() }
 
+    fun speakAddress(address: String) {
+        val cleanAddress = address.trim()
+        if (cleanAddress.isBlank()) {
+            setStatus(Strings.noAddressAvailable)
+            return
+        }
+        val message = Strings.addressForSpeech(cleanAddress)
+        _uiState.value = _uiState.value.copy(lastAiReply = message)
+        voiceManager?.speak(message, expectReply = false)
+    }
+
+    fun onNavigationLaunchHandled(opened: Boolean, address: String) {
+        _uiState.value = _uiState.value.copy(
+            pendingNavigationAddress = null,
+            awaitingNavigationAddress = false,
+            status = if (opened) Strings.waitingForCommand else Strings.navigationUnavailable(address)
+        )
+    }
+
     fun updateContext(id: Long?, type: String?) {
         _uiState.value = _uiState.value.copy(contextEntityId = id, contextType = type)
     }
@@ -4103,7 +4727,7 @@ class SecretaryViewModel : ViewModel() {
                 }
                 val textType = "text/plain".toMediaType()
                 val organsJson = org.json.JSONArray(photos.map { it.organ }).toString().toRequestBody(textType)
-                val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
+                val language = _uiState.value.appLanguage.toRequestBody(textType)
                 val response = api.identifyPlant(
                     imageParts,
                     organsJson,
@@ -4169,7 +4793,7 @@ class SecretaryViewModel : ViewModel() {
                     )
                 }
                 val textType = "text/plain".toMediaType()
-                val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
+                val language = _uiState.value.appLanguage.toRequestBody(textType)
                 val response = api.assessPlantHealth(
                     imageParts,
                     language,
@@ -4234,7 +4858,7 @@ class SecretaryViewModel : ViewModel() {
                     )
                 }
                 val textType = "text/plain".toMediaType()
-                val language = (settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()).toRequestBody(textType)
+                val language = _uiState.value.appLanguage.toRequestBody(textType)
                 val response = api.identifyMushroom(
                     imageParts,
                     language,
@@ -4354,7 +4978,7 @@ class SecretaryViewModel : ViewModel() {
     fun loadNatureHistory() {
         viewModelScope.launch {
             try {
-                val language = settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()
+                val language = _uiState.value.appLanguage
                 val res = api.getNatureHistory(limit = 30, language = language)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(recognitionHistory = res.body() ?: emptyList())
@@ -4376,7 +5000,7 @@ class SecretaryViewModel : ViewModel() {
                 val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
                 val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
                 val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
-                val language = settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()
+                val language = _uiState.value.appLanguage
                 val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
@@ -4397,7 +5021,7 @@ class SecretaryViewModel : ViewModel() {
                 val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
                 val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
                 val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
-                val language = settingsManager?.getCurrentAppLanguage() ?: Strings.getRecognitionLocale()
+                val language = _uiState.value.appLanguage
                 val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
@@ -5106,8 +5730,8 @@ class SecretaryViewModel : ViewModel() {
     fun startWorkReportSession() {
         viewModelScope.launch {
             try {
-                val lang = settingsManager?.getCurrentAppLanguage() ?: "en"
-                val data = mapOf<String, Any?>("tenant_id" to 1, "language" to lang, "work_date" to java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date()))
+                val lang = _uiState.value.appLanguage
+                val data = mapOf<String, Any?>("tenant_id" to 1, "language" to lang, "work_date" to java.text.SimpleDateFormat("yyyy-MM-dd", Locale.UK).format(Date()))
                 val res = api.voiceSessionStart(data)
                 if (res.isSuccessful) {
                     val body = res.body() ?: return@launch
@@ -5130,7 +5754,7 @@ class SecretaryViewModel : ViewModel() {
         val sid = _uiState.value.voiceSessionId ?: return
         viewModelScope.launch {
             try {
-                val data = mapOf<String, Any?>("session_id" to sid, "text" to text, "tenant_id" to 1)
+                val data = mapOf<String, Any?>("session_id" to sid, "text" to text, "tenant_id" to 1, "language" to _uiState.value.appLanguage)
                 val res = api.voiceSessionInput(data)
                 if (res.isSuccessful) {
                     val body = res.body() ?: return@launch
@@ -5186,6 +5810,7 @@ class SecretaryViewModel : ViewModel() {
     fun onVoiceInput(text: String) {
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
+        val normalized = normalizeVoiceCommand(text)
         if (Strings.matchesLogoutCommand(lower)) {
             val logoutMessage = Strings.loggingOutMessage()
             val msg = ChatMessage("assistant", logoutMessage)
@@ -5197,6 +5822,29 @@ class SecretaryViewModel : ViewModel() {
             viewModelScope.launch {
                 kotlinx.coroutines.delay(2500) // wait for TTS
                 logout()
+            }
+            return
+        }
+        if (_uiState.value.awaitingNavigationAddress) {
+            if (isVoiceCancelCommand(normalized)) {
+                val message = Strings.navigationCancelled
+                _uiState.value = _uiState.value.copy(
+                    awaitingNavigationAddress = false,
+                    status = Strings.waitingForCommand,
+                    lastAiReply = message,
+                    history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
+                )
+                voiceManager?.speak(message, expectReply = false)
+                return
+            }
+            startVoiceNavigation(text)
+            return
+        }
+        parseVoiceNavigationAddress(text)?.let { address ->
+            if (address.isBlank()) {
+                askForNavigationAddress(text)
+            } else {
+                startVoiceNavigation(address)
             }
             return
         }
@@ -5231,7 +5879,7 @@ class SecretaryViewModel : ViewModel() {
                     history = updatedHistory,
                     context_entity_id = currentState.contextEntityId,
                     context_type = currentState.contextType,
-                    internal_language = settingsManager?.getCurrentAppLanguage() ?: Strings.getLangCode(),
+                    internal_language = currentState.appLanguage,
                     external_language = currentState.tenantConfig?.get("default_customer_lang")?.toString() ?: Strings.getLangCode(),
                     calendar_context = calendarManager?.getCalendarContext(),
                     current_datetime = nowStr
@@ -5264,6 +5912,77 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    private fun askForNavigationAddress(originalText: String) {
+        val message = Strings.sayNavigationAddress
+        _uiState.value = _uiState.value.copy(
+            awaitingNavigationAddress = true,
+            isListening = false,
+            status = Strings.listening,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = true)
+    }
+
+    private fun startVoiceNavigation(address: String) {
+        val cleanAddress = address.trim()
+        if (cleanAddress.isBlank()) {
+            askForNavigationAddress(Strings.startNavigation)
+            return
+        }
+        val message = Strings.startingNavigation(cleanAddress)
+        _uiState.value = _uiState.value.copy(
+            awaitingNavigationAddress = false,
+            pendingNavigationAddress = cleanAddress,
+            isListening = false,
+            status = Strings.startNavigation,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("user", cleanAddress) + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = false)
+    }
+
+    private fun parseVoiceNavigationAddress(text: String): String? {
+        val normalized = normalizeVoiceCommand(text)
+        val prefixes = listOf(
+            "spustit navigaci na ",
+            "spust navigaci na ",
+            "spustit navigaci do ",
+            "spust navigaci do ",
+            "spustit navigaci ",
+            "spust navigaci ",
+            "zapni navigaci na ",
+            "zapni navigaci do ",
+            "zapni navigaci ",
+            "naviguj na ",
+            "naviguj do ",
+            "navigace na ",
+            "navigace do ",
+            "navigace ",
+            "navigate to ",
+            "navigation to "
+        )
+        prefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            return normalized.drop(prefix.length).trim()
+        }
+        return if (normalized == "spustit navigaci" ||
+            normalized == "spust navigaci" ||
+            normalized == "zapni navigaci" ||
+            normalized == "navigace" ||
+            normalized == "naviguj" ||
+            normalized == "navigate" ||
+            normalized == "navigation"
+        ) "" else null
+    }
+
+    private fun normalizeVoiceCommand(text: String): String =
+        java.text.Normalizer.normalize(text.trim().lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+            .replace("\\s+".toRegex(), " ")
+
+    private fun isVoiceCancelCommand(normalized: String): Boolean =
+        normalized in setOf("ne", "no", "zrusit", "zrus", "cancel", "stop")
+
     private fun handleAction(response: AssistantResponse) {
         when (response.action_type) {
             "REFRESH" -> { refreshCrmData() }
@@ -5272,8 +5991,11 @@ class SecretaryViewModel : ViewModel() {
                 val results = contactManager?.searchContact(query) ?: emptyList()
                 if (results.isNotEmpty()) {
                     _uiState.value = _uiState.value.copy(contactResults = results)
-                    val names = results.joinToString(", ") { it["name"] ?: "" }
-                    onVoiceInput("SYSTÉM: Našla jsem tyto kontakty: $names. Přečti je uživateli a nabídni volání.")
+                    val names = results.joinToString(", ") {
+                        val address = it["address"]?.takeIf(String::isNotBlank)
+                        if (address == null) it["name"].orEmpty() else "${it["name"].orEmpty()} (${Strings.address}: $address)"
+                    }
+                    onVoiceInput("SYSTÉM: Našla jsem tyto kontakty: $names. Přečti je uživateli a nabídni volání, přečtení adresy a navigaci, pokud je adresa dostupná.")
                 } else {
                     voiceManager?.speak(Strings.noContactFound(query))
                 }
@@ -5415,11 +6137,9 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun changeLanguage(langCode: String) {
-        settingsManager?.setCurrentAppLanguage(langCode)
-        Strings.setLanguage(langCode)
-        // Update recognition language to match
-        settingsManager?.recognitionLanguage = Strings.getRecognitionLocale()
+        applyAppLanguage(langCode, persist = true)
         _uiState.value = _uiState.value.copy(status = Strings.ready, lastAiReply = Strings.waitingForCommand)
+        loadNatureHistory()
     }
     fun resetSettings() { settingsManager?.resetAll(); setStatus(Strings.settingsRestored) }
     fun exportCrmData() { viewModelScope.launch { setStatus(Strings.exportUnavailable) } }
@@ -5465,9 +6185,13 @@ class SecretaryViewModel : ViewModel() {
 
 data class UiState(
     val isListening: Boolean = false, 
+    val appLanguage: String = Strings.getLangCode(),
+    val recognitionLocale: String = Strings.getRecognitionLocale(),
     val status: String = Strings.ready, 
     val lastAiReply: String = Strings.waitingForYourCommand,
     val history: List<ChatMessage> = emptyList(),
+    val pendingNavigationAddress: String? = null,
+    val awaitingNavigationAddress: Boolean = false,
     val contactResults: List<Map<String, String>> = emptyList(),
     val systemSettings: Map<String, Any> = emptyMap(),
     val calendarFeed: List<CalendarFeedEntry> = emptyList(),

@@ -76,6 +76,8 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.landscapist.coil)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation("androidx.biometric:biometric:1.1.0")
 
     testImplementation(libs.junit)

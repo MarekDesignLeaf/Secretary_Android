@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.text.Normalizer
+import java.util.Locale
 
 object Strings {
     enum class Lang { EN, CS, PL }
@@ -15,7 +16,22 @@ object Strings {
     fun getCurrent(): Lang = activeLang
     fun getLangCode(): String = when (activeLang) { Lang.EN -> "en"; Lang.CS -> "cs"; Lang.PL -> "pl" }
     fun getRecognitionLocale(): String = when (activeLang) { Lang.EN -> "en-GB"; Lang.CS -> "cs-CZ"; Lang.PL -> "pl-PL" }
-    fun fromCode(code: String): Lang = when { code.lowercase().startsWith("cs") -> Lang.CS; code.lowercase().startsWith("pl") -> Lang.PL; else -> Lang.EN }
+    fun currentLocale(): Locale = when (activeLang) {
+        Lang.EN -> Locale.UK
+        Lang.CS -> Locale("cs", "CZ")
+        Lang.PL -> Locale("pl", "PL")
+    }
+    private fun normalizeLanguageCode(code: String): String =
+        Normalizer.normalize(code.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+    fun fromCode(code: String): Lang {
+        val normalized = normalizeLanguageCode(code)
+        return when {
+            normalized.startsWith("cs") || normalized.startsWith("cz") || normalized.contains("czech") || normalized.contains("cestina") -> Lang.CS
+            normalized.startsWith("pl") || normalized.contains("polish") || normalized.contains("polski") -> Lang.PL
+            else -> Lang.EN
+        }
+    }
 
     // === NAVIGATION ===
     val home get() = t("Home", "Domů", "Strona główna")
@@ -316,6 +332,29 @@ object Strings {
     val phoneSecondary get() = t("Phone 2", "Telefon 2", "Telefon 2")
     val website get() = t("Website", "Web", "Strona www")
     val billingAddress get() = t("Billing address", "Fakturační adresa", "Adres rozliczeniowy")
+    val address get() = t("Address", "Adresa", "Adres")
+    val enterAddress get() = t("Enter address", "Zadej adresu", "Wpisz adres")
+    val startNavigation get() = t("Start navigation", "Spustit navigaci", "Uruchom nawigację")
+    val sayNavigationAddress get() = t(
+        "Say the address for navigation.",
+        "Řekni adresu pro navigaci.",
+        "Powiedz adres do nawigacji."
+    )
+    val navigationCancelled get() = t("Navigation cancelled.", "Navigace zrušena.", "Nawigacja anulowana.")
+    fun startingNavigation(address: String): String = t(
+        "Starting navigation to $address.",
+        "Spouštím navigaci na adresu $address.",
+        "Uruchamiam nawigację do $address."
+    )
+    val readAddress get() = t("Read address", "Přečíst adresu", "Odczytaj adres")
+    val navigate get() = t("Navigate", "Navigace", "Nawiguj")
+    val noAddressAvailable get() = t("No address available.", "Adresa není vyplněná.", "Brak adresu.")
+    fun addressForSpeech(address: String): String = t("Address: $address", "Adresa: $address", "Adres: $address")
+    fun navigationUnavailable(address: String): String = t(
+        "Navigation could not be opened for $address.",
+        "Navigaci se nepodařilo otevřít pro adresu $address.",
+        "Nie udało się otworzyć nawigacji dla adresu $address."
+    )
     val city get() = t("City", "Město", "Miasto")
     val postcode get() = t("Postcode", "PSČ", "Kod pocztowy")
     val country get() = t("Country", "Země", "Kraj")
@@ -725,12 +764,18 @@ object Strings {
     val loadingCalendar get() = t("Loading calendar...", "Načítám kalendář...", "Wczytuję kalendarz...")
     val scheduledTasksLabel get() = t("Scheduled tasks", "Naplánované úkoly", "Zaplanowane zadania")
     val sharedPlanningLabel get() = t("Shared planning", "Sdílené plánování", "Plan współdzielony")
+    val calendarWeekLabel get() = t("Week", "Týden", "Tydzień")
+    val calendarMonthLabel get() = t("Month", "Měsíc", "Miesiąc")
     val calendarEventsLabel get() = t("Calendar events", "Události z kalendáře", "Wydarzenia z kalendarza")
     val noCalendarEntries get() = t("No planned items yet", "Zatím nejsou žádné plánované položky", "Brak zaplanowanych pozycji")
+    val noCalendarEntriesForDay get() = t("No items on the selected day", "Ve vybraný den nejsou žádné položky", "Brak pozycji w wybranym dniu")
     val syncCalendar get() = t("Sync calendar", "Synchronizovat kalendář", "Synchronizuj kalendarz")
     val reminderEntry get() = t("Reminder", "Připomínka", "Przypomnienie")
     val infoEntry get() = t("Info", "Informace", "Informacja")
     val sharedEntry get() = t("Shared", "Sdílené", "Wspólne")
+    val calendarTodayAction get() = t("Today", "Dnes", "Dziś")
+    fun calendarSelectedDayLabel(date: String): String = t("Selected day: $date", "Vybraný den: $date", "Wybrany dzień: $date")
+    fun calendarItemCount(count: Int): String = t("$count items", "$count položek", "$count pozycji")
     val backgroundEnabledShort get() = t("Background ON", "Pozadí ZAP", "Tło WŁ")
     val backgroundDisabledShort get() = t("Background OFF", "Pozadí VYP", "Tło WYŁ")
     val restartShort get() = t("Restart", "Restart", "Restart")
@@ -797,6 +842,16 @@ object Strings {
     val history get() = t("HISTORY", "HISTORIE", "HISTORIA")
     val backgroundActive get() = t("Background active", "Na pozadí aktivní", "Aktywne w tle")
     val backgroundInactive get() = t("Background inactive", "Na pozadí neaktivní", "Nieaktywne w tle")
+    val ttsOutputUnavailable get() = t(
+        "Voice output is unavailable. Install TTS language data in system settings.",
+        "Hlasový výstup není dostupný. Nainstalujte TTS data v nastavení systému.",
+        "Wyjście głosowe jest niedostępne. Zainstaluj dane TTS w ustawieniach systemu."
+    )
+    fun ttsInitFailed(status: Int): String = t(
+        "TTS did not load (status=$status). Voice replies are disabled.",
+        "TTS se nenačetlo (status=$status). Hlasové odpovědi jsou vypnuté.",
+        "TTS nie załadowało się (status=$status). Odpowiedzi głosowe są wyłączone."
+    )
 
     // === HELPER ===
     fun t(en: String, cs: String, pl: String): String = when (activeLang) {

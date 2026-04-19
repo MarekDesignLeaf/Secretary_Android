@@ -135,7 +135,12 @@ private fun buildRecognitionCaptureContext(context: Context): RecognitionCapture
 }
 
 @Composable
-fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
+fun PlantRecognitionTab(
+    state: UiState,
+    viewModel: SecretaryViewModel,
+    showModeSwitcher: Boolean = true,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val mode = state.plantCaptureMode
     val isHealthMode = mode == "health"
@@ -270,18 +275,20 @@ fun PlantRecognitionTab(state: UiState, viewModel: SecretaryViewModel) {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { viewModel.setPlantCaptureMode("identify") }) { Text(Strings.plantModeRecognition) }
-                        OutlinedButton(onClick = { viewModel.setPlantCaptureMode("health") }) { Text(Strings.plantModeHealth) }
-                        OutlinedButton(onClick = { viewModel.setPlantCaptureMode("mushroom") }) { Text(Strings.mushroomModeRecognition) }
+                    if (showModeSwitcher) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { viewModel.setPlantCaptureMode("identify") }) { Text(Strings.plantModeRecognition) }
+                            OutlinedButton(onClick = { viewModel.setPlantCaptureMode("health") }) { Text(Strings.plantModeHealth) }
+                            OutlinedButton(onClick = { viewModel.setPlantCaptureMode("mushroom") }) { Text(Strings.mushroomModeRecognition) }
+                        }
+                        Spacer(Modifier.height(8.dp))
                     }
-                    Spacer(Modifier.height(8.dp))
                     Text(
                         when {
                             isMushroomMode -> Strings.mushroomRecognitionTitle

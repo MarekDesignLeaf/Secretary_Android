@@ -125,7 +125,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     var showConfirm by remember { mutableStateOf<String?>(null) }
     var showCustomerConfirm by remember { mutableStateOf<String?>(null) }
     var customerLanguageFeedback by remember { mutableStateOf<String?>(null) }
-    val currentLang = sm.getCurrentAppLanguage()
+    val currentLang = state.appLanguage.ifBlank { sm.getCurrentAppLanguage() }
     val langName = Strings.languageDisplayName(currentLang)
     val currentCustomerLang = state.tenantConfig?.get("default_customer_lang")?.toString() ?: currentLang
     val canEditCustomerLanguage = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
@@ -1054,8 +1054,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     SCard(Strings.companyProfile, Icons.Default.AccountCircle, exp, { exp = !exp }) {
         val wsMode = config["workspace_mode"]?.toString() ?: "-"
         val wsLabel = Strings.localizeWorkspaceMode(wsMode)
-        val currentInternalLanguage = Strings.languageDisplayName(sm.getCurrentAppLanguage())
-        val currentCustomerLanguage = Strings.languageDisplayName(config["default_customer_lang"]?.toString() ?: sm.getCurrentAppLanguage())
+        val currentInternalLanguage = Strings.languageDisplayName(state.appLanguage.ifBlank { sm.getCurrentAppLanguage() })
+        val currentCustomerLanguage = Strings.languageDisplayName(config["default_customer_lang"]?.toString() ?: state.appLanguage.ifBlank { sm.getCurrentAppLanguage() })
         ARow(Strings.workspaceMode, wsLabel)
         ARow(Strings.internalLanguage, currentInternalLanguage)
         ARow(Strings.customerLanguage, currentCustomerLanguage)

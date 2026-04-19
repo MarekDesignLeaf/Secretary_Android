@@ -5,7 +5,9 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.text.Normalizer
 import java.security.MessageDigest
+import java.util.Locale
 
 data class UserProfile(
     val id: String = java.util.UUID.randomUUID().toString(),
@@ -261,8 +263,8 @@ class SettingsManager(context: Context) {
         get() = prefs.getString("current_user_display_name", "") ?: ""
         set(v) = prefs.edit { if (v.isBlank()) remove("current_user_display_name") else putString("current_user_display_name", v) }
     var appLanguage: String
-        get() = prefs.getString("app_language", "cs") ?: "cs"
-        set(v) = prefs.edit { putString("app_language", v) }
+        get() = normalizeAppLanguage(prefs.getString("app_language", "cs") ?: "cs")
+        set(v) = prefs.edit { putString("app_language", normalizeAppLanguage(v)) }
     fun setCurrentBackendUser(userId: Long?, role: String?, displayName: String? = null, email: String? = null) {
         currentBackendUserId = if ((userId ?: 0L) > 0L) userId!! else -1L
         currentBackendUserRole = role.orEmpty()
@@ -279,23 +281,34 @@ class SettingsManager(context: Context) {
     fun getCurrentAppLanguage(): String {
         val userId = currentBackendUserId
         if (userId > 0L) {
-            return prefs.getString("app_language_user_$userId", appLanguage) ?: appLanguage
+            return normalizeAppLanguage(prefs.getString("app_language_user_$userId", appLanguage) ?: appLanguage)
         }
         return appLanguage
     }
     fun setCurrentAppLanguage(lang: String) {
+        val normalized = normalizeAppLanguage(lang)
         val userId = currentBackendUserId
         if (userId > 0L) {
-            prefs.edit { putString("app_language_user_$userId", lang) }
+            prefs.edit { putString("app_language_user_$userId", normalized) }
         }
-        appLanguage = lang
+        appLanguage = normalized
     }
     fun getAppLanguageForUser(userId: Long?, fallback: String = appLanguage): String {
         val resolved = userId ?: currentBackendUserId
         if (resolved > 0L) {
-            return prefs.getString("app_language_user_$resolved", fallback) ?: fallback
+            return normalizeAppLanguage(prefs.getString("app_language_user_$resolved", fallback) ?: fallback)
         }
-        return fallback
+        return normalizeAppLanguage(fallback)
+    }
+
+    private fun normalizeAppLanguage(lang: String): String {
+        val normalized = Normalizer.normalize(lang.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+        return when {
+            normalized.startsWith("cs") || normalized.startsWith("cz") || normalized.contains("czech") || normalized.contains("cestina") -> "cs"
+            normalized.startsWith("pl") || normalized.contains("polish") || normalized.contains("polski") -> "pl"
+            else -> "en"
+        }
     }
 
     fun getBiometricProfiles(): List<BiometricProfile> {
