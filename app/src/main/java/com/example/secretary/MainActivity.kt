@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.provider.Telephony
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -71,6 +72,71 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+
+private fun readSmsMessagesForImport(context: Context, limit: Int = 5000): List<Map<String, Any?>> {
+    if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        return emptyList()
+    }
+    val messages = mutableListOf<Map<String, Any?>>()
+    val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.UK)
+    val projection = arrayOf(
+        Telephony.Sms._ID,
+        Telephony.Sms.ADDRESS,
+        Telephony.Sms.BODY,
+        Telephony.Sms.DATE,
+        Telephony.Sms.TYPE
+    )
+    try {
+        context.contentResolver.query(
+            Telephony.Sms.CONTENT_URI,
+            projection,
+            null,
+            null,
+            "${Telephony.Sms.DATE} DESC"
+        )?.use { cursor ->
+            val idIdx = cursor.getColumnIndexOrThrow(Telephony.Sms._ID)
+            val addressIdx = cursor.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
+            val bodyIdx = cursor.getColumnIndexOrThrow(Telephony.Sms.BODY)
+            val dateIdx = cursor.getColumnIndexOrThrow(Telephony.Sms.DATE)
+            val typeIdx = cursor.getColumnIndexOrThrow(Telephony.Sms.TYPE)
+            while (cursor.moveToNext() && messages.size < limit) {
+                val id = cursor.getLong(idIdx)
+                val phone = cursor.getString(addressIdx) ?: continue
+                val body = cursor.getString(bodyIdx) ?: ""
+                val dateMillis = cursor.getLong(dateIdx)
+                val type = cursor.getInt(typeIdx)
+                val outbound = type == Telephony.Sms.MESSAGE_TYPE_SENT ||
+                    type == Telephony.Sms.MESSAGE_TYPE_OUTBOX ||
+                    type == Telephony.Sms.MESSAGE_TYPE_QUEUED
+                messages.add(
+                    mapOf(
+                        "source" to "sms",
+                        "comm_type" to "sms",
+                        "external_message_id" to "android-sms-$id",
+                        "phone" to phone,
+                        "source_phone" to if (outbound) null else phone,
+                        "target_phone" to if (outbound) phone else null,
+                        "direction" to if (outbound) "outbound" else "inbound",
+                        "message" to body,
+                        "sent_at" to formatter.format(Date(dateMillis))
+                    )
+                )
+            }
+        }
+    } catch (e: Exception) {
+        Log.e("SmsImport", "Unable to read SMS history", e)
+    }
+    return messages
+}
+
+data class CommunicationImportStats(
+    val scanned: Int = 0,
+    val imported: Int = 0,
+    val updated: Int = 0,
+    val matched: Int = 0,
+    val unmatched: Int = 0,
+    val message: String? = null
+)
 
 class MainActivity : androidx.fragment.app.FragmentActivity() {
     private var voiceService: VoiceService? = null
@@ -2650,16 +2716,100 @@ fun ClientTasksTab(tasks: List<Task>, viewModel: SecretaryViewModel) {
     }
 }
 
+private fun communicationSourceKey(c: Communication): String =
+    (c.source ?: c.comm_type ?: "manual").lowercase(Locale.UK)
+
+private fun communicationSourceLabel(source: String): String = when (source) {
+    "whatsapp" -> "WhatsApp"
+    "sms" -> "SMS"
+    "email" -> "Email"
+    "telefon" -> "Telefon"
+    "checkatrade" -> "Checkatrade"
+    else -> source.replaceFirstChar { it.uppercase() }
+}
+
+private fun communicationSourceColor(source: String): Color = when (source) {
+    "whatsapp" -> Color(0xFF1FA855)
+    "sms" -> Color(0xFF00897B)
+    "email" -> Color(0xFF1976D2)
+    "telefon" -> Color(0xFFEF6C00)
+    "checkatrade" -> Color(0xFF6D4C41)
+    else -> Color(0xFF607D8B)
+}
+
+private fun communicationImportStatus(stats: CommunicationImportStats): String =
+    stats.message ?: Strings.communicationImportDone(stats.imported, stats.updated, stats.matched, stats.scanned)
+
 @Composable
 fun ClientCommsTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     var showLogDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var importRunning by remember { mutableStateOf(false) }
+    var importStatus by remember { mutableStateOf<String?>(null) }
+    fun runSmsImport() {
+        importRunning = true
+        importStatus = null
+        scope.launch {
+            try {
+                val stats = viewModel.importSmsMessages(readSmsMessagesForImport(context))
+                importStatus = communicationImportStatus(stats)
+                viewModel.loadClientDetail(detail.client.id)
+            } catch (e: Exception) {
+                importStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
+            } finally {
+                importRunning = false
+            }
+        }
+    }
+    val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) runSmsImport() else importStatus = Strings.communicationImportFailed("READ_SMS permission denied")
+    }
     Column(Modifier.fillMaxSize()) {
         if (detail.communications.isEmpty()) {
             Box(Modifier.fillMaxSize().weight(1f), Alignment.Center) { Text(Strings.noCommunications, color = Color.Gray) }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(detail.communications) { c -> CommRow(c); HorizontalDivider() }
+                val sorted = detail.communications.sortedByDescending { it.sent_at ?: it.created_at ?: "" }
+                items(sorted) { c -> CommRow(c); HorizontalDivider() }
             }
+        }
+        importStatus?.let {
+            Text(it, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        runSmsImport()
+                    } else {
+                        smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                    }
+                },
+                enabled = !importRunning,
+                modifier = Modifier.weight(1f)
+            ) {
+                if (importRunning) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text(Strings.importSmsHistory)
+            }
+            OutlinedButton(
+                onClick = {
+                    importRunning = true
+                    importStatus = null
+                    scope.launch {
+                        try {
+                            val stats = viewModel.importServerCommunicationHistory()
+                            importStatus = communicationImportStatus(stats)
+                            viewModel.loadClientDetail(detail.client.id)
+                        } catch (e: Exception) {
+                            importStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
+                        } finally {
+                            importRunning = false
+                        }
+                    }
+                },
+                enabled = !importRunning,
+                modifier = Modifier.weight(1f)
+            ) { Text(Strings.importServerMessageHistory) }
         }
         Button(onClick = { showLogDialog = true }, modifier = Modifier.fillMaxWidth().padding(8.dp)) { Text("+ ${Strings.logCommunicationAction}") }
     }
@@ -2671,11 +2821,15 @@ fun ClientCommsTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
 
 @Composable
 fun CommRow(c: Communication, navController: NavHostController? = null) {
-    val typeEmoji = when (c.comm_type) { "telefon" -> "📞"; "email" -> "📧"; "sms" -> "💬"; "whatsapp" -> "📱"; "checkatrade" -> "🏠"; "osobne" -> "🤝"; else -> "📋" }
+    val source = communicationSourceKey(c)
+    val sourceColor = communicationSourceColor(source)
+    val typeEmoji = when (source) { "telefon" -> "📞"; "email" -> "📧"; "sms" -> "💬"; "whatsapp" -> "📱"; "checkatrade" -> "🏠"; "osobne" -> "🤝"; else -> "📋" }
     val dirLabel = if (c.direction == "outbound") "→ ${Strings.outgoing}" else "← ${Strings.incoming}"
     val dirColor = if (c.direction == "outbound") Color(0xFF2196F3) else Color(0xFF4CAF50)
     Card(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(start = 0.dp, top = 0.dp, end = 0.dp, bottom = 0.dp)) {
+            Box(Modifier.fillMaxWidth().height(4.dp).background(sourceColor))
+            Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(typeEmoji, fontSize = 20.sp)
                 Spacer(Modifier.width(8.dp))
@@ -2685,13 +2839,21 @@ fun CommRow(c: Communication, navController: NavHostController? = null) {
                         modifier = Modifier.clickable { c.client_id?.let { navController?.navigate("client/$it") } })
                     if (c.job_title != null) Text("📋 ${c.job_title}", fontSize = 12.sp, color = Color.Gray)
                 }
-                Text(dirLabel, fontSize = 11.sp, color = dirColor)
+                Column(horizontalAlignment = Alignment.End) {
+                    Surface(shape = RoundedCornerShape(50), color = sourceColor.copy(alpha = 0.16f)) {
+                        Text(communicationSourceLabel(source), Modifier.padding(horizontal = 8.dp, vertical = 3.dp), fontSize = 11.sp, color = sourceColor)
+                    }
+                    Text(dirLabel, fontSize = 11.sp, color = dirColor)
+                }
             }
             if (c.message_summary.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
-                Text(c.message_summary, fontSize = 13.sp, color = Color.Gray, maxLines = 2)
+                Text(c.message_summary, fontSize = 13.sp, color = Color.Gray, maxLines = 6, overflow = TextOverflow.Ellipsis)
             }
+            val phoneLine = listOfNotNull(c.source_phone?.takeIf { it.isNotBlank() }, c.target_phone?.takeIf { it.isNotBlank() }).distinct().joinToString(" → ")
+            if (phoneLine.isNotBlank()) Text(phoneLine, fontSize = 11.sp, color = Color.Gray)
             Text(c.sent_at?.take(16) ?: c.created_at?.take(16) ?: "", fontSize = 11.sp, color = Color.Gray, modifier = Modifier.align(Alignment.End))
+            }
         }
     }
 }
@@ -3814,6 +3976,25 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
     var syncRunning by remember { mutableStateOf(false) }
     var syncStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    fun runSmsImport() {
+        syncRunning = true
+        syncStatus = null
+        scope.launch {
+            try {
+                val stats = viewModel.importSmsMessages(readSmsMessagesForImport(context))
+                syncStatus = communicationImportStatus(stats)
+                comms.value = viewModel.loadAllCommunications()
+            } catch (e: Exception) {
+                syncStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
+            } finally {
+                syncRunning = false
+            }
+        }
+    }
+    val smsPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) runSmsImport() else syncStatus = Strings.communicationImportFailed("READ_SMS permission denied")
+    }
     
     LaunchedEffect(Unit) {
         try {
@@ -3839,37 +4020,67 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
             }
         }
 
-        Row(
+        LazyRow(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
-                onClick = {
-                    syncRunning = true
-                    syncStatus = null
-                    scope.launch {
-                        try {
-                            val (updated, scanned) = viewModel.syncWhatsappAddressesFromMessages()
-                            syncStatus = Strings.whatsappAddressSyncDone(updated, scanned)
-                            comms.value = viewModel.loadAllCommunications()
-                        } catch (e: Exception) {
-                            syncStatus = Strings.whatsappAddressSyncFailed(e.message ?: "unknown error")
-                        } finally {
-                            syncRunning = false
+            item {
+                OutlinedButton(
+                    onClick = {
+                        syncRunning = true
+                        syncStatus = null
+                        scope.launch {
+                            try {
+                                val (updated, scanned) = viewModel.syncWhatsappAddressesFromMessages()
+                                syncStatus = Strings.whatsappAddressSyncDone(updated, scanned)
+                                comms.value = viewModel.loadAllCommunications()
+                            } catch (e: Exception) {
+                                syncStatus = Strings.whatsappAddressSyncFailed(e.message ?: "unknown error")
+                            } finally {
+                                syncRunning = false
+                            }
                         }
-                    }
-                },
-                enabled = !syncRunning
-            ) {
-                if (syncRunning) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(Strings.syncWhatsappAddresses)
+                    },
+                    enabled = !syncRunning
+                ) {
+                    if (syncRunning) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text(Strings.syncWhatsappAddresses)
                 }
             }
+            item {
+                OutlinedButton(
+                    onClick = {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            runSmsImport()
+                        } else {
+                            smsPermissionLauncher.launch(Manifest.permission.READ_SMS)
+                        }
+                    },
+                    enabled = !syncRunning
+                ) { Text(Strings.importSmsHistory) }
+            }
+            item {
+                OutlinedButton(
+                    onClick = {
+                        syncRunning = true
+                        syncStatus = null
+                        scope.launch {
+                            try {
+                                val stats = viewModel.importServerCommunicationHistory()
+                                syncStatus = communicationImportStatus(stats)
+                                comms.value = viewModel.loadAllCommunications()
+                            } catch (e: Exception) {
+                                syncStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
+                            } finally {
+                                syncRunning = false
+                            }
+                        }
+                    },
+                    enabled = !syncRunning
+                ) { Text(Strings.importServerMessageHistory) }
+            }
             syncStatus?.let {
-                Text(it, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.weight(1f))
+                item { Text(it, fontSize = 12.sp, color = Color.Gray) }
             }
         }
         
@@ -4723,6 +4934,39 @@ class SecretaryViewModel : ViewModel() {
         val scanned = (summary["scanned"] as? Number)?.toInt() ?: 0
         refreshCrmData()
         return updated to scanned
+    }
+
+    private fun parseCommunicationImportStats(body: Map<String, @JvmSuppressWildcards Any?>): CommunicationImportStats {
+        val summary = body["summary"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        return CommunicationImportStats(
+            scanned = (summary["scanned"] as? Number)?.toInt() ?: 0,
+            imported = (summary["imported"] as? Number)?.toInt() ?: 0,
+            updated = (summary["updated"] as? Number)?.toInt() ?: 0,
+            matched = (summary["matched"] as? Number)?.toInt() ?: 0,
+            unmatched = (summary["unmatched"] as? Number)?.toInt() ?: 0,
+            message = summary["message"] as? String
+        )
+    }
+
+    suspend fun importSmsMessages(messages: List<Map<String, @JvmSuppressWildcards Any?>>): CommunicationImportStats {
+        if (messages.isEmpty()) return CommunicationImportStats(message = "No SMS messages available")
+        val res = api.importCommunications(mapOf("source" to "sms", "messages" to messages))
+        if (!res.isSuccessful) {
+            throw IllegalStateException(res.errorBody()?.string() ?: "HTTP ${res.code()}")
+        }
+        val stats = parseCommunicationImportStats(res.body() ?: emptyMap())
+        refreshCrmData()
+        return stats
+    }
+
+    suspend fun importServerCommunicationHistory(): CommunicationImportStats {
+        val res = api.importProviderCommunicationHistory(mapOf("limit" to 5000))
+        if (!res.isSuccessful) {
+            throw IllegalStateException(res.errorBody()?.string() ?: "HTTP ${res.code()}")
+        }
+        val stats = parseCommunicationImportStats(res.body() ?: emptyMap())
+        refreshCrmData()
+        return stats
     }
 
     fun takePhotoForTask(taskId: String, taskTitle: String) {

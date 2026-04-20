@@ -810,6 +810,18 @@ object Strings {
     val hourlyRateLabel get() = t("Hourly rate (£/h)", "Hodinová sazba (£/h)", "Stawka godzinowa (£/h)")
     val noCommunications get() = t("No communications", "Žádná komunikace", "Brak komunikacji")
     val logCommunicationAction get() = t("Log communication", "Zalogovat komunikaci", "Dodaj komunikację")
+    val importSmsHistory get() = t("Import SMS history", "Importovat SMS historii", "Importuj historię SMS")
+    val importServerMessageHistory get() = t("Import server history", "Importovat historii ze serveru", "Importuj historię z serwera")
+    fun communicationImportDone(imported: Int, updated: Int, matched: Int, scanned: Int): String = t(
+        "Import done: $imported new, $updated updated, $matched matched from $scanned messages.",
+        "Import hotový: $imported nových, $updated aktualizovaných, $matched spárovaných z $scanned zpráv.",
+        "Import gotowy: $imported nowych, $updated zaktualizowanych, $matched dopasowanych z $scanned wiadomości."
+    )
+    fun communicationImportFailed(error: String): String = t(
+        "Message import failed: $error",
+        "Import zpráv selhal: $error",
+        "Import wiadomości nie powiódł się: $error"
+    )
     val syncWhatsappAddresses get() = t("Import addresses from WhatsApp", "Doplnit adresy z WhatsApp", "Uzupełnij adresy z WhatsApp")
     fun whatsappAddressSyncDone(updated: Int, scanned: Int): String = t(
         "WhatsApp address scan finished: $updated updated from $scanned messages.",

@@ -208,6 +208,12 @@ interface SecretaryApi {
     @POST("crm/communications")
     suspend fun logCommunication(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
+    @POST("crm/communications/import")
+    suspend fun importCommunications(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("crm/communications/provider-history-import")
+    suspend fun importProviderCommunicationHistory(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     @POST("crm/communications/whatsapp-address-sync")
     suspend fun syncWhatsappAddresses(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 

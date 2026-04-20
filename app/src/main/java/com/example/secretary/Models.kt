@@ -532,12 +532,18 @@ data class Communication(
     val job_id: Long? = null,
     val job_title: String? = null,
     val comm_type: String? = "telefon",
+    val source: String? = null,
+    val external_message_id: String? = null,
+    val source_phone: String? = null,
+    val target_phone: String? = null,
+    val conversation_key: String? = null,
     val subject: String? = null,
     val message_summary: String = "",
     val sent_at: String? = null,
     val direction: String = "inbound",
     val notes: String? = null,
-    val created_at: String? = null
+    val created_at: String? = null,
+    val imported_at: String? = null
 )
 
 // === TASK — matches DB: tasks table (EXTRA_TABLES_SQL) ===
