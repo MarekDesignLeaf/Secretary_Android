@@ -34,7 +34,7 @@ class ContactManager(private val context: Context) {
                 val numIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
                 while (cursor.moveToNext()) {
                     val contactId = cursor.getLong(idIdx).toString()
-                    val name = cursor.getString(nameIdx) ?: continue
+                    val name = cursor.getString(nameIdx).cleanContactName().takeIf(String::isNotBlank) ?: continue
                     val number = cursor.getString(numIdx) ?: continue
                     val contact = mutableMapOf(
                         "contact_id" to contactId,
@@ -66,7 +66,7 @@ class ContactManager(private val context: Context) {
                 while (cursor.moveToNext()) {
                     val contactId = cursor.getLong(idIdx).toString()
                     if (seenContactIds.contains(contactId)) continue
-                    val name = cursor.getString(nameIdx) ?: continue
+                    val name = cursor.getString(nameIdx).cleanContactName().takeIf(String::isNotBlank) ?: continue
                     val contact = mutableMapOf(
                         "contact_id" to contactId,
                         "name" to name,
@@ -98,7 +98,7 @@ class ContactManager(private val context: Context) {
                 val emailIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Email.ADDRESS)
                 while (cursor.moveToNext()) {
                     val contactId = cursor.getLong(idIdx).toString()
-                    val name = cursor.getString(nameIdx) ?: continue
+                    val name = cursor.getString(nameIdx).cleanContactName().takeIf(String::isNotBlank) ?: continue
                     val email = cursor.getString(emailIdx) ?: continue
                     emailByContactId[contactId] = email
                     emailByName[name] = email
@@ -134,7 +134,7 @@ class ContactManager(private val context: Context) {
                 
                 while (cursor.moveToNext()) {
                     val contactId = cursor.getLong(idIdx).toString()
-                    val name = cursor.getString(nameIdx) ?: continue
+                    val name = cursor.getString(nameIdx).cleanContactName().takeIf(String::isNotBlank) ?: continue
                     val number = cursor.getString(numIdx) ?: continue
                     val contact = mutableMapOf(
                         "contact_id" to contactId,
@@ -163,7 +163,7 @@ class ContactManager(private val context: Context) {
                 while (cursor.moveToNext()) {
                     val contactId = cursor.getLong(idIdx).toString()
                     if (seenContactIds.contains(contactId)) continue
-                    val name = cursor.getString(nameIdx) ?: continue
+                    val name = cursor.getString(nameIdx).cleanContactName().takeIf(String::isNotBlank) ?: continue
                     val contact = mutableMapOf(
                         "contact_id" to contactId,
                         "name" to name,
@@ -261,6 +261,12 @@ class ContactManager(private val context: Context) {
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .joinToString(", ")
+
+    private fun String?.cleanContactName(): String =
+        orEmpty()
+            .replace(Regex("\\*+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
     private fun List<String?>.joinAddressParts(): String =
         mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
