@@ -380,6 +380,43 @@ object Strings {
         "Vytáčení se nepodařilo otevřít pro číslo $phone.",
         "Nie udało się otworzyć wybierania dla numeru $phone."
     )
+    fun whatsAppUnavailable(phone: String): String = t(
+        "WhatsApp could not be opened for $phone.",
+        "WhatsApp se nepodařilo otevřít pro číslo $phone.",
+        "Nie udało się otworzyć WhatsApp dla numeru $phone."
+    )
+    val sayCallContact get() = t(
+        "Who should I call?",
+        "Komu mám zavolat?",
+        "Do kogo mam zadzwonić?"
+    )
+    val dialing get() = t("Dialing...", "Vytáčím...", "Wybieram numer...")
+    fun dialingContact(name: String): String = t(
+        "Dialing $name.",
+        "Vytáčím $name.",
+        "Wybieram $name."
+    )
+    fun noPhoneAvailableFor(name: String): String = t(
+        "No phone number is saved for $name.",
+        "U kontaktu $name není uložené telefonní číslo.",
+        "Kontakt $name nie ma zapisanego numeru telefonu."
+    )
+    val sayWhatsAppContact get() = t(
+        "Who should I message on WhatsApp?",
+        "Komu mám napsat na WhatsApp?",
+        "Do kogo mam napisać na WhatsApp?"
+    )
+    fun sayWhatsAppMessage(name: String): String = t(
+        "What message should I send to $name on WhatsApp?",
+        "Jakou zprávu mám poslat kontaktu $name na WhatsApp?",
+        "Jaką wiadomość mam wysłać do $name na WhatsApp?"
+    )
+    val openingWhatsApp get() = t("Opening WhatsApp...", "Otevírám WhatsApp...", "Otwieram WhatsApp...")
+    fun openingWhatsAppFor(name: String): String = t(
+        "Opening WhatsApp for $name.",
+        "Otevírám WhatsApp pro $name.",
+        "Otwieram WhatsApp dla $name."
+    )
     val city get() = t("City", "Město", "Miasto")
     val postcode get() = t("Postcode", "PSČ", "Kod pocztowy")
     val country get() = t("Country", "Země", "Kraj")

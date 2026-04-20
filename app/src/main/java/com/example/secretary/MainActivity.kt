@@ -238,6 +238,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val opened = openDialer(this@MainActivity, phone)
                     vm.onCallLaunchHandled(opened, phone)
                 }
+
+                LaunchedEffect(state.pendingWhatsAppPhone, state.pendingWhatsAppMessage) {
+                    val phone = state.pendingWhatsAppPhone?.trim()?.takeIf(String::isNotBlank) ?: return@LaunchedEffect
+                    val opened = openWhatsApp(this@MainActivity, phone, state.pendingWhatsAppMessage.orEmpty())
+                    vm.onWhatsAppLaunchHandled(opened, phone)
+                }
                 
                 when (state.loggedIn) {
                     null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2454,6 +2460,43 @@ private fun openDialer(context: Context, phone: String): Boolean {
         Log.w("Dialer", "Failed to open dialer for phone: $cleanPhone", e)
         false
     }
+}
+
+private fun normalizePhoneForWhatsApp(phone: String): String {
+    val raw = phone.trim().filter { it.isDigit() || it == '+' }
+    val international = when {
+        raw.startsWith("+") -> raw.drop(1)
+        raw.startsWith("00") -> raw.drop(2)
+        raw.startsWith("0") && raw.length in 10..11 -> "44${raw.drop(1)}"
+        else -> raw
+    }
+    return international.filter(Char::isDigit)
+}
+
+private fun openWhatsApp(context: Context, phone: String, message: String): Boolean {
+    val cleanPhone = normalizePhoneForWhatsApp(phone)
+    if (cleanPhone.length < 8) return false
+    val uri = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encode(message)}")
+    val intents = listOf(
+        Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.whatsapp") },
+        Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.whatsapp.w4b") },
+        Intent(Intent.ACTION_VIEW, uri)
+    ).map { intent ->
+        intent.apply {
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+    for (intent in intents) {
+        try {
+            context.startActivity(intent)
+            return true
+        } catch (_: Exception) {
+            // Try the next installed WhatsApp variant or browser fallback.
+        }
+    }
+    Log.w("WhatsApp", "Failed to open WhatsApp for phone: $phone")
+    return false
 }
 
 private fun openNavigation(context: Context, address: String): Boolean {
@@ -5168,6 +5211,14 @@ class SecretaryViewModel : ViewModel() {
         )
     }
 
+    fun onWhatsAppLaunchHandled(opened: Boolean, phone: String) {
+        _uiState.value = _uiState.value.copy(
+            pendingWhatsAppPhone = null,
+            pendingWhatsAppMessage = null,
+            status = if (opened) Strings.waitingForCommand else Strings.whatsAppUnavailable(phone)
+        )
+    }
+
     fun updateContext(id: Long?, type: String?) {
         _uiState.value = _uiState.value.copy(contextEntityId = id, contextType = type)
     }
@@ -6441,6 +6492,14 @@ class SecretaryViewModel : ViewModel() {
             }
             return
         }
+        parseVoiceCallTarget(text)?.let { target ->
+            startVoiceCallTarget(target, text)
+            return
+        }
+        parseVoiceWhatsAppCommand(text)?.let { command ->
+            startVoiceWhatsApp(command, text)
+            return
+        }
         // If voice work report session is active, redirect to session
         if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
             processVoiceSessionInput(text)
@@ -6491,7 +6550,7 @@ class SecretaryViewModel : ViewModel() {
                             history = _uiState.value.history + newAssistantMessage
                         )
                         handleAction(response)
-                        if (response.action_type != "SEARCH_CONTACTS" && response.action_type != "LIST_CALENDAR_EVENTS" && response.action_type != "START_WORK_REPORT") {
+                        if (response.action_type !in setOf("SEARCH_CONTACTS", "LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP")) {
                             voiceManager?.speak(assistantReply, expectReply = response.is_question)
                         }
                         // Refresh CRM data ale NEZNICIT lokalni tasky
@@ -6529,6 +6588,17 @@ class SecretaryViewModel : ViewModel() {
         val name: String,
         val address: String?,
         val score: Int
+    )
+
+    private data class PhoneContactCandidate(
+        val name: String,
+        val phone: String?,
+        val score: Int
+    )
+
+    private data class WhatsAppVoiceCommand(
+        val target: String,
+        val message: String
     )
 
     private fun startVoiceNavigationTarget(target: String, originalText: String = target) {
@@ -6658,6 +6728,124 @@ class SecretaryViewModel : ViewModel() {
         )
     }
 
+    private fun startVoiceCallTarget(target: String, originalText: String = target) {
+        val cleanTarget = target.trim()
+        if (cleanTarget.isBlank()) {
+            val message = Strings.sayCallContact
+            _uiState.value = _uiState.value.copy(
+                status = Strings.waitingForCommand,
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = true)
+            return
+        }
+        val candidate = resolvePhoneTarget(cleanTarget)
+        val message = when {
+            candidate == null -> Strings.noContactFound(cleanTarget)
+            candidate.phone.isNullOrBlank() -> Strings.noPhoneAvailableFor(candidate.name)
+            else -> Strings.dialingContact(candidate.name)
+        }
+        _uiState.value = _uiState.value.copy(
+            pendingCall = candidate?.phone?.takeIf(String::isNotBlank),
+            isListening = false,
+            status = if (candidate?.phone.isNullOrBlank()) Strings.waitingForCommand else Strings.dialing,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = false)
+    }
+
+    private fun startVoiceWhatsApp(command: WhatsAppVoiceCommand, originalText: String) {
+        val cleanTarget = command.target.trim()
+        val cleanMessage = command.message.trim()
+        if (cleanTarget.isBlank()) {
+            val message = Strings.sayWhatsAppContact
+            _uiState.value = _uiState.value.copy(
+                status = Strings.waitingForCommand,
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = true)
+            return
+        }
+        val candidate = resolvePhoneTarget(cleanTarget)
+        val reply = when {
+            candidate == null -> Strings.noContactFound(cleanTarget)
+            candidate.phone.isNullOrBlank() -> Strings.noPhoneAvailableFor(candidate.name)
+            cleanMessage.isBlank() -> Strings.sayWhatsAppMessage(candidate.name)
+            else -> Strings.openingWhatsAppFor(candidate.name)
+        }
+        _uiState.value = _uiState.value.copy(
+            pendingWhatsAppPhone = if (!candidate?.phone.isNullOrBlank() && cleanMessage.isNotBlank()) candidate?.phone else null,
+            pendingWhatsAppMessage = if (!candidate?.phone.isNullOrBlank() && cleanMessage.isNotBlank()) cleanMessage else null,
+            isListening = false,
+            status = if (!candidate?.phone.isNullOrBlank() && cleanMessage.isNotBlank()) Strings.openingWhatsApp else Strings.waitingForCommand,
+            lastAiReply = reply,
+            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", reply)).takeLast(30)
+        )
+        voiceManager?.speak(reply, expectReply = false)
+    }
+
+    private fun resolvePhoneTarget(query: String): PhoneContactCandidate? {
+        val normalizedQuery = stripContactCommandPrefixes(query)
+        if (normalizedQuery.length < 2) return null
+        val words = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        fun score(labels: List<String>): Int? {
+            val normalizedLabels = labels.map { normalizeVoiceCommand(it) }.filter { it.isNotBlank() }
+            if (normalizedLabels.any { it == normalizedQuery }) return 0
+            if (normalizedLabels.any { it.startsWith(normalizedQuery) }) return 1
+            if (normalizedLabels.any { label -> words.all { it.length > 1 && label.contains(it) } }) return 2
+            if (normalizedLabels.any { it.contains(normalizedQuery) }) return 3
+            return null
+        }
+        val clientMatches = _uiState.value.clients.mapNotNull { client ->
+            val labels = listOfNotNull(
+                client.display_name,
+                client.company_name,
+                client.client_code,
+                client.phone_primary,
+                client.phone_secondary,
+                client.email_primary
+            )
+            score(labels)?.let {
+                PhoneContactCandidate(client.display_name, client.phone_primary?.takeIf(String::isNotBlank) ?: client.phone_secondary, it)
+            }
+        }
+        val sharedMatches = _uiState.value.sharedContacts.mapNotNull { contact ->
+            val labels = listOfNotNull(
+                contact.display_name,
+                contact.company_name,
+                contact.phone_primary,
+                contact.email_primary
+            )
+            score(labels)?.let { PhoneContactCandidate(contact.display_name, contact.phone_primary, it + 1) }
+        }
+        val deviceMatches = contactManager
+            ?.searchContact(query)
+            .orEmpty()
+            .mapIndexedNotNull { index, contact ->
+                val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
+                PhoneContactCandidate(name, contact["phone"]?.takeIf(String::isNotBlank), 10 + index)
+            }
+        return (clientMatches + sharedMatches + deviceMatches).minWithOrNull(
+            compareBy<PhoneContactCandidate> { if (it.phone.isNullOrBlank()) it.score + 100 else it.score }.thenBy { it.name.length }
+        )
+    }
+
+    private fun stripContactCommandPrefixes(query: String): String {
+        var value = normalizeVoiceCommand(query)
+        listOf(
+            "klient ", "klienta ", "kontakt ", "kontaktu ", "client ", "contact ",
+            "zavolej ", "volej ", "volat ", "vytoc ", "vytocit ", "call ", "dial ",
+            "posli whatsapp ", "posli zpravu whatsapp ", "napis whatsapp ", "napis na whatsapp ",
+            "whatsapp ", "send whatsapp ", "whatsapp message "
+        ).forEach { prefix ->
+            value = value.removePrefix(prefix)
+        }
+        return value.trim()
+    }
+
     private fun parseVoiceNavigationAddress(text: String): String? {
         val normalized = normalizeVoiceCommand(text)
         val prefixes = listOf(
@@ -6727,6 +6915,60 @@ class SecretaryViewModel : ViewModel() {
             return normalized.drop(prefix.length).trim()
         }
         return null
+    }
+
+    private fun parseVoiceCallTarget(text: String): String? {
+        val normalized = normalizeVoiceCommand(text)
+        val prefixes = listOf(
+            "zavolej ",
+            "volej ",
+            "volat ",
+            "vytoc ",
+            "vytocit ",
+            "call ",
+            "dial ",
+            "zadzwon do ",
+            "zadzwon "
+        )
+        prefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            return normalized.drop(prefix.length).trim()
+        }
+        return null
+    }
+
+    private fun parseVoiceWhatsAppCommand(text: String): WhatsAppVoiceCommand? {
+        val normalized = normalizeVoiceCommand(text)
+        val prefixes = listOf(
+            "posli whatsapp ",
+            "posli zpravu whatsapp ",
+            "posli zpravu na whatsapp ",
+            "napis whatsapp ",
+            "napis na whatsapp ",
+            "whatsapp message ",
+            "whatsapp ",
+            "send whatsapp ",
+            "wyslij whatsapp ",
+            "napisz whatsapp "
+        )
+        val prefix = prefixes.firstOrNull { normalized.startsWith(it) } ?: return null
+        val remainder = normalized.drop(prefix.length).trim()
+        if (remainder.isBlank()) return WhatsAppVoiceCommand("", "")
+
+        val separator = Regex("\\b(zpravu|zprava|message|text|ze|aby)\\b").find(remainder)
+        if (separator != null && separator.range.first > 0) {
+            val target = remainder.substring(0, separator.range.first).trim()
+            val message = remainder.substring(separator.range.last + 1).trim()
+            return WhatsAppVoiceCommand(target, message)
+        }
+
+        val words = remainder.split(" ").filter { it.isNotBlank() }
+        for (count in minOf(4, words.size - 1) downTo 1) {
+            val target = words.take(count).joinToString(" ")
+            if (resolvePhoneTarget(target) != null) {
+                return WhatsAppVoiceCommand(target, words.drop(count).joinToString(" "))
+            }
+        }
+        return WhatsAppVoiceCommand(remainder, "")
     }
 
     private fun normalizeVoiceCommand(text: String): String =
@@ -6861,8 +7103,41 @@ class SecretaryViewModel : ViewModel() {
                 _uiState.value = _uiState.value.copy(tasks = _uiState.value.tasks + newTask)
             }
             "CALL_CONTACT" -> {
-                val phone = response.action_data?.get("phone") as? String ?: return
-                _uiState.value = _uiState.value.copy(pendingCall = phone)
+                val phone = response.action_data?.get("phone") as? String
+                val target = listOf("contact_name", "client_name", "name", "query")
+                    .firstNotNullOfOrNull { response.action_data?.get(it) as? String }
+                if (!phone.isNullOrBlank()) {
+                    val label = target?.takeIf(String::isNotBlank) ?: phone
+                    val message = Strings.dialingContact(label)
+                    _uiState.value = _uiState.value.copy(
+                        pendingCall = phone,
+                        lastAiReply = message,
+                        history = (_uiState.value.history + ChatMessage("assistant", message)).takeLast(30)
+                    )
+                    voiceManager?.speak(message, expectReply = false)
+                } else if (!target.isNullOrBlank()) {
+                    startVoiceCallTarget(target, target)
+                }
+            }
+            "SEND_WHATSAPP" -> {
+                val data = response.action_data ?: return
+                val phone = data["phone"] as? String
+                val target = listOf("client_name", "contact_name", "name", "query")
+                    .firstNotNullOfOrNull { data[it] as? String }
+                val message = (data["message"] as? String).orEmpty()
+                if (!phone.isNullOrBlank()) {
+                    val label = target?.takeIf(String::isNotBlank) ?: phone
+                    val reply = Strings.openingWhatsAppFor(label)
+                    _uiState.value = _uiState.value.copy(
+                        pendingWhatsAppPhone = phone,
+                        pendingWhatsAppMessage = message,
+                        lastAiReply = reply,
+                        history = (_uiState.value.history + ChatMessage("assistant", reply)).takeLast(30)
+                    )
+                    voiceManager?.speak(reply, expectReply = false)
+                } else if (!target.isNullOrBlank()) {
+                    startVoiceWhatsApp(WhatsAppVoiceCommand(target, message), target)
+                }
             }
             "LIST_TASKS" -> {
                 refreshCrmData()
@@ -6992,6 +7267,8 @@ data class UiState(
     val hierarchyIntegrityError: String? = null,
     val pendingImport: Map<String, String>? = null,
     val pendingCall: String? = null,
+    val pendingWhatsAppPhone: String? = null,
+    val pendingWhatsAppMessage: String? = null,
     val pendingPhotoTaskId: String? = null,
     val pendingPhotoTaskTitle: String? = null,
     val pendingPlantCaptureRequestId: Long? = null,
