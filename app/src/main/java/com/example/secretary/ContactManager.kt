@@ -7,6 +7,14 @@ import android.util.Log
 class ContactManager(private val context: Context) {
     private val TAG = "ContactManager"
 
+    private data class PostalAddress(
+        val formatted: String,
+        val line1: String?,
+        val city: String?,
+        val postcode: String?,
+        val country: String?
+    )
+
     fun getAllContacts(): List<Map<String, String>> {
         val results = mutableListOf<Map<String, String>>()
         val addressesByContactId = getPostalAddressMap()
@@ -32,7 +40,7 @@ class ContactManager(private val context: Context) {
                         "name" to name,
                         "phone" to number
                     )
-                    addressesByContactId[contactId]?.let { contact["address"] = it }
+                    addressesByContactId[contactId]?.let { contact.addPostalAddress(it) }
                     results.add(contact)
                 }
             }
@@ -99,7 +107,7 @@ class ContactManager(private val context: Context) {
                         "name" to name,
                         "phone" to number
                     )
-                    addressesByContactId[contactId]?.let { contact["address"] = it }
+                    addressesByContactId[contactId]?.let { contact.addPostalAddress(it) }
                     results.add(contact)
                 }
             }
@@ -109,8 +117,8 @@ class ContactManager(private val context: Context) {
         return results.distinctBy { it["phone"] }
     }
 
-    private fun getPostalAddressMap(): Map<String, String> {
-        val addresses = mutableMapOf<String, String>()
+    private fun getPostalAddressMap(): Map<String, PostalAddress> {
+        val addresses = mutableMapOf<String, PostalAddress>()
         val uri = ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_URI
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.StructuredPostal.CONTACT_ID,
@@ -130,15 +138,24 @@ class ContactManager(private val context: Context) {
                 val countryIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.StructuredPostal.COUNTRY)
                 while (cursor.moveToNext()) {
                     val contactId = cursor.getLong(idIdx).toString()
-                    val formatted = cursor.getString(formattedIdx)
-                    val address = formatted?.cleanAddress()
-                        ?: listOf(
-                            cursor.getString(streetIdx),
-                            cursor.getString(cityIdx),
-                            cursor.getString(postcodeIdx),
-                            cursor.getString(countryIdx)
-                        ).joinAddressParts()
-                    if (address.isNotBlank()) addresses.putIfAbsent(contactId, address)
+                    val line1 = cursor.getOptionalString(streetIdx)
+                    val city = cursor.getOptionalString(cityIdx)
+                    val postcode = cursor.getOptionalString(postcodeIdx)
+                    val country = cursor.getOptionalString(countryIdx)
+                    val formatted = cursor.getOptionalString(formattedIdx)?.cleanAddress()
+                        ?: listOf(line1, city, postcode, country).joinAddressParts()
+                    if (formatted.isNotBlank()) {
+                        addresses.putIfAbsent(
+                            contactId,
+                            PostalAddress(
+                                formatted = formatted,
+                                line1 = line1,
+                                city = city,
+                                postcode = postcode,
+                                country = country
+                            )
+                        )
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -146,6 +163,29 @@ class ContactManager(private val context: Context) {
         }
         return addresses
     }
+
+    private fun MutableMap<String, String>.addPostalAddress(address: PostalAddress) {
+        this["address"] = address.formatted
+        address.line1?.let {
+            this["address_line1"] = it
+            this["billing_address_line1"] = it
+        }
+        address.city?.let {
+            this["city"] = it
+            this["billing_city"] = it
+        }
+        address.postcode?.let {
+            this["postcode"] = it
+            this["billing_postcode"] = it
+        }
+        address.country?.let {
+            this["country"] = it
+            this["billing_country"] = it
+        }
+    }
+
+    private fun android.database.Cursor.getOptionalString(index: Int): String? =
+        if (index >= 0) getString(index)?.trim()?.takeIf(String::isNotBlank) else null
 
     private fun String.cleanAddress(): String =
         split('\n', '\r')

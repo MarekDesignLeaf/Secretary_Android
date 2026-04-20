@@ -1535,6 +1535,9 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
         it.name.contains(searchQuery, ignoreCase = true) ||
             (it.phone ?: "").contains(searchQuery, ignoreCase = true) ||
             (it.email ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.address ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.city ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.postcode ?: "").contains(searchQuery, ignoreCase = true) ||
             (it.linked_client_name ?: "").contains(searchQuery, ignoreCase = true)
     }
     Column(Modifier.fillMaxSize()) {
@@ -1622,6 +1625,7 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                                         Text(contact.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         contact.phone?.takeIf { it.isNotBlank() }?.let { Text("\u260E $it", fontSize = 13.sp) }
                                         contact.email?.takeIf { it.isNotBlank() }?.let { Text("\u2709 $it", fontSize = 13.sp, color = Color.Gray) }
+                                        contact.address?.takeIf { it.isNotBlank() }?.let { Text("${Strings.address}: $it", fontSize = 12.sp, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                                         if (contact.linked_client_name != null) {
                                             Text("${Strings.syncedToClient}: ${contact.linked_client_name}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                                         }
@@ -5287,12 +5291,26 @@ class SecretaryViewModel : ViewModel() {
             }
             val contactKey = normalizedPhone
                 .ifBlank { cleanedEmail.ifBlank { normalizedName.lowercase(Locale.ROOT) } }
-            mapOf(
+            mutableMapOf(
                 "contact_key" to contactKey,
                 "name" to normalizedName,
                 "phone" to cleanedPhone,
                 "email" to cleanedEmail
-            )
+            ).apply {
+                listOf(
+                    "address",
+                    "address_line1",
+                    "city",
+                    "postcode",
+                    "country",
+                    "billing_address_line1",
+                    "billing_city",
+                    "billing_postcode",
+                    "billing_country"
+                ).forEach { key ->
+                    c[key]?.trim()?.takeIf(String::isNotBlank)?.let { this[key] = it }
+                }
+            }
         }.filter { it["contact_key"].orEmpty().isNotBlank() }
 
         if (onlyUkNumbers) {
@@ -5326,6 +5344,15 @@ class SecretaryViewModel : ViewModel() {
                             name = local["name"].orEmpty(),
                             phone = local["phone"],
                             email = local["email"]?.ifBlank { null },
+                            address = local["address"]?.ifBlank { null } ?: remote?.address,
+                            address_line1 = local["address_line1"]?.ifBlank { null } ?: remote?.address_line1,
+                            city = local["city"]?.ifBlank { null } ?: remote?.city,
+                            postcode = local["postcode"]?.ifBlank { null } ?: remote?.postcode,
+                            country = local["country"]?.ifBlank { null } ?: remote?.country,
+                            billing_address_line1 = local["billing_address_line1"]?.ifBlank { null } ?: remote?.billing_address_line1 ?: remote?.address_line1,
+                            billing_city = local["billing_city"]?.ifBlank { null } ?: remote?.billing_city ?: remote?.city,
+                            billing_postcode = local["billing_postcode"]?.ifBlank { null } ?: remote?.billing_postcode ?: remote?.postcode,
+                            billing_country = local["billing_country"]?.ifBlank { null } ?: remote?.billing_country ?: remote?.country,
                             selected_as_client = remote?.selected_as_client == true,
                             linked_client_id = remote?.linked_client_id,
                             linked_client_name = remote?.linked_client_name
@@ -5362,6 +5389,15 @@ class SecretaryViewModel : ViewModel() {
                         "name" to contact.name,
                         "phone" to contact.phone,
                         "email" to contact.email,
+                        "address" to contact.address,
+                        "address_line1" to contact.address_line1,
+                        "city" to contact.city,
+                        "postcode" to contact.postcode,
+                        "country" to contact.country,
+                        "billing_address_line1" to contact.billing_address_line1,
+                        "billing_city" to contact.billing_city,
+                        "billing_postcode" to contact.billing_postcode,
+                        "billing_country" to contact.billing_country,
                         "selected_as_client" to contact.selected_as_client
                     )
                 }
@@ -5402,6 +5438,11 @@ class SecretaryViewModel : ViewModel() {
                         name = it["name"].orEmpty(),
                         phone = it["phone"]?.ifBlank { null },
                         email = it["email"]?.ifBlank { null },
+                        address = it["address"]?.ifBlank { null },
+                        address_line1 = it["address_line1"]?.ifBlank { null },
+                        city = it["city"]?.ifBlank { null },
+                        postcode = it["postcode"]?.ifBlank { null },
+                        country = it["country"]?.ifBlank { null },
                         selected = false,
                         section_code = defaultSection
                     )
@@ -5477,6 +5518,11 @@ class SecretaryViewModel : ViewModel() {
                         "display_name" to it.name,
                         "phone_primary" to it.phone,
                         "email_primary" to it.email,
+                        "address" to it.address,
+                        "address_line1" to it.address_line1,
+                        "city" to it.city,
+                        "postcode" to it.postcode,
+                        "country" to it.country,
                         "section_code" to it.section_code,
                         "selected" to it.selected
                     )

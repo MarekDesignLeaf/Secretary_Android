@@ -96,7 +96,11 @@ fun ContactsDirectoryTab(state: UiState, viewModel: SecretaryViewModel) {
             it.display_name.contains(searchQuery, ignoreCase = true) ||
             (it.company_name ?: "").contains(searchQuery, ignoreCase = true) ||
             (it.phone_primary ?: "").contains(searchQuery, ignoreCase = true) ||
-            (it.email_primary ?: "").contains(searchQuery, ignoreCase = true)
+            (it.email_primary ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.address ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.address_line1 ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.city ?: "").contains(searchQuery, ignoreCase = true) ||
+            (it.postcode ?: "").contains(searchQuery, ignoreCase = true)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -173,6 +177,10 @@ fun ContactsDirectoryTab(state: UiState, viewModel: SecretaryViewModel) {
                                     contact.company_name?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
                                     contact.phone_primary?.let { Text("\u260E $it", fontSize = 13.sp) }
                                     contact.email_primary?.let { Text("\u2709 $it", fontSize = 13.sp, color = Color.Gray) }
+                                    contact.fullAddress()?.let {
+                                        Text("${Strings.address}: $it", fontSize = 12.sp, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                        AddressActionsRow(it, viewModel)
+                                    }
                                     contact.notes?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 12.sp, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                                 }
                             }
@@ -240,6 +248,10 @@ fun SharedContactDialog(
     var companyName by remember(contact) { mutableStateOf(contact?.company_name ?: "") }
     var phone by remember(contact) { mutableStateOf(contact?.phone_primary ?: "") }
     var email by remember(contact) { mutableStateOf(contact?.email_primary ?: "") }
+    var addressLine1 by remember(contact) { mutableStateOf(contact?.address_line1 ?: contact?.address ?: "") }
+    var city by remember(contact) { mutableStateOf(contact?.city ?: "") }
+    var postcode by remember(contact) { mutableStateOf(contact?.postcode ?: "") }
+    var country by remember(contact) { mutableStateOf(contact?.country ?: "") }
     var notes by remember(contact) { mutableStateOf(contact?.notes ?: "") }
     var sectionCode by remember(contact, sections) { mutableStateOf(contact?.section_code ?: sections.firstOrNull()?.section_code.orEmpty()) }
     var sectionExpanded by remember { mutableStateOf(false) }
@@ -279,6 +291,10 @@ fun SharedContactDialog(
                 item { OutlinedTextField(companyName, { companyName = it }, label = { Text(Strings.companyNameLabel) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting) }
                 item { OutlinedTextField(phone, { phone = it }, label = { Text(Strings.phone) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting) }
                 item { OutlinedTextField(email, { email = it }, label = { Text(Strings.email) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting) }
+                item { OutlinedTextField(addressLine1, { addressLine1 = it }, label = { Text(Strings.address) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting) }
+                item { OutlinedTextField(city, { city = it }, label = { Text(Strings.city) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting) }
+                item { OutlinedTextField(postcode, { postcode = it }, label = { Text(Strings.postcode) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting) }
+                item { OutlinedTextField(country, { country = it }, label = { Text(Strings.country) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !submitting) }
                 item { OutlinedTextField(notes, { notes = it }, label = { Text(Strings.notesLabel) }, modifier = Modifier.fillMaxWidth(), minLines = 3, enabled = !submitting) }
                 if (error != null) item { Text(error!!, color = Color.Red, fontSize = 12.sp) }
             }
@@ -293,6 +309,11 @@ fun SharedContactDialog(
                         "company_name" to companyName.ifBlank { null },
                         "phone_primary" to phone.ifBlank { null },
                         "email_primary" to email.ifBlank { null },
+                        "address" to listOf(addressLine1, city, postcode, country).joinContactAddressParts().ifBlank { null },
+                        "address_line1" to addressLine1.ifBlank { null },
+                        "city" to city.ifBlank { null },
+                        "postcode" to postcode.ifBlank { null },
+                        "country" to country.ifBlank { null },
                         "notes" to notes.ifBlank { null }
                     )
                     onSave(payload, contact?.id) { ok, msg ->
@@ -365,6 +386,7 @@ private fun ImportSharedContactsDialog(
                                         Text(contact.name, fontWeight = FontWeight.SemiBold)
                                         contact.phone?.let { Text("\u260E $it", fontSize = 12.sp) }
                                         contact.email?.let { Text("\u2709 $it", fontSize = 12.sp, color = Color.Gray) }
+                                        contact.fullAddress()?.let { Text("${Strings.address}: $it", fontSize = 12.sp, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                                     }
                                 }
                                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
@@ -414,3 +436,14 @@ private fun ImportSharedContactsDialog(
         dismissButton = { TextButton(onClick = onDismiss, enabled = !submitting) { Text(Strings.cancel) } }
     )
 }
+
+private fun SharedContact.fullAddress(): String? =
+    address?.takeIf { it.isNotBlank() }
+        ?: listOf(address_line1, city, postcode, country).joinContactAddressParts().takeIf { it.isNotBlank() }
+
+private fun ImportableSharedContact.fullAddress(): String? =
+    address?.takeIf { it.isNotBlank() }
+        ?: listOf(address_line1, city, postcode, country).joinContactAddressParts().takeIf { it.isNotBlank() }
+
+private fun List<String?>.joinContactAddressParts(): String =
+    mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }.joinToString(", ")
