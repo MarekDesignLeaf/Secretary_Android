@@ -39,6 +39,14 @@ data class BiometricProfile(
     val password: String = ""
 )
 
+data class VoiceAlias(
+    val alias: String = "",
+    val target: String = "",
+    val targetType: String = "contact",
+    val uses: Int = 0,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("secretary_settings", Context.MODE_PRIVATE)
     private val gson = Gson()
@@ -301,6 +309,57 @@ class SettingsManager(context: Context) {
         return normalizeAppLanguage(fallback)
     }
 
+    fun getVoiceAliases(): List<VoiceAlias> {
+        val scoped = scopedKey("voice_aliases")
+        val json = when {
+            scoped != null && prefs.contains(scoped) -> prefs.getString(scoped, null)
+            else -> prefs.getString("voice_aliases", null)
+        } ?: return emptyList()
+        return try {
+            gson.fromJson<List<VoiceAlias>>(json, object : TypeToken<List<VoiceAlias>>() {}.type).orEmpty()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveVoiceAliases(aliases: List<VoiceAlias>) {
+        val scoped = scopedKey("voice_aliases")
+        val cleaned = aliases
+            .filter { it.alias.isNotBlank() && it.target.isNotBlank() }
+            .distinctBy { normalizeVoiceAlias(it.alias) }
+            .take(300)
+        prefs.edit {
+            if (scoped != null) putString(scoped, gson.toJson(cleaned)) else putString("voice_aliases", gson.toJson(cleaned))
+        }
+    }
+
+    fun upsertVoiceAlias(alias: String, target: String, targetType: String = "contact"): VoiceAlias? {
+        val cleanAlias = alias.trim()
+        val cleanTarget = target.trim()
+        if (cleanAlias.length < 2 || cleanTarget.length < 2) return null
+        val aliasKey = normalizeVoiceAlias(cleanAlias)
+        val existing = getVoiceAliases().filterNot { normalizeVoiceAlias(it.alias) == aliasKey }
+        val currentUses = getVoiceAliases().firstOrNull { normalizeVoiceAlias(it.alias) == aliasKey }?.uses ?: 0
+        val saved = VoiceAlias(
+            alias = cleanAlias,
+            target = cleanTarget,
+            targetType = targetType,
+            uses = currentUses + 1,
+            updatedAt = System.currentTimeMillis()
+        )
+        saveVoiceAliases(listOf(saved) + existing.sortedByDescending { it.updatedAt })
+        return saved
+    }
+
+    fun removeVoiceAlias(alias: String): Boolean {
+        val aliasKey = normalizeVoiceAlias(alias)
+        val current = getVoiceAliases()
+        val updated = current.filterNot { normalizeVoiceAlias(it.alias) == aliasKey }
+        if (updated.size == current.size) return false
+        saveVoiceAliases(updated)
+        return true
+    }
+
     private fun normalizeAppLanguage(lang: String): String {
         val normalized = Normalizer.normalize(lang.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
             .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
@@ -310,6 +369,12 @@ class SettingsManager(context: Context) {
             else -> "en"
         }
     }
+
+    private fun normalizeVoiceAlias(value: String): String =
+        Normalizer.normalize(value.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
+            .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
+            .replace("[^a-z0-9]+".toRegex(), " ")
+            .trim()
 
     fun getBiometricProfiles(): List<BiometricProfile> {
         val json = prefs.getString("biometric_profiles", null)

@@ -417,6 +417,21 @@ object Strings {
         "Otevírám WhatsApp pro $name.",
         "Otwieram WhatsApp dla $name."
     )
+    fun voiceAliasLearned(alias: String, target: String): String = t(
+        "Learned. When I hear '$alias', I will look for '$target'.",
+        "Naučeno. Když uslyším '$alias', budu hledat '$target'.",
+        "Nauczone. Gdy usłyszę '$alias', będę szukać '$target'."
+    )
+    fun voiceAliasForgotten(alias: String): String = t(
+        "I forgot the voice correction for '$alias'.",
+        "Zapomněla jsem hlasovou opravu pro '$alias'.",
+        "Zapomniałam korektę głosową dla '$alias'."
+    )
+    fun voiceAliasNotFound(alias: String): String = t(
+        "I do not have a voice correction for '$alias'.",
+        "Pro '$alias' nemám uloženou hlasovou opravu.",
+        "Nie mam zapisanej korekty głosowej dla '$alias'."
+    )
     val city get() = t("City", "Město", "Miasto")
     val postcode get() = t("Postcode", "PSČ", "Kod pocztowy")
     val country get() = t("Country", "Země", "Kraj")

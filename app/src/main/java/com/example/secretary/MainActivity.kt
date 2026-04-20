@@ -6480,6 +6480,14 @@ class SecretaryViewModel : ViewModel() {
             startVoiceNavigationTarget(text, text)
             return
         }
+        parseVoiceAliasLearning(text)?.let { command ->
+            learnVoiceAlias(command.alias, command.target, text)
+            return
+        }
+        parseVoiceAliasForget(text)?.let { alias ->
+            forgetVoiceAlias(alias, text)
+            return
+        }
         parseVoiceAddressReadTarget(text)?.let { target ->
             readVoiceAddressTarget(target, text)
             return
@@ -6522,7 +6530,8 @@ class SecretaryViewModel : ViewModel() {
             return
         }
         val currentState = _uiState.value
-        val newUserMessage = ChatMessage("user", text)
+        val correctedText = applyVoiceAliasesToFreeText(text)
+        val newUserMessage = ChatMessage("user", correctedText)
         val updatedHistory = (currentState.history + newUserMessage).takeLast(30)
         
         _uiState.value = currentState.copy(isListening = false, status = Strings.processing, history = updatedHistory)
@@ -6531,7 +6540,7 @@ class SecretaryViewModel : ViewModel() {
                 val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                 val nowStr = sdf.format(Date())
                 val res = api.processMessage(MessageRequest(
-                    text = text, 
+                    text = correctedText,
                     history = updatedHistory,
                     context_entity_id = currentState.contextEntityId,
                     context_type = currentState.contextType,
@@ -6593,12 +6602,23 @@ class SecretaryViewModel : ViewModel() {
     private data class PhoneContactCandidate(
         val name: String,
         val phone: String?,
-        val score: Int
+        val score: Int,
+        val matchedAlias: String? = null
     )
 
     private data class WhatsAppVoiceCommand(
         val target: String,
         val message: String
+    )
+
+    private data class VoiceAliasCommand(
+        val alias: String,
+        val target: String
+    )
+
+    private data class VoiceQueryVariant(
+        val value: String,
+        val matchedAlias: String? = null
     )
 
     private fun startVoiceNavigationTarget(target: String, originalText: String = target) {
@@ -6621,6 +6641,7 @@ class SecretaryViewModel : ViewModel() {
                 voiceManager?.speak(message, expectReply = false)
                 return
             }
+            rememberVoiceAliasIfUseful(cleanTarget, candidate.name)
             startVoiceNavigation(address, candidate.name, originalText)
             return
         }
@@ -6675,8 +6696,45 @@ class SecretaryViewModel : ViewModel() {
         voiceManager?.speak(message, expectReply = false)
     }
 
+    private fun learnVoiceAlias(alias: String, target: String, originalText: String) {
+        val cleanAlias = stripContactCommandPrefixes(alias)
+        val cleanTarget = target.trim()
+        if (cleanAlias.length < 2 || cleanTarget.length < 2) return
+        val resolvedTarget = resolvePhoneTarget(cleanTarget)?.name
+            ?: resolveNavigationTarget(cleanTarget)?.name
+            ?: cleanTarget
+        settingsManager?.upsertVoiceAlias(cleanAlias, resolvedTarget)
+        val message = Strings.voiceAliasLearned(cleanAlias, resolvedTarget)
+        _uiState.value = _uiState.value.copy(
+            status = Strings.waitingForCommand,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = false)
+    }
+
+    private fun forgetVoiceAlias(alias: String, originalText: String) {
+        val cleanAlias = stripContactCommandPrefixes(alias)
+        val removed = settingsManager?.removeVoiceAlias(cleanAlias) == true
+        val message = if (removed) Strings.voiceAliasForgotten(cleanAlias) else Strings.voiceAliasNotFound(cleanAlias)
+        _uiState.value = _uiState.value.copy(
+            status = Strings.waitingForCommand,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = false)
+    }
+
+    private fun rememberVoiceAliasIfUseful(spoken: String, resolvedName: String) {
+        val cleanAlias = stripContactCommandPrefixes(spoken)
+        val aliasNorm = normalizeVoiceCommand(cleanAlias)
+        val targetNorm = normalizeVoiceCommand(resolvedName)
+        if (aliasNorm.length < 3 || targetNorm.length < 3 || aliasNorm == targetNorm) return
+        settingsManager?.upsertVoiceAlias(cleanAlias, resolvedName)
+    }
+
     private fun resolveNavigationTarget(query: String): NavigationAddressCandidate? {
-        val normalizedQuery = normalizeVoiceCommand(query)
+        val normalizedQuery = applyVoiceAliasToQuery(normalizeVoiceCommand(query))
             .removePrefix("klient ")
             .removePrefix("klienta ")
             .removePrefix("kontakt ")
@@ -6687,15 +6745,7 @@ class SecretaryViewModel : ViewModel() {
             .removePrefix("na ")
             .trim()
         if (normalizedQuery.length < 2) return null
-        val words = normalizedQuery.split(" ").filter { it.isNotBlank() }
-        fun score(labels: List<String>): Int? {
-            val normalizedLabels = labels.map { normalizeVoiceCommand(it) }.filter { it.isNotBlank() }
-            if (normalizedLabels.any { it == normalizedQuery }) return 0
-            if (normalizedLabels.any { it.startsWith(normalizedQuery) }) return 1
-            if (normalizedLabels.any { label -> words.all { it.length > 1 && label.contains(it) } }) return 2
-            if (normalizedLabels.any { it.contains(normalizedQuery) }) return 3
-            return null
-        }
+        fun score(labels: List<String>): Int? = scoreVoiceLabels(labels, voiceQueryVariants(normalizedQuery))?.first
         val clientMatches = _uiState.value.clients.mapNotNull { client ->
             val labels = listOfNotNull(
                 client.display_name,
@@ -6716,12 +6766,14 @@ class SecretaryViewModel : ViewModel() {
             score(labels)?.let { NavigationAddressCandidate(contact.display_name, contact.navigationAddress(), it + 1) }
         }
         val phoneMatches = contactManager
-            ?.searchContact(query)
+            ?.getAllContacts()
             .orEmpty()
             .mapIndexedNotNull { index, contact ->
                 val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
                 val address = contact["address"]?.takeIf(String::isNotBlank)
-                NavigationAddressCandidate(name, address, 10 + index)
+                score(listOfNotNull(name, contact["phone"], contact["email"]))?.let {
+                    NavigationAddressCandidate(name, address, 10 + index + it)
+                }
             }
         return (clientMatches + contactMatches + phoneMatches).minWithOrNull(
             compareBy<NavigationAddressCandidate> { it.score }.thenBy { it.name.length }
@@ -6753,6 +6805,9 @@ class SecretaryViewModel : ViewModel() {
             lastAiReply = message,
             history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
         )
+        if (!candidate?.phone.isNullOrBlank()) {
+            rememberVoiceAliasIfUseful(candidate?.matchedAlias ?: cleanTarget, candidate?.name.orEmpty())
+        }
         voiceManager?.speak(message, expectReply = false)
     }
 
@@ -6784,21 +6839,17 @@ class SecretaryViewModel : ViewModel() {
             lastAiReply = reply,
             history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", reply)).takeLast(30)
         )
+        if (!candidate?.phone.isNullOrBlank()) {
+            rememberVoiceAliasIfUseful(candidate?.matchedAlias ?: cleanTarget, candidate?.name.orEmpty())
+        }
         voiceManager?.speak(reply, expectReply = false)
     }
 
     private fun resolvePhoneTarget(query: String): PhoneContactCandidate? {
         val normalizedQuery = stripContactCommandPrefixes(query)
         if (normalizedQuery.length < 2) return null
-        val words = normalizedQuery.split(" ").filter { it.isNotBlank() }
-        fun score(labels: List<String>): Int? {
-            val normalizedLabels = labels.map { normalizeVoiceCommand(it) }.filter { it.isNotBlank() }
-            if (normalizedLabels.any { it == normalizedQuery }) return 0
-            if (normalizedLabels.any { it.startsWith(normalizedQuery) }) return 1
-            if (normalizedLabels.any { label -> words.all { it.length > 1 && label.contains(it) } }) return 2
-            if (normalizedLabels.any { it.contains(normalizedQuery) }) return 3
-            return null
-        }
+        val queryVariants = voiceQueryVariants(normalizedQuery)
+        fun score(labels: List<String>): Pair<Int, String?>? = scoreVoiceLabels(labels, queryVariants)
         val clientMatches = _uiState.value.clients.mapNotNull { client ->
             val labels = listOfNotNull(
                 client.display_name,
@@ -6808,8 +6859,8 @@ class SecretaryViewModel : ViewModel() {
                 client.phone_secondary,
                 client.email_primary
             )
-            score(labels)?.let {
-                PhoneContactCandidate(client.display_name, client.phone_primary?.takeIf(String::isNotBlank) ?: client.phone_secondary, it)
+            score(labels)?.let { (score, alias) ->
+                PhoneContactCandidate(client.display_name, client.phone_primary?.takeIf(String::isNotBlank) ?: client.phone_secondary, score, alias)
             }
         }
         val sharedMatches = _uiState.value.sharedContacts.mapNotNull { contact ->
@@ -6819,18 +6870,94 @@ class SecretaryViewModel : ViewModel() {
                 contact.phone_primary,
                 contact.email_primary
             )
-            score(labels)?.let { PhoneContactCandidate(contact.display_name, contact.phone_primary, it + 1) }
+            score(labels)?.let { (score, alias) -> PhoneContactCandidate(contact.display_name, contact.phone_primary, score + 1, alias) }
         }
         val deviceMatches = contactManager
-            ?.searchContact(query)
+            ?.getAllContacts()
             .orEmpty()
             .mapIndexedNotNull { index, contact ->
                 val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
-                PhoneContactCandidate(name, contact["phone"]?.takeIf(String::isNotBlank), 10 + index)
+                score(listOfNotNull(name, contact["phone"], contact["email"]))?.let { (score, alias) ->
+                    PhoneContactCandidate(name, contact["phone"]?.takeIf(String::isNotBlank), score + 10 + index, alias)
+                }
             }
         return (clientMatches + sharedMatches + deviceMatches).minWithOrNull(
             compareBy<PhoneContactCandidate> { if (it.phone.isNullOrBlank()) it.score + 100 else it.score }.thenBy { it.name.length }
         )
+    }
+
+    private fun voiceQueryVariants(normalizedQuery: String): List<VoiceQueryVariant> {
+        val base = normalizedQuery.trim()
+        val variants = mutableListOf(VoiceQueryVariant(base))
+        settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
+            val aliasNorm = normalizeVoiceCommand(alias.alias)
+            val targetNorm = normalizeVoiceCommand(alias.target)
+            if (aliasNorm.isBlank() || targetNorm.isBlank()) return@forEach
+            if (base == aliasNorm) {
+                variants += VoiceQueryVariant(targetNorm, alias.alias)
+            } else if (base.contains(aliasNorm)) {
+                variants += VoiceQueryVariant(base.replace(aliasNorm, targetNorm).trim(), alias.alias)
+            }
+        }
+        return variants.distinctBy { it.value }
+    }
+
+    private fun scoreVoiceLabels(labels: List<String>, queries: List<VoiceQueryVariant>): Pair<Int, String?>? {
+        val normalizedLabels = labels.map { normalizeVoiceCommand(it) }.filter { it.isNotBlank() }
+        var best: Pair<Int, String?>? = null
+        for (query in queries) {
+            val q = query.value.trim()
+            if (q.length < 2) continue
+            val words = q.split(" ").filter { it.isNotBlank() }
+            val compactQ = q.replace(" ", "")
+            val score = when {
+                normalizedLabels.any { it == q || it.replace(" ", "") == compactQ } -> 0
+                normalizedLabels.any { it.startsWith(q) || it.replace(" ", "").startsWith(compactQ) } -> 1
+                normalizedLabels.any { label -> words.all { it.length > 1 && label.contains(it) } } -> 2
+                normalizedLabels.any { it.contains(q) || it.replace(" ", "").contains(compactQ) } -> 3
+                normalizedLabels.any { label -> fuzzyVoiceMatch(q, label) } -> 5
+                else -> null
+            } ?: continue
+            val adjustedScore = if (query.matchedAlias != null) score - 1 else score
+            if (best == null || adjustedScore < best!!.first) best = adjustedScore to query.matchedAlias
+        }
+        return best
+    }
+
+    private fun fuzzyVoiceMatch(query: String, label: String): Boolean {
+        val compactQuery = query.replace(" ", "")
+        val compactLabel = label.replace(" ", "")
+        if (compactQuery.length < 4 || compactLabel.length < 4) return false
+        val maxDistance = if (compactQuery.length <= 6) 1 else 2
+        if (levenshteinDistance(compactQuery, compactLabel) <= maxDistance) return true
+        val queryTokens = query.split(" ").filter { it.length >= 4 }
+        val labelTokens = label.split(" ").filter { it.length >= 4 }
+        return queryTokens.any { q ->
+            labelTokens.any { l ->
+                kotlin.math.abs(q.length - l.length) <= 2 && levenshteinDistance(q, l) <= maxDistance
+            }
+        }
+    }
+
+    private fun levenshteinDistance(a: String, b: String): Int {
+        if (a == b) return 0
+        if (a.isEmpty()) return b.length
+        if (b.isEmpty()) return a.length
+        val previous = IntArray(b.length + 1) { it }
+        val current = IntArray(b.length + 1)
+        for (i in a.indices) {
+            current[0] = i + 1
+            for (j in b.indices) {
+                val cost = if (a[i] == b[j]) 0 else 1
+                current[j + 1] = minOf(
+                    current[j] + 1,
+                    previous[j + 1] + 1,
+                    previous[j] + cost
+                )
+            }
+            for (j in previous.indices) previous[j] = current[j]
+        }
+        return previous[b.length]
     }
 
     private fun stripContactCommandPrefixes(query: String): String {
@@ -6843,7 +6970,77 @@ class SecretaryViewModel : ViewModel() {
         ).forEach { prefix ->
             value = value.removePrefix(prefix)
         }
+        val tokens = value.trim().split(" ").filter { it.isNotBlank() }
+        if (tokens.size > 1 && "designleaf" in tokens) {
+            value = tokens.filterNot { it == "designleaf" }.joinToString(" ")
+        } else if (tokens.size > 2 && tokens.contains("design") && tokens.contains("leaf")) {
+            value = tokens.filterNot { it == "design" || it == "leaf" }.joinToString(" ")
+        }
         return value.trim()
+    }
+
+    private fun applyVoiceAliasToQuery(normalizedQuery: String): String {
+        var value = normalizedQuery
+        settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
+            val aliasNorm = normalizeVoiceCommand(alias.alias)
+            val targetNorm = normalizeVoiceCommand(alias.target)
+            if (aliasNorm.isBlank() || targetNorm.isBlank()) return@forEach
+            if (value == aliasNorm) value = targetNorm
+            else if (value.contains(aliasNorm)) value = value.replace(aliasNorm, targetNorm).trim()
+        }
+        return value
+    }
+
+    private fun applyVoiceAliasesToFreeText(text: String): String {
+        var normalized = normalizeVoiceCommand(text)
+        var changed = false
+        settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
+            val aliasNorm = normalizeVoiceCommand(alias.alias)
+            val target = alias.target.trim()
+            if (aliasNorm.isBlank() || target.isBlank()) return@forEach
+            val updated = normalized.replace(Regex("\\b${Regex.escape(aliasNorm)}\\b"), target)
+            if (updated != normalized) {
+                normalized = updated
+                changed = true
+            }
+        }
+        return if (changed) normalized.ifBlank { text } else text
+    }
+
+    private fun parseVoiceAliasLearning(text: String): VoiceAliasCommand? {
+        val normalized = normalizeVoiceCommand(text)
+        val patterns = listOf(
+            Regex("^kdyz reknu (.+) myslim (.+)$"),
+            Regex("^kdyz reknu (.+) znamena to (.+)$"),
+            Regex("^nauc se ze (.+) je (.+)$"),
+            Regex("^nauc se (.+) jako (.+)$"),
+            Regex("^oprav jmeno (.+) na (.+)$"),
+            Regex("^alias (.+) je (.+)$"),
+            Regex("^alias (.+) znamena (.+)$"),
+            Regex("^learn name (.+) as (.+)$"),
+            Regex("^when i say (.+) i mean (.+)$")
+        )
+        for (pattern in patterns) {
+            val match = pattern.find(normalized) ?: continue
+            return VoiceAliasCommand(match.groupValues[1].trim(), match.groupValues[2].trim())
+        }
+        return null
+    }
+
+    private fun parseVoiceAliasForget(text: String): String? {
+        val normalized = normalizeVoiceCommand(text)
+        val prefixes = listOf(
+            "zapomen alias ",
+            "zapomen opravu ",
+            "smaz alias ",
+            "smaz opravu ",
+            "forget alias ",
+            "remove alias "
+        )
+        prefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            return normalized.drop(prefix.length).trim()
+        }
+        return null
     }
 
     private fun parseVoiceNavigationAddress(text: String): String? {
