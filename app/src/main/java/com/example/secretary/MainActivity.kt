@@ -5283,6 +5283,7 @@ class SecretaryViewModel : ViewModel() {
                 .replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
             val cleanedEmail = c["email"].orEmpty().trim().lowercase(Locale.ROOT)
             val normalizedName = c["name"].orEmpty().trim()
+            val contactId = c["contact_id"].orEmpty().trim()
             val phoneDigits = cleanedPhone.filter { it.isDigit() }
             val normalizedPhone = when {
                 phoneDigits.startsWith("0044") -> "0" + phoneDigits.removePrefix("0044")
@@ -5290,9 +5291,10 @@ class SecretaryViewModel : ViewModel() {
                 else -> phoneDigits
             }
             val contactKey = normalizedPhone
-                .ifBlank { cleanedEmail.ifBlank { normalizedName.lowercase(Locale.ROOT) } }
+                .ifBlank { cleanedEmail.ifBlank { contactId.ifBlank { normalizedName.lowercase(Locale.ROOT) } } }
             mutableMapOf(
                 "contact_key" to contactKey,
+                "contact_id" to contactId,
                 "name" to normalizedName,
                 "phone" to cleanedPhone,
                 "email" to cleanedEmail

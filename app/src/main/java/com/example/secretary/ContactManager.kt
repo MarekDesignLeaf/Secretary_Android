@@ -17,6 +17,7 @@ class ContactManager(private val context: Context) {
 
     fun getAllContacts(): List<Map<String, String>> {
         val results = mutableListOf<Map<String, String>>()
+        val seenContactIds = mutableSetOf<String>()
         val addressesByContactId = getPostalAddressMap()
         val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
         val projection = arrayOf(
@@ -42,10 +43,42 @@ class ContactManager(private val context: Context) {
                     )
                     addressesByContactId[contactId]?.let { contact.addPostalAddress(it) }
                     results.add(contact)
+                    seenContactIds.add(contactId)
                 }
             }
         } catch (e: Exception) { Log.e(TAG, "getAllContacts error", e) }
-        return results.distinctBy { it["phone"]?.replace(" ","")?.replace("-","") }
+
+        try {
+            val contactsUri = ContactsContract.Contacts.CONTENT_URI
+            val contactsProjection = arrayOf(
+                ContactsContract.Contacts._ID,
+                ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+            )
+            context.contentResolver.query(
+                contactsUri,
+                contactsProjection,
+                null,
+                null,
+                ContactsContract.Contacts.DISPLAY_NAME_PRIMARY + " ASC"
+            )?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
+                while (cursor.moveToNext()) {
+                    val contactId = cursor.getLong(idIdx).toString()
+                    if (seenContactIds.contains(contactId)) continue
+                    val name = cursor.getString(nameIdx) ?: continue
+                    val contact = mutableMapOf(
+                        "contact_id" to contactId,
+                        "name" to name,
+                        "phone" to ""
+                    )
+                    addressesByContactId[contactId]?.let { contact.addPostalAddress(it) }
+                    results.add(contact)
+                }
+            }
+        } catch (e: Exception) { Log.e(TAG, "getAllContacts fallback contacts error", e) }
+
+        return results.distinctBy { it.dedupeKey() }
     }
 
     fun getContactsWithEmail(): List<Map<String, String>> {
@@ -80,6 +113,7 @@ class ContactManager(private val context: Context) {
 
     fun searchContact(query: String): List<Map<String, String>> {
         val results = mutableListOf<Map<String, String>>()
+        val seenContactIds = mutableSetOf<String>()
         val addressesByContactId = getPostalAddressMap()
         val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
         val projection = arrayOf(
@@ -109,12 +143,41 @@ class ContactManager(private val context: Context) {
                     )
                     addressesByContactId[contactId]?.let { contact.addPostalAddress(it) }
                     results.add(contact)
+                    seenContactIds.add(contactId)
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Search error", e)
         }
-        return results.distinctBy { it["phone"] }
+
+        try {
+            val contactsUri = ContactsContract.Contacts.CONTENT_URI
+            val contactsProjection = arrayOf(
+                ContactsContract.Contacts._ID,
+                ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+            )
+            val contactsSelection = "${ContactsContract.Contacts.DISPLAY_NAME_PRIMARY} LIKE ?"
+            context.contentResolver.query(contactsUri, contactsProjection, contactsSelection, selectionArgs, null)?.use { cursor ->
+                val idIdx = cursor.getColumnIndex(ContactsContract.Contacts._ID)
+                val nameIdx = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME_PRIMARY)
+                while (cursor.moveToNext()) {
+                    val contactId = cursor.getLong(idIdx).toString()
+                    if (seenContactIds.contains(contactId)) continue
+                    val name = cursor.getString(nameIdx) ?: continue
+                    val contact = mutableMapOf(
+                        "contact_id" to contactId,
+                        "name" to name,
+                        "phone" to ""
+                    )
+                    addressesByContactId[contactId]?.let { contact.addPostalAddress(it) }
+                    results.add(contact)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Search fallback contacts error", e)
+        }
+
+        return results.distinctBy { it.dedupeKey() }
     }
 
     private fun getPostalAddressMap(): Map<String, PostalAddress> {
@@ -186,6 +249,12 @@ class ContactManager(private val context: Context) {
 
     private fun android.database.Cursor.getOptionalString(index: Int): String? =
         if (index >= 0) getString(index)?.trim()?.takeIf(String::isNotBlank) else null
+
+    private fun Map<String, String>.dedupeKey(): String =
+        this["phone"]?.replace(" ", "")?.replace("-", "")?.takeIf(String::isNotBlank)
+            ?: this["email"]?.trim()?.lowercase()?.takeIf(String::isNotBlank)
+            ?: this["contact_id"]?.takeIf(String::isNotBlank)
+            ?: this["name"].orEmpty().trim().lowercase()
 
     private fun String.cleanAddress(): String =
         split('\n', '\r')
