@@ -232,6 +232,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     val opened = openNavigation(this@MainActivity, address)
                     vm.onNavigationLaunchHandled(opened, address)
                 }
+
+                LaunchedEffect(state.pendingCall) {
+                    val phone = state.pendingCall?.trim()?.takeIf(String::isNotBlank) ?: return@LaunchedEffect
+                    val opened = openDialer(this@MainActivity, phone)
+                    vm.onCallLaunchHandled(opened, phone)
+                }
                 
                 when (state.loggedIn) {
                     null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2434,6 +2440,21 @@ private fun Task.navigationAddress(state: UiState): String? =
 
 private fun Task.isOpenForField(): Boolean =
     !isCompleted && status !in setOf("hotovo", "zruseno", "completed", "cancelled")
+
+private fun openDialer(context: Context, phone: String): Boolean {
+    val cleanPhone = phone.trim()
+    if (cleanPhone.isBlank()) return false
+    val intent = Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", cleanPhone, null)).apply {
+        if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    return try {
+        context.startActivity(intent)
+        true
+    } catch (e: Exception) {
+        Log.w("Dialer", "Failed to open dialer for phone: $cleanPhone", e)
+        false
+    }
+}
 
 private fun openNavigation(context: Context, address: String): Boolean {
     val query = address.trim()
@@ -5137,6 +5158,13 @@ class SecretaryViewModel : ViewModel() {
             pendingNavigationAddress = null,
             awaitingNavigationAddress = false,
             status = if (opened) Strings.waitingForCommand else Strings.navigationUnavailable(address)
+        )
+    }
+
+    fun onCallLaunchHandled(opened: Boolean, phone: String) {
+        _uiState.value = _uiState.value.copy(
+            pendingCall = null,
+            status = if (opened) Strings.waitingForCommand else Strings.callUnavailable(phone)
         )
     }
 

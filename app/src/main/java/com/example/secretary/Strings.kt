@@ -375,6 +375,11 @@ object Strings {
         "Navigaci se nepodařilo otevřít pro adresu $address.",
         "Nie udało się otworzyć nawigacji dla adresu $address."
     )
+    fun callUnavailable(phone: String): String = t(
+        "Phone dialer could not be opened for $phone.",
+        "Vytáčení se nepodařilo otevřít pro číslo $phone.",
+        "Nie udało się otworzyć wybierania dla numeru $phone."
+    )
     val city get() = t("City", "Město", "Miasto")
     val postcode get() = t("Postcode", "PSČ", "Kod pocztowy")
     val country get() = t("Country", "Země", "Kraj")
