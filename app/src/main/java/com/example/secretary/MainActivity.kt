@@ -953,8 +953,14 @@ private fun calendarWeekdayShort(calendar: Calendar): String =
 private fun activeHierarchyUsers(users: List<BackendUser>): List<BackendUser> =
     users.filter { it.status.equals("active", ignoreCase = true) }
 
+private fun cleanUserDisplayName(value: String?): String =
+    value.orEmpty()
+        .replace(Regex("\\*+"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
 private fun hierarchyUserLabel(user: BackendUser): String =
-    user.display_name.ifBlank { user.email }.ifBlank { "User ${user.id}" }
+    cleanUserDisplayName(user.display_name).ifBlank { user.email }.ifBlank { "User ${user.id}" }
 
 private fun findHierarchyUser(users: List<BackendUser>, userId: Long?): BackendUser? =
     users.firstOrNull { it.id == userId }
@@ -1192,7 +1198,7 @@ fun AddClientDialog(
                                 firstAction = WorkflowActionDraft(
                                     title = actionTitle.trim(),
                                     assignedUserId = actionAssigneeId,
-                                    assignedTo = selectedAssignee?.display_name,
+                                    assignedTo = selectedAssignee?.let(::hierarchyUserLabel),
                                     plannedStartAt = actionPlannedStart.trim().ifBlank { null },
                                     deadline = actionDeadline.trim().ifBlank { null },
                                     priority = actionPriority,
@@ -1320,7 +1326,7 @@ fun AddTaskDialog(
                                 clientName = selectedClientName,
                                 jobId = initialJobId,
                                 assignedUserId = selectedAssigneeId,
-                                assignedTo = assignee?.display_name,
+                                assignedTo = assignee?.let(::hierarchyUserLabel),
                                 plannedStartAt = plannedStartAt.trim().ifBlank { null },
                                 deadline = deadline.trim().ifBlank { null },
                                 planningNote = planningNote.trim().ifBlank { null },
@@ -2955,12 +2961,12 @@ fun AddJobDialog(
                                 clientId = selectedClientId,
                                 clientName = selectedClientName,
                                 assignedUserId = assignedUserId,
-                                assignedTo = owner?.display_name,
+                                assignedTo = owner?.let(::hierarchyUserLabel),
                                 startDate = startDate.trim().ifBlank { null },
                                 firstAction = WorkflowActionDraft(
                                     title = firstActionTitle.trim(),
                                     assignedUserId = firstActionAssigneeId,
-                                    assignedTo = assignee?.display_name,
+                                    assignedTo = assignee?.let(::hierarchyUserLabel),
                                     plannedStartAt = firstActionPlannedStart.trim().ifBlank { null },
                                     deadline = firstActionDeadline.trim().ifBlank { null },
                                     priority = firstActionPriority,
@@ -3364,7 +3370,7 @@ fun TaskCompletionDialog(
                             WorkflowActionDraft(
                                 title = title.trim(),
                                 assignedUserId = assignedUserId,
-                                assignedTo = assignee?.display_name,
+                                assignedTo = assignee?.let(::hierarchyUserLabel),
                                 plannedStartAt = plannedStartAt.trim().ifBlank { null },
                                 deadline = deadline.trim().ifBlank { null },
                                 priority = priority,
@@ -4166,7 +4172,7 @@ class SecretaryViewModel : ViewModel() {
                 val res = api.registerUser(
                     RegisterRequest(
                         email = email.trim(),
-                        display_name = displayName.trim(),
+                        display_name = cleanUserDisplayName(displayName),
                         role = role
                     )
                 )
@@ -4253,7 +4259,7 @@ class SecretaryViewModel : ViewModel() {
                 val res = api.updateAuthUser(
                     userId,
                     mapOf(
-                        "display_name" to displayName.trim(),
+                        "display_name" to cleanUserDisplayName(displayName),
                         "phone" to phone?.trim().orEmpty(),
                         "role" to role,
                         "status" to status,
@@ -4837,7 +4843,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val assigneeName = draft.assignedTo
-                    ?: _uiState.value.backendUsers.firstOrNull { it.id == draft.assignedUserId }?.display_name
+                    ?: _uiState.value.backendUsers.firstOrNull { it.id == draft.assignedUserId }?.let(::hierarchyUserLabel)
                 val payload = mapOf<String, Any?>(
                     "title" to draft.title.trim(),
                     "task_type" to draft.taskType,
@@ -5435,7 +5441,7 @@ class SecretaryViewModel : ViewModel() {
     fun createClientManual(draft: ClientCreationDraft, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val actionAssigneeName = _uiState.value.backendUsers.firstOrNull { it.id == draft.firstAction.assignedUserId }?.display_name
+                val actionAssigneeName = _uiState.value.backendUsers.firstOrNull { it.id == draft.firstAction.assignedUserId }?.let(::hierarchyUserLabel)
                 val data = mapOf<String, Any?>(
                     "name" to draft.name.trim(),
                     "email" to draft.email.trim().ifBlank { null },
@@ -5898,8 +5904,8 @@ class SecretaryViewModel : ViewModel() {
     fun createJobManual(draft: JobCreationDraft, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val ownerName = _uiState.value.backendUsers.firstOrNull { it.id == draft.assignedUserId }?.display_name
-                val actionAssigneeName = _uiState.value.backendUsers.firstOrNull { it.id == draft.firstAction.assignedUserId }?.display_name
+                val ownerName = _uiState.value.backendUsers.firstOrNull { it.id == draft.assignedUserId }?.let(::hierarchyUserLabel)
+                val actionAssigneeName = _uiState.value.backendUsers.firstOrNull { it.id == draft.firstAction.assignedUserId }?.let(::hierarchyUserLabel)
                 val data = mapOf<String, Any?>(
                     "title" to draft.title.trim(),
                     "client_id" to draft.clientId,

@@ -241,13 +241,13 @@ class VoiceManager(
                     recognizer?.setRecognitionListener(createListener())
                 }
                 hotwordMatchedInSession = false
-                // Don't mute in HOTWORD mode — Samsung recognizer may fail silently when muted
-                if (mode == ListenMode.COMMAND) muteBeep()
+                muteBeep()
                 Log.d(TAG, "Calling startListening on recognizer")
                 recognizer?.startListening(createRecognizerIntent())
                 isRecognizerActive = true
             } catch (e: Exception) {
                 isRecognizerActive = false
+                unmuteBeep()
                 scheduleRestart(1500)
             }
         }
@@ -273,8 +273,7 @@ class VoiceManager(
         isRecognizerActive = false
         handler.removeCallbacksAndMessages(null)
         try { recognizer?.cancel() } catch (_: Exception) { }
-        // Only unmute if we're NOT in hotword mode (hotword stays silent)
-        if (mode != ListenMode.HOTWORD) unmuteBeep()
+        unmuteBeep()
     }
 
     private fun scheduleRestart(delayMs: Long) {
@@ -289,18 +288,17 @@ class VoiceManager(
         override fun onReadyForSpeech(params: Bundle?) {
             isRecognizerActive = true
             consecutiveErrors = 0
-            // Only unmute in COMMAND mode (user speaking command), stay silent in HOTWORD mode
             if (mode == ListenMode.COMMAND) {
-                handler.postDelayed({ unmuteBeep() }, 500)
                 onReady()
             }
         }
         override fun onBeginningOfSpeech() {}
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() { isRecognizerActive = false; unmuteBeep() }
+        override fun onEndOfSpeech() { isRecognizerActive = false }
         override fun onError(error: Int) {
             isRecognizerActive = false
+            unmuteBeep()
             consecutiveErrors++
             if (mode == ListenMode.COMMAND) onRecognizerError(error)
             if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED) {
@@ -325,6 +323,7 @@ class VoiceManager(
         }
         override fun onResults(results: Bundle?) {
             isRecognizerActive = false
+            unmuteBeep()
             if (mode == ListenMode.HOTWORD && hotwordMatchedInSession) return
             val candidates = recognitionCandidates(results)
             when (mode) {
@@ -358,19 +357,26 @@ class VoiceManager(
     private var originalSystemVol = 0
 
     private fun muteBeep() {
+        if (wasMuted) return
         try {
             originalNotifVol = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
             originalSystemVol = audioManager.getStreamVolume(AudioManager.STREAM_SYSTEM)
             audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0)
             audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0)
+            wasMuted = true
         } catch (e: Exception) { Log.e(TAG, "Mute error", e) }
     }
 
     private fun unmuteBeep() {
+        if (!wasMuted) return
         try {
             audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, originalNotifVol, 0)
             audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, originalSystemVol, 0)
-        } catch (e: Exception) { Log.e(TAG, "Unmute error", e) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Unmute error", e)
+        } finally {
+            wasMuted = false
+        }
     }
 
     private fun setupTts() {
