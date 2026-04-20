@@ -2173,27 +2173,45 @@ private fun openNavigation(context: Context, address: String): Boolean {
     val query = address.trim()
     if (query.isBlank()) return false
     val encoded = Uri.encode(query)
+    val mapsDirectionsUri = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$encoded&travelmode=driving")
     val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$encoded")).apply {
         addCategory(Intent.CATEGORY_BROWSABLE)
+        addNavigationLaunchFlags(context)
     }
     val intents = listOf(
+        Intent(Intent.ACTION_VIEW, mapsDirectionsUri).apply {
+            setPackage("com.google.android.apps.maps")
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            addNavigationLaunchFlags(context)
+        },
         Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$encoded")).apply {
             setPackage("com.google.android.apps.maps")
+            addNavigationLaunchFlags(context)
         },
         mapIntent,
-        Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$encoded")).apply {
+        Intent(Intent.ACTION_VIEW, mapsDirectionsUri).apply {
             addCategory(Intent.CATEGORY_BROWSABLE)
+            addNavigationLaunchFlags(context)
         },
-        Intent.createChooser(mapIntent, Strings.navigate)
+        Intent.createChooser(mapIntent, Strings.navigate).apply {
+            addNavigationLaunchFlags(context)
+        }
     )
     for (intent in intents) {
         try {
             context.startActivity(intent)
             return true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("Navigation", "Failed to open navigation intent: ${intent.data}", e)
         }
     }
     return false
+}
+
+private fun Intent.addNavigationLaunchFlags(context: Context) {
+    if (context !is android.app.Activity) {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
 }
 
 @Composable
