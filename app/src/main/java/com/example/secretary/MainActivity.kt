@@ -6559,7 +6559,7 @@ class SecretaryViewModel : ViewModel() {
                             history = _uiState.value.history + newAssistantMessage
                         )
                         handleAction(response)
-                        if (response.action_type !in setOf("SEARCH_CONTACTS", "LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP")) {
+                        if (response.action_type !in setOf("SEARCH_CONTACTS", "LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP", "START_NAVIGATION", "OPEN_NAVIGATION", "NAVIGATE")) {
                             voiceManager?.speak(assistantReply, expectReply = response.is_question)
                         }
                         // Refresh CRM data ale NEZNICIT lokalni tasky
@@ -7045,25 +7045,111 @@ class SecretaryViewModel : ViewModel() {
 
     private fun parseVoiceNavigationAddress(text: String): String? {
         val normalized = normalizeVoiceCommand(text)
+        val askOnlyCommands = setOf(
+            "spustit navigaci",
+            "spust navigaci",
+            "zapni navigaci",
+            "otevri navigaci",
+            "otevri mapy",
+            "spust mapy",
+            "navigace",
+            "naviguj",
+            "trasa",
+            "start navigation",
+            "navigate",
+            "navigation",
+            "directions",
+            "open maps",
+            "uruchom nawigacje",
+            "nawiguj",
+            "nawigacja",
+            "mapy"
+        )
+        if (normalized in askOnlyCommands) return ""
         val prefixes = listOf(
+            "navigate me to ",
             "start navigation to ",
             "start navigation ",
+            "directions to ",
+            "take me to ",
+            "drive to ",
+            "open maps to ",
+            "open maps ",
+            "maps to ",
             "spustit navigaci na ",
             "spust navigaci na ",
             "spustit navigaci do ",
             "spust navigaci do ",
+            "spustit navigaci k ",
+            "spust navigaci k ",
+            "spustit navigaci ke ",
+            "spust navigaci ke ",
             "spustit navigaci ",
             "spust navigaci ",
             "zapni navigaci na ",
             "zapni navigaci do ",
+            "zapni navigaci k ",
+            "zapni navigaci ke ",
             "zapni navigaci ",
+            "otevri navigaci na ",
+            "otevri navigaci do ",
+            "otevri navigaci k ",
+            "otevri navigaci ke ",
+            "otevri mapy na ",
+            "otevri mapy do ",
+            "otevri mapy k ",
+            "otevri mapy ke ",
+            "spust mapy na ",
+            "spust mapy do ",
+            "spust mapy k ",
+            "spust mapy ke ",
+            "mapy na ",
+            "mapy do ",
+            "mapy k ",
+            "mapy ke ",
+            "ukaz cestu na ",
+            "ukaz cestu do ",
+            "ukaz cestu k ",
+            "ukaz cestu ke ",
+            "ukaz trasu na ",
+            "ukaz trasu do ",
+            "ukaz trasu k ",
+            "ukaz trasu ke ",
+            "trasu na ",
+            "trasu do ",
+            "trasu k ",
+            "trasu ke ",
+            "vezmi me na ",
+            "vezmi me do ",
+            "vezmi me k ",
+            "vezmi me ke ",
+            "jed na ",
+            "jed do ",
+            "jed k ",
+            "jed ke ",
             "naviguj na ",
             "naviguj do ",
+            "naviguj k ",
+            "naviguj ke ",
+            "navigovat na ",
+            "navigovat do ",
+            "navigovat k ",
+            "navigovat ke ",
             "navigace na ",
             "navigace do ",
+            "navigace k ",
+            "navigace ke ",
             "navigace ",
             "navigate to ",
             "navigation to ",
+            "prowadz do ",
+            "prowadz na ",
+            "jedz do ",
+            "jedz na ",
+            "trasa do ",
+            "trasa na ",
+            "mapy do ",
+            "mapy na ",
             "uruchom nawigacje do ",
             "uruchom nawigacje na ",
             "uruchom nawigacje ",
@@ -7076,18 +7162,39 @@ class SecretaryViewModel : ViewModel() {
         prefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
             return normalized.drop(prefix.length).trim()
         }
-        return if (normalized == "spustit navigaci" ||
-            normalized == "spust navigaci" ||
-            normalized == "zapni navigaci" ||
-            normalized == "navigace" ||
-            normalized == "naviguj" ||
-            normalized == "start navigation" ||
-            normalized == "navigate" ||
-            normalized == "navigation" ||
-            normalized == "uruchom nawigacje" ||
-            normalized == "nawiguj" ||
-            normalized == "nawigacja"
-        ) "" else null
+        val markers = listOf(
+            " navigaci na ",
+            " navigaci do ",
+            " navigaci k ",
+            " navigaci ke ",
+            " navigace na ",
+            " navigace do ",
+            " navigace k ",
+            " navigace ke ",
+            " mapy na ",
+            " mapy do ",
+            " mapy k ",
+            " mapy ke ",
+            " trasu na ",
+            " trasu do ",
+            " trasu k ",
+            " trasu ke ",
+            " cestu na ",
+            " cestu do ",
+            " cestu k ",
+            " cestu ke ",
+            " directions to ",
+            " navigation to ",
+            " navigate to ",
+            " nawigacje do ",
+            " nawigacje na ",
+            " nawigacja do ",
+            " nawigacja na "
+        )
+        markers.firstOrNull { normalized.contains(it) }?.let { marker ->
+            return normalized.substringAfter(marker).trim()
+        }
+        return null
     }
 
     private fun parseVoiceAddressReadTarget(text: String): String? {
@@ -7334,6 +7441,17 @@ class SecretaryViewModel : ViewModel() {
                     voiceManager?.speak(reply, expectReply = false)
                 } else if (!target.isNullOrBlank()) {
                     startVoiceWhatsApp(WhatsAppVoiceCommand(target, message), target)
+                }
+            }
+            "START_NAVIGATION", "OPEN_NAVIGATION", "NAVIGATE" -> {
+                val data = response.action_data ?: return
+                val target = listOf("address", "target", "client_name", "contact_name", "name", "query")
+                    .mapNotNull { data[it] as? String }
+                    .firstOrNull { it.isNotBlank() }
+                if (!target.isNullOrBlank()) {
+                    startVoiceNavigationTarget(target, target)
+                } else {
+                    askForNavigationAddress(response.reply_cs)
                 }
             }
             "LIST_TASKS" -> {
