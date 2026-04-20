@@ -51,6 +51,16 @@ object Strings {
     val newLeads get() = t("New leads", "Nové leady", "Nowe leady")
     val clientsInCrm get() = t("Clients in CRM", "Klienti v CRM", "Klienci w CRM")
     val noActiveTasks get() = t("No active tasks", "Žádné aktivní úkoly", "Brak aktywnych zadań")
+    val fieldModeTitle get() = t("Field mode", "Režim v terénu", "Tryb pracy w terenie")
+    val fieldModeHint get() = t(
+        "Fast actions for mobile work: start a voice work report or navigate to a planned address.",
+        "Rychlé akce pro mobil: spustit hlasový výkaz práce nebo navigaci na plánovanou adresu.",
+        "Szybkie akcje w telefonie: uruchom raport głosowy albo nawigację do zaplanowanego adresu."
+    )
+    val startVoiceWorkReport get() = t("Start voice work report", "Spustit hlasový výkaz", "Uruchom raport głosowy")
+    val navigateToPlannedAddress get() = t("Navigate to planned address", "Navigovat na plánovanou adresu", "Nawiguj do zaplanowanego adresu")
+    val todayFieldTasks get() = t("Today's field tasks", "Dnešní práce v terénu", "Dzisiejsze prace w terenie")
+    val noFieldTasks get() = t("No planned field tasks with address.", "Žádné plánované terénní úkoly s adresou.", "Brak zaplanowanych zadań terenowych z adresem.")
     val clientsWithoutNextAction get() = t("Clients without next action", "Klienti bez další akce", "Klienci bez kolejnej akcji")
     val jobsWithoutNextAction get() = t("Jobs without next action", "Zakázky bez další akce", "Zlecenia bez kolejnej akcji")
     val tasksWithoutAssignee get() = t("Tasks without assignee", "Úkoly bez řešitele", "Zadania bez wykonawcy")
@@ -346,9 +356,19 @@ object Strings {
         "Spouštím navigaci na adresu $address.",
         "Uruchamiam nawigację do $address."
     )
+    fun startingNavigationFor(name: String, address: String): String = t(
+        "Starting navigation to $name: $address.",
+        "Spouštím navigaci na $name: $address.",
+        "Uruchamiam nawigację do $name: $address."
+    )
     val readAddress get() = t("Read address", "Přečíst adresu", "Odczytaj adres")
     val navigate get() = t("Navigate", "Navigace", "Nawiguj")
     val noAddressAvailable get() = t("No address available.", "Adresa není vyplněná.", "Brak adresu.")
+    fun noAddressAvailableFor(name: String): String = t(
+        "No address is saved for $name.",
+        "U kontaktu $name není uložená adresa.",
+        "Kontakt $name nie ma zapisanego adresu."
+    )
     fun addressForSpeech(address: String): String = t("Address: $address", "Adresa: $address", "Adres: $address")
     fun navigationUnavailable(address: String): String = t(
         "Navigation could not be opened for $address.",
@@ -790,6 +810,17 @@ object Strings {
     val hourlyRateLabel get() = t("Hourly rate (£/h)", "Hodinová sazba (£/h)", "Stawka godzinowa (£/h)")
     val noCommunications get() = t("No communications", "Žádná komunikace", "Brak komunikacji")
     val logCommunicationAction get() = t("Log communication", "Zalogovat komunikaci", "Dodaj komunikację")
+    val syncWhatsappAddresses get() = t("Import addresses from WhatsApp", "Doplnit adresy z WhatsApp", "Uzupełnij adresy z WhatsApp")
+    fun whatsappAddressSyncDone(updated: Int, scanned: Int): String = t(
+        "WhatsApp address scan finished: $updated updated from $scanned messages.",
+        "Hotovo: z WhatsApp doplněno $updated adres ze $scanned zpráv.",
+        "Gotowe: z WhatsApp uzupełniono $updated adresów z $scanned wiadomości."
+    )
+    fun whatsappAddressSyncFailed(error: String): String = t(
+        "WhatsApp address import failed: $error",
+        "Import adres z WhatsApp selhal: $error",
+        "Import adresów z WhatsApp nie powiódł się: $error"
+    )
     val noSubject get() = t("No subject", "Bez předmětu", "Bez tematu")
     val selectAll get() = t("Select all", "Vybrat vše", "Zaznacz wszystko")
     val leadFallback get() = t("Lead", "Lead", "Lead")

@@ -208,6 +208,9 @@ interface SecretaryApi {
     @POST("crm/communications")
     suspend fun logCommunication(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
+    @POST("crm/communications/whatsapp-address-sync")
+    suspend fun syncWhatsappAddresses(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === PHOTOS ===
     @GET("crm/photos")
     suspend fun getPhotos(@Query("entity_type") entityType: String? = null, @Query("entity_id") entityId: String? = null): Response<List<Map<String, @JvmSuppressWildcards Any?>>>

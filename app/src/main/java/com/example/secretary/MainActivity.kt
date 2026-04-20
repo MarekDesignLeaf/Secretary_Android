@@ -2008,6 +2008,7 @@ fun DashboardTab(state: UiState, viewModel: SecretaryViewModel, navController: N
         item { DashSection(Strings.jobsWithoutNextAction, orphanJobs) }
         item { DashSection(Strings.tasksWithoutAssignee, orphanTasksAssignee) }
         item { DashSection(Strings.tasksWithoutSchedule, orphanTasksPlanning) }
+        item { FieldModeCard(state, viewModel) }
         // Urgentni ukoly
         val urgent = state.tasks.filter { !it.isCompleted && (it.priority == "urgentni" || it.priority == "kriticka") }
         if (urgent.isNotEmpty()) {
@@ -2055,6 +2056,77 @@ fun DashboardTab(state: UiState, viewModel: SecretaryViewModel, navController: N
         }
         // Klienti
         item { DashSection(Strings.clientsInCrm, state.clients.size) }
+    }
+}
+
+@Composable
+fun FieldModeCard(state: UiState, viewModel: SecretaryViewModel) {
+    val context = LocalContext.current
+    val todayKey = remember { SimpleDateFormat("yyyy-MM-dd", Locale.UK).format(Date()) }
+    val fieldTasks = remember(state.tasks, state.clients, todayKey) {
+        val openTasks = state.tasks.filter { it.isOpenForField() && it.navigationAddress(state) != null }
+        val plannedToday = openTasks.filter {
+            it.plannedDate == todayKey || it.plannedStartAt?.startsWith(todayKey) == true || it.deadline?.startsWith(todayKey) == true
+        }
+        (if (plannedToday.isNotEmpty()) plannedToday else openTasks).take(5)
+    }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(Strings.fieldModeTitle, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(Strings.fieldModeHint, fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = { viewModel.startWorkReportSession() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(Strings.startVoiceWorkReport, fontSize = 12.sp)
+                }
+                OutlinedButton(
+                    onClick = { viewModel.requestNavigationAddress() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(Strings.startNavigation, fontSize = 12.sp)
+                }
+            }
+            Text(Strings.todayFieldTasks, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            if (fieldTasks.isEmpty()) {
+                Text(Strings.noFieldTasks, fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            } else {
+                fieldTasks.forEach { task ->
+                    val address = task.navigationAddress(state).orEmpty()
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(task.title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                listOfNotNull(task.clientName, address).joinToString(" - "),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                if (!openNavigation(context, address)) {
+                                    viewModel.setStatus(Strings.navigationUnavailable(address))
+                                }
+                            }
+                        ) {
+                            Text(Strings.navigate, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2172,6 +2244,21 @@ fun ClientDetailScreen(clientId: Long, viewModel: SecretaryViewModel, navControl
 private fun addressFromParts(vararg parts: String?): String =
     parts.mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
         .joinToString(", ")
+
+private fun Client.navigationAddress(): String? =
+    addressFromParts(billing_address_line1, billing_city, billing_postcode, billing_country)
+        .takeIf { it.isNotBlank() }
+
+private fun SharedContact.navigationAddress(): String? =
+    address?.trim()?.takeIf(String::isNotBlank)
+        ?: addressFromParts(address_line1, city, postcode, country).takeIf { it.isNotBlank() }
+
+private fun Task.navigationAddress(state: UiState): String? =
+    propertyAddress?.trim()?.takeIf(String::isNotBlank)
+        ?: state.clients.firstOrNull { it.id == clientId }?.navigationAddress()
+
+private fun Task.isOpenForField(): Boolean =
+    !isCompleted && status !in setOf("hotovo", "zruseno", "completed", "cancelled")
 
 private fun openNavigation(context: Context, address: String): Boolean {
     val query = address.trim()
@@ -3615,6 +3702,8 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
     val loading = remember { mutableStateOf(true) }
     var selectedType by remember { mutableStateOf("vše") }
     var showAddDialog by remember { mutableStateOf(false) }
+    var syncRunning by remember { mutableStateOf(false) }
+    var syncStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     
     LaunchedEffect(Unit) {
@@ -3638,6 +3727,40 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
                     onClick = { selectedType = type },
                     label = { Text(if (type == "vše") "Vše" else "$emoji ${type.replaceFirstChar { it.uppercase() }}") }
                 )
+            }
+        }
+
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    syncRunning = true
+                    syncStatus = null
+                    scope.launch {
+                        try {
+                            val (updated, scanned) = viewModel.syncWhatsappAddressesFromMessages()
+                            syncStatus = Strings.whatsappAddressSyncDone(updated, scanned)
+                            comms.value = viewModel.loadAllCommunications()
+                        } catch (e: Exception) {
+                            syncStatus = Strings.whatsappAddressSyncFailed(e.message ?: "unknown error")
+                        } finally {
+                            syncRunning = false
+                        }
+                    }
+                },
+                enabled = !syncRunning
+            ) {
+                if (syncRunning) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(Strings.syncWhatsappAddresses)
+                }
+            }
+            syncStatus?.let {
+                Text(it, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.weight(1f))
             }
         }
         
@@ -4472,6 +4595,25 @@ class SecretaryViewModel : ViewModel() {
             val res = api.getCommunications()
             if (res.isSuccessful) res.body() ?: emptyList() else emptyList()
         } catch (e: Exception) { Log.e("ViewModel", "Load comms error", e); emptyList() }
+    }
+
+    suspend fun syncWhatsappAddressesFromMessages(): Pair<Int, Int> {
+        val res = api.syncWhatsappAddresses(
+            mapOf(
+                "apply" to true,
+                "overwrite" to false,
+                "limit" to 10000
+            )
+        )
+        if (!res.isSuccessful) {
+            throw IllegalStateException(res.errorBody()?.string() ?: "HTTP ${res.code()}")
+        }
+        val body = res.body() ?: emptyMap()
+        val summary = body["summary"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val updated = (summary["updated"] as? Number)?.toInt() ?: 0
+        val scanned = (summary["scanned"] as? Number)?.toInt() ?: 0
+        refreshCrmData()
+        return updated to scanned
     }
 
     fun takePhotoForTask(taskId: String, taskTitle: String) {
@@ -5903,20 +6045,28 @@ class SecretaryViewModel : ViewModel() {
                 voiceManager?.speak(message, expectReply = false)
                 return
             }
-            startVoiceNavigation(text)
+            startVoiceNavigationTarget(text, text)
+            return
+        }
+        parseVoiceAddressReadTarget(text)?.let { target ->
+            readVoiceAddressTarget(target, text)
             return
         }
         parseVoiceNavigationAddress(text)?.let { address ->
             if (address.isBlank()) {
                 askForNavigationAddress(text)
             } else {
-                startVoiceNavigation(address)
+                startVoiceNavigationTarget(address, text)
             }
             return
         }
         // If voice work report session is active, redirect to session
         if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
             processVoiceSessionInput(text)
+            return
+        }
+        if (matchesStartWorkReportCommand(normalized)) {
+            startWorkReportSession()
             return
         }
         if (Strings.matchesPlantHealthCommand(lower)) {
@@ -5990,27 +6140,148 @@ class SecretaryViewModel : ViewModel() {
         voiceManager?.speak(message, expectReply = true)
     }
 
-    private fun startVoiceNavigation(address: String) {
+    fun requestNavigationAddress() {
+        askForNavigationAddress(Strings.startNavigation)
+    }
+
+    private data class NavigationAddressCandidate(
+        val name: String,
+        val address: String?,
+        val score: Int
+    )
+
+    private fun startVoiceNavigationTarget(target: String, originalText: String = target) {
+        val cleanTarget = target.trim()
+        if (cleanTarget.isBlank()) {
+            askForNavigationAddress(originalText)
+            return
+        }
+        val candidate = resolveNavigationTarget(cleanTarget)
+        if (candidate != null) {
+            val address = candidate.address
+            if (address.isNullOrBlank()) {
+                val message = Strings.noAddressAvailableFor(candidate.name)
+                _uiState.value = _uiState.value.copy(
+                    awaitingNavigationAddress = false,
+                    status = Strings.waitingForCommand,
+                    lastAiReply = message,
+                    history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+                )
+                voiceManager?.speak(message, expectReply = false)
+                return
+            }
+            startVoiceNavigation(address, candidate.name, originalText)
+            return
+        }
+        startVoiceNavigation(cleanTarget, null, originalText)
+    }
+
+    private fun readVoiceAddressTarget(target: String, originalText: String) {
+        val cleanTarget = target.trim()
+        if (cleanTarget.isBlank()) {
+            val message = Strings.sayNavigationAddress
+            _uiState.value = _uiState.value.copy(
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = true)
+            return
+        }
+        val candidate = resolveNavigationTarget(cleanTarget)
+        val message = when {
+            candidate == null -> Strings.noContactFound(cleanTarget)
+            candidate.address.isNullOrBlank() -> Strings.noAddressAvailableFor(candidate.name)
+            else -> "${candidate.name}. ${Strings.addressForSpeech(candidate.address)}"
+        }
+        _uiState.value = _uiState.value.copy(
+            awaitingNavigationAddress = false,
+            status = Strings.waitingForCommand,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = false)
+    }
+
+    private fun startVoiceNavigation(address: String, label: String? = null, originalText: String = address) {
         val cleanAddress = address.trim()
         if (cleanAddress.isBlank()) {
             askForNavigationAddress(Strings.startNavigation)
             return
         }
-        val message = Strings.startingNavigation(cleanAddress)
+        val message = if (label.isNullOrBlank()) {
+            Strings.startingNavigation(cleanAddress)
+        } else {
+            Strings.startingNavigationFor(label, cleanAddress)
+        }
         _uiState.value = _uiState.value.copy(
             awaitingNavigationAddress = false,
             pendingNavigationAddress = cleanAddress,
             isListening = false,
             status = Strings.startNavigation,
             lastAiReply = message,
-            history = (_uiState.value.history + ChatMessage("user", cleanAddress) + ChatMessage("assistant", message)).takeLast(30)
+            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
         )
         voiceManager?.speak(message, expectReply = false)
+    }
+
+    private fun resolveNavigationTarget(query: String): NavigationAddressCandidate? {
+        val normalizedQuery = normalizeVoiceCommand(query)
+            .removePrefix("klient ")
+            .removePrefix("klienta ")
+            .removePrefix("kontakt ")
+            .removePrefix("kontaktu ")
+            .removePrefix("client ")
+            .removePrefix("contact ")
+            .removePrefix("do ")
+            .removePrefix("na ")
+            .trim()
+        if (normalizedQuery.length < 2) return null
+        val words = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        fun score(labels: List<String>): Int? {
+            val normalizedLabels = labels.map { normalizeVoiceCommand(it) }.filter { it.isNotBlank() }
+            if (normalizedLabels.any { it == normalizedQuery }) return 0
+            if (normalizedLabels.any { it.startsWith(normalizedQuery) }) return 1
+            if (normalizedLabels.any { label -> words.all { it.length > 1 && label.contains(it) } }) return 2
+            if (normalizedLabels.any { it.contains(normalizedQuery) }) return 3
+            return null
+        }
+        val clientMatches = _uiState.value.clients.mapNotNull { client ->
+            val labels = listOfNotNull(
+                client.display_name,
+                client.company_name,
+                client.client_code,
+                client.phone_primary,
+                client.email_primary
+            )
+            score(labels)?.let { NavigationAddressCandidate(client.display_name, client.navigationAddress(), it) }
+        }
+        val contactMatches = _uiState.value.sharedContacts.mapNotNull { contact ->
+            val labels = listOfNotNull(
+                contact.display_name,
+                contact.company_name,
+                contact.phone_primary,
+                contact.email_primary
+            )
+            score(labels)?.let { NavigationAddressCandidate(contact.display_name, contact.navigationAddress(), it + 1) }
+        }
+        val phoneMatches = contactManager
+            ?.searchContact(query)
+            .orEmpty()
+            .mapIndexedNotNull { index, contact ->
+                val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
+                val address = contact["address"]?.takeIf(String::isNotBlank)
+                NavigationAddressCandidate(name, address, 10 + index)
+            }
+        return (clientMatches + contactMatches + phoneMatches).minWithOrNull(
+            compareBy<NavigationAddressCandidate> { it.score }.thenBy { it.name.length }
+        )
     }
 
     private fun parseVoiceNavigationAddress(text: String): String? {
         val normalized = normalizeVoiceCommand(text)
         val prefixes = listOf(
+            "start navigation to ",
+            "start navigation ",
             "spustit navigaci na ",
             "spust navigaci na ",
             "spustit navigaci do ",
@@ -6026,7 +6297,15 @@ class SecretaryViewModel : ViewModel() {
             "navigace do ",
             "navigace ",
             "navigate to ",
-            "navigation to "
+            "navigation to ",
+            "uruchom nawigacje do ",
+            "uruchom nawigacje na ",
+            "uruchom nawigacje ",
+            "nawiguj do ",
+            "nawiguj na ",
+            "nawigacja do ",
+            "nawigacja na ",
+            "nawigacja "
         )
         prefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
             return normalized.drop(prefix.length).trim()
@@ -6036,9 +6315,37 @@ class SecretaryViewModel : ViewModel() {
             normalized == "zapni navigaci" ||
             normalized == "navigace" ||
             normalized == "naviguj" ||
+            normalized == "start navigation" ||
             normalized == "navigate" ||
-            normalized == "navigation"
+            normalized == "navigation" ||
+            normalized == "uruchom nawigacje" ||
+            normalized == "nawiguj" ||
+            normalized == "nawigacja"
         ) "" else null
+    }
+
+    private fun parseVoiceAddressReadTarget(text: String): String? {
+        val normalized = normalizeVoiceCommand(text)
+        val prefixes = listOf(
+            "precti adresu kontaktu ",
+            "precti adresu klienta ",
+            "precti adresu ",
+            "rekni adresu kontaktu ",
+            "rekni adresu klienta ",
+            "rekni adresu ",
+            "read address for ",
+            "read address ",
+            "say address for ",
+            "say address ",
+            "odczytaj adres kontaktu ",
+            "odczytaj adres klienta ",
+            "odczytaj adres ",
+            "powiedz adres "
+        )
+        prefixes.firstOrNull { normalized.startsWith(it) }?.let { prefix ->
+            return normalized.drop(prefix.length).trim()
+        }
+        return null
     }
 
     private fun normalizeVoiceCommand(text: String): String =
@@ -6047,7 +6354,21 @@ class SecretaryViewModel : ViewModel() {
             .replace("\\s+".toRegex(), " ")
 
     private fun isVoiceCancelCommand(normalized: String): Boolean =
-        normalized in setOf("ne", "no", "zrusit", "zrus", "cancel", "stop")
+        normalized in setOf("ne", "nee", "no", "nie", "zadny", "zadna", "zadne", "nula", "zero", "nic", "zrusit", "zrus", "cancel", "stop")
+
+    private fun matchesStartWorkReportCommand(normalized: String): Boolean =
+        listOf(
+            "vykaz prace",
+            "spustit vykaz",
+            "spust vykaz",
+            "spustit hlasovy vykaz",
+            "hlasovy vykaz",
+            "start work report",
+            "work report",
+            "raport pracy",
+            "uruchom raport",
+            "raport glosowy"
+        ).any { normalized.contains(it) }
 
     private fun handleAction(response: AssistantResponse) {
         when (response.action_type) {

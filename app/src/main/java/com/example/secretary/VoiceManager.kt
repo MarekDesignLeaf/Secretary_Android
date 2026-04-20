@@ -114,7 +114,11 @@ class VoiceManager(
         "hei" to "hej",
         "okey" to "ok",
         "tree" to "tri",
-        "free" to "tri"
+        "free" to "tri",
+        "three" to "tri",
+        "pete" to "pet",
+        "fit" to "pet",
+        "know" to "no"
     )
 
     private fun normalizeRecognizedText(text: String): String {
