@@ -834,6 +834,109 @@ private fun calendarDisplayDate(dateKey: String): String =
         dateKey
     }
 
+private val dateInputIsoDateRegex = Regex("""\d{4}-\d{2}-\d{2}""")
+
+private fun dateInputDatePart(value: String): String? =
+    dateInputIsoDateRegex.find(value)?.value
+
+private fun dateInputTimePart(value: String): String? =
+    Regex("""[T ](\d{2}:\d{2}(?::\d{2})?)""").find(value)?.groupValues?.getOrNull(1)
+
+private fun dateInputParseMillis(value: String): Long? {
+    val datePart = dateInputDatePart(value) ?: return null
+    return try {
+        SimpleDateFormat("yyyy-MM-dd", Locale.UK).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }.parse(datePart)?.time
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun dateInputFormatMillis(millis: Long): String =
+    SimpleDateFormat("yyyy-MM-dd", Locale.UK).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }.format(Date(millis))
+
+private fun dateInputTodayMillis(): Long =
+    Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+private fun dateInputMergeSelection(
+    currentValue: String,
+    selectedDate: String,
+    includeTime: Boolean,
+    defaultTime: String?
+): String {
+    if (!includeTime) return selectedDate
+    val time = dateInputTimePart(currentValue) ?: defaultTime ?: "09:00:00"
+    return "${selectedDate}T$time"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DateInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    includeTime: Boolean = false,
+    defaultTime: String? = null,
+    enabled: Boolean = true,
+    singleLine: Boolean = true
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        modifier = modifier,
+        enabled = enabled,
+        singleLine = singleLine,
+        trailingIcon = {
+            IconButton(onClick = { showPicker = true }, enabled = enabled) {
+                Icon(Icons.Default.DateRange, contentDescription = Strings.calendar)
+            }
+        }
+    )
+    if (showPicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = dateInputParseMillis(value) ?: dateInputTodayMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { millis ->
+                        onValueChange(
+                            dateInputMergeSelection(
+                                currentValue = value,
+                                selectedDate = dateInputFormatMillis(millis),
+                                includeTime = includeTime,
+                                defaultTime = defaultTime
+                            )
+                        )
+                    }
+                    showPicker = false
+                }) {
+                    Text(Strings.confirm)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) {
+                    Text(Strings.cancel)
+                }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
+
 private fun calendarWeekdayLabels(): List<String> {
     val base = Calendar.getInstance().apply { set(Calendar.DAY_OF_WEEK, Calendar.MONDAY) }
     return (0 until 7).map {
@@ -1026,8 +1129,8 @@ fun AddClientDialog(
                         BackendUserDropdown(label = "${Strings.actionAssignee} *", users = activeUsers, selectedUserId = actionAssigneeId) {
                             actionAssigneeId = it.id
                         }
-                        OutlinedTextField(value = actionPlannedStart, onValueChange = { actionPlannedStart = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = actionDeadline, onValueChange = { actionDeadline = it }, label = { Text("${Strings.deadline} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
+                        DateInputField(value = actionPlannedStart, onValueChange = { actionPlannedStart = it }, label = "${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "09:00:00")
+                        DateInputField(value = actionDeadline, onValueChange = { actionDeadline = it }, label = "${Strings.deadline} (YYYY-MM-DD)")
                         ExposedDropdownMenuBox(expanded = priorityExpanded, onExpandedChange = { priorityExpanded = it }) {
                             OutlinedTextField(
                                 value = prios.firstOrNull { it.first == actionPriority }?.second ?: Strings.normal,
@@ -1187,8 +1290,8 @@ fun AddTaskDialog(
                         }
                     }
                 }
-                OutlinedTextField(value = plannedStartAt, onValueChange = { plannedStartAt = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = deadline, onValueChange = { deadline = it }, label = { Text("${Strings.deadline} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
+                DateInputField(value = plannedStartAt, onValueChange = { plannedStartAt = it }, label = "${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "09:00:00")
+                DateInputField(value = deadline, onValueChange = { deadline = it }, label = "${Strings.deadline} (YYYY-MM-DD)")
                 OutlinedTextField(value = planningNote, onValueChange = { planningNote = it }, label = { Text(Strings.planningNote) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                 if (allowSetAsNextAction && (selectedClientId != null || initialJobId != null)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2779,7 +2882,7 @@ fun AddJobDialog(
                                 }
                             }
                         }
-                        OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
+                        DateInputField(value = startDate, onValueChange = { startDate = it }, label = "${Strings.plannedStart} (YYYY-MM-DD)")
                     }
                     1 -> {
                         BackendUserDropdown(label = "${Strings.jobOwner} *", users = activeUsers, selectedUserId = assignedUserId) {
@@ -2791,8 +2894,8 @@ fun AddJobDialog(
                         BackendUserDropdown(label = "${Strings.actionAssignee} *", users = activeUsers, selectedUserId = firstActionAssigneeId) {
                             firstActionAssigneeId = it.id
                         }
-                        OutlinedTextField(value = firstActionPlannedStart, onValueChange = { firstActionPlannedStart = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = firstActionDeadline, onValueChange = { firstActionDeadline = it }, label = { Text("${Strings.deadline} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
+                        DateInputField(value = firstActionPlannedStart, onValueChange = { firstActionPlannedStart = it }, label = "${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "09:00:00")
+                        DateInputField(value = firstActionDeadline, onValueChange = { firstActionDeadline = it }, label = "${Strings.deadline} (YYYY-MM-DD)")
                         ExposedDropdownMenuBox(expanded = priorityExpanded, onExpandedChange = { priorityExpanded = it }) {
                             OutlinedTextField(
                                 value = prios.firstOrNull { it.first == firstActionPriority }?.second ?: Strings.normal,
@@ -3218,8 +3321,8 @@ fun TaskCompletionDialog(
                     BackendUserDropdown(label = "${Strings.actionAssignee} *", users = activeUsers, selectedUserId = assignedUserId) {
                         assignedUserId = it.id
                     }
-                    OutlinedTextField(value = plannedStartAt, onValueChange = { plannedStartAt = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(value = deadline, onValueChange = { deadline = it }, label = { Text("${Strings.deadline} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth())
+                    DateInputField(value = plannedStartAt, onValueChange = { plannedStartAt = it }, label = "${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "09:00:00")
+                    DateInputField(value = deadline, onValueChange = { deadline = it }, label = "${Strings.deadline} (YYYY-MM-DD)")
                     ExposedDropdownMenuBox(expanded = priorityExpanded, onExpandedChange = { priorityExpanded = it }) {
                         OutlinedTextField(
                             value = prios.firstOrNull { it.first == priority }?.second ?: Strings.normal,
@@ -3618,11 +3721,11 @@ fun TaskEditDialog(
                     }
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = plannedDate, onValueChange = { plannedDate = it }, label = { Text("${Strings.plan} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = plannedDate, onValueChange = { plannedDate = it }, label = "${Strings.plan} (YYYY-MM-DD)")
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = plannedStart, onValueChange = { plannedStart = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = plannedStart, onValueChange = { plannedStart = it }, label = "${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "09:00:00")
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = plannedEnd, onValueChange = { plannedEnd = it }, label = { Text("${Strings.plannedEnd} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = plannedEnd, onValueChange = { plannedEnd = it }, label = "${Strings.plannedEnd} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "10:00:00")
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = planningNote, onValueChange = { planningNote = it }, label = { Text(Strings.planningNote) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                 Spacer(Modifier.height(8.dp))

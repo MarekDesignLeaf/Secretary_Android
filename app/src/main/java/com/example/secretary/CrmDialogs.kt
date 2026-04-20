@@ -33,11 +33,11 @@ fun EditJobDialog(job: Job, onDismiss: () -> Unit, onSave: (Map<String, Any?>) -
             LazyColumn(Modifier.heightIn(max = 420.dp)) { item {
                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text(Strings.jobTitle) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = startDate, onValueChange = { startDate = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = startDate, onValueChange = { startDate = it }, label = "${Strings.plannedStart} (YYYY-MM-DD)")
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = plannedStart, onValueChange = { plannedStart = it }, label = { Text("${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = plannedStart, onValueChange = { plannedStart = it }, label = "${Strings.plannedStart} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "09:00:00")
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = plannedEnd, onValueChange = { plannedEnd = it }, label = { Text("${Strings.plannedEnd} (YYYY-MM-DDTHH:MM:SS)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = plannedEnd, onValueChange = { plannedEnd = it }, label = "${Strings.plannedEnd} (YYYY-MM-DDTHH:MM:SS)", includeTime = true, defaultTime = "10:00:00")
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = assignedTo, onValueChange = { assignedTo = it }, label = { Text(Strings.assigned) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
@@ -152,7 +152,7 @@ fun CreateInvoiceDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm:
                 }
                 OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("${Strings.amount} (£)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = dueDate, onValueChange = { dueDate = it }, label = { Text("${Strings.dueDate} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = dueDate, onValueChange = { dueDate = it }, label = "${Strings.dueDate} (YYYY-MM-DD)")
             }
         },
         confirmButton = { Button(onClick = {
@@ -200,7 +200,7 @@ fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfi
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                OutlinedTextField(value = workDate, onValueChange = { workDate = it }, label = { Text("${Strings.workDate} (YYYY-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateInputField(value = workDate, onValueChange = { workDate = it }, label = "${Strings.workDate} (YYYY-MM-DD)")
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = totalHours, onValueChange = { totalHours = it }, label = { Text(Strings.totalHours) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Spacer(Modifier.height(8.dp))
