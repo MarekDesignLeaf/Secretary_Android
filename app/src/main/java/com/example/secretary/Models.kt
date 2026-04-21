@@ -130,7 +130,8 @@ data class ContactSection(
     val section_code: String = "",
     val display_name: String = "",
     val is_default: Boolean = false,
-    val sort_order: Int = 0
+    val sort_order: Int = 0,
+    val parent_section_code: String? = null
 )
 
 data class SharedContact(
@@ -144,7 +145,9 @@ data class SharedContact(
     val notes: String? = null,
     val source: String? = null,
     val created_at: String? = null,
-    val updated_at: String? = null
+    val updated_at: String? = null,
+    val next_contact_at: String? = null,
+    val next_contact_method: String? = null
 )
 
 data class SharedContactImportResult(
