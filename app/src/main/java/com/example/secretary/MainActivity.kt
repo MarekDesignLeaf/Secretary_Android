@@ -66,7 +66,6 @@ import okhttp3.OkHttpClient
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.text.SimpleDateFormat
@@ -1472,8 +1471,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
                             trailingContent = { 
                                 IconButton(onClick = { 
                                     val phone = contact["phone"] ?: return@IconButton
-                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
-                                    try { context.startActivity(intent) } catch (_: Exception) {}
+                                    openDialer(context, phone)
                                 }) { Icon(imageVector = Icons.Default.Call, contentDescription = null) } 
                             }
                         )
@@ -2450,16 +2448,24 @@ private fun Task.isOpenForField(): Boolean =
 private fun openDialer(context: Context, phone: String): Boolean {
     val cleanPhone = phone.trim()
     if (cleanPhone.isBlank()) return false
-    val intent = Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", cleanPhone, null)).apply {
-        if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val telUri = Uri.fromParts("tel", cleanPhone, null)
+    val intents = mutableListOf<Intent>()
+    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        intents += Intent(Intent.ACTION_CALL, telUri)
     }
-    return try {
-        context.startActivity(intent)
-        true
-    } catch (e: Exception) {
-        Log.w("Dialer", "Failed to open dialer for phone: $cleanPhone", e)
-        false
+    intents += Intent(Intent.ACTION_DIAL, telUri)
+    for (intent in intents) {
+        intent.apply {
+            if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+            return true
+        } catch (e: Exception) {
+            Log.w("Dialer", "Failed to open phone intent ${intent.action} for phone: $cleanPhone", e)
+        }
     }
+    return false
 }
 
 private fun normalizePhoneForWhatsApp(phone: String): String {
@@ -2596,7 +2602,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
         item {
             Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!c.phone_primary.isNullOrBlank()) {
-                    Button(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${c.phone_primary}"))) },
+                    Button(onClick = { openDialer(ctx, c.phone_primary.orEmpty()) },
                         modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                     ) { Icon(imageVector = Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.call, fontSize = 12.sp) }
                     Button(onClick = {
@@ -4194,7 +4200,6 @@ class SecretaryViewModel : ViewModel() {
             } else original
             chain.proceed(request)
         }
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
