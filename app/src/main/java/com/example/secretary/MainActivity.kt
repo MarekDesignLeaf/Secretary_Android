@@ -7017,12 +7017,20 @@ class SecretaryViewModel : ViewModel() {
         val patterns = listOf(
             Regex("^kdyz reknu (.+) myslim (.+)$"),
             Regex("^kdyz reknu (.+) znamena to (.+)$"),
+            Regex("^kdyz rikam (.+) myslim (.+)$"),
+            Regex("^kdyz vyslovim (.+) myslim (.+)$"),
             Regex("^nauc se ze (.+) je (.+)$"),
             Regex("^nauc se (.+) jako (.+)$"),
+            Regex("^zapamatuj si alias (.+) je (.+)$"),
+            Regex("^zapamatuj si opravu (.+) je (.+)$"),
+            Regex("^zapamatuj si ze kdyz reknu (.+) myslim (.+)$"),
             Regex("^oprav jmeno (.+) na (.+)$"),
+            Regex("^oprav kontakt (.+) na (.+)$"),
             Regex("^alias (.+) je (.+)$"),
             Regex("^alias (.+) znamena (.+)$"),
             Regex("^learn name (.+) as (.+)$"),
+            Regex("^remember alias (.+) is (.+)$"),
+            Regex("^remember correction (.+) is (.+)$"),
             Regex("^when i say (.+) i mean (.+)$")
         )
         for (pattern in patterns) {

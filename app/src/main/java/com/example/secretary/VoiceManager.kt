@@ -134,7 +134,20 @@ class VoiceManager(
             .split(" ")
             .filter { it.isNotBlank() }
             .joinToString(" ") { token -> spokenTokenCorrections()[token] ?: token }
-        return corrected.trim()
+        return applyVoiceAliases(corrected).trim()
+    }
+
+    private fun applyVoiceAliases(text: String): String {
+        var corrected = text
+        settings.getVoiceAliases()
+            .sortedByDescending { normalize(it.alias).length }
+            .forEach { alias ->
+                val aliasNorm = normalize(alias.alias)
+                val targetNorm = normalize(alias.target)
+                if (aliasNorm.length < 2 || targetNorm.length < 2 || aliasNorm == targetNorm) return@forEach
+                corrected = corrected.replace(Regex("\\b${Regex.escape(aliasNorm)}\\b"), targetNorm)
+            }
+        return corrected
     }
 
     private fun recognitionCandidates(results: Bundle?): List<String> {
