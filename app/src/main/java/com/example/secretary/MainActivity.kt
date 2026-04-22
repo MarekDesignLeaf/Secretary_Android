@@ -386,6 +386,7 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                     viewModel.loadSettings()
                     viewModel.loadBackendRoles()
                     viewModel.loadBackendUsers()
+                    viewModel.loadAssistantMemory()
                 }
                 SettingsScreen(viewModel) 
             }
@@ -4567,6 +4568,54 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun loadAssistantMemory() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(assistantMemoryLoading = true, assistantMemoryError = null)
+            try {
+                val res = api.getAssistantMemory(limit = 100)
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        assistantMemory = res.body() ?: emptyList(),
+                        assistantMemoryLoading = false,
+                        assistantMemoryError = null
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        assistantMemoryLoading = false,
+                        assistantMemoryError = Strings.assistantMemoryLoadFailed
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Assistant memory load error", e)
+                _uiState.value = _uiState.value.copy(
+                    assistantMemoryLoading = false,
+                    assistantMemoryError = e.message ?: Strings.assistantMemoryLoadFailed
+                )
+            }
+        }
+    }
+
+    fun deleteAssistantMemory(memoryId: Long) {
+        viewModelScope.launch {
+            try {
+                val res = api.deleteAssistantMemory(memoryId)
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        assistantMemory = _uiState.value.assistantMemory.filterNot { it.id == memoryId },
+                        assistantMemoryError = null
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(assistantMemoryError = Strings.assistantMemoryDeleteFailed)
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Assistant memory delete error", e)
+                _uiState.value = _uiState.value.copy(
+                    assistantMemoryError = e.message ?: Strings.assistantMemoryDeleteFailed
+                )
+            }
+        }
+    }
+
     private fun shouldLoadHierarchyIntegrity(): Boolean {
         val state = _uiState.value
         return state.currentUserPermissions["manage_users"] == true ||
@@ -7587,6 +7636,9 @@ data class UiState(
     val backendRoles: List<BackendRole> = emptyList(),
     val backendUsersLoading: Boolean = false,
     val backendUsersError: String? = null,
+    val assistantMemory: List<AssistantMemoryItem> = emptyList(),
+    val assistantMemoryLoading: Boolean = false,
+    val assistantMemoryError: String? = null,
     val adminActivityLog: List<AdminActivityLogEntry> = emptyList(),
     val adminActivityLoading: Boolean = false,
     val adminActivityError: String? = null,

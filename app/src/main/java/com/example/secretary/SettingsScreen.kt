@@ -38,6 +38,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         item { LanguageSection(sm, viewModel) }
         item { ThemeSection(sm) }
         item { VoiceSection(sm) }
+        item { AssistantMemorySection(viewModel) }
         item { ServerSection(sm, viewModel, state) }
         item { CrmSection(sm) }
         item { NotificationSection(sm) }
@@ -257,6 +258,57 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         SSlider(Strings.voicePitch, pitch, 0.5f..2.0f, 5, "%.1fx".format(pitch), { pitch = it }) { sm.ttsPitch = pitch }
         var sil by remember { mutableFloatStateOf(sm.silenceLength.toFloat()) }
         SSlider(Strings.silenceLengthLabel, sil, 1500f..10000f, 7, "%.1fs".format(sil / 1000), { sil = it }) { sm.silenceLength = sil.toLong() }
+    }
+}
+
+@Composable private fun AssistantMemorySection(viewModel: SecretaryViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    var exp by remember { mutableStateOf(false) }
+    fun fmt(ts: String?) = ts?.replace("T", " ")?.replace("Z", "")?.take(16).orEmpty()
+    SCard(Strings.assistantMemoryTitle, Icons.Default.Info, exp, { exp = !exp }) {
+        Text(Strings.assistantMemoryHint, fontSize = 12.sp, color = Color.Gray)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = { viewModel.loadAssistantMemory() }) {
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(Strings.reload)
+            }
+        }
+        when {
+            state.assistantMemoryLoading -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(Strings.processing, fontSize = 12.sp, color = Color.Gray)
+                }
+            }
+            !state.assistantMemoryError.isNullOrBlank() -> {
+                Text(state.assistantMemoryError ?: Strings.assistantMemoryLoadFailed, color = Color.Red, fontSize = 12.sp)
+            }
+            state.assistantMemory.isEmpty() -> {
+                Text(Strings.assistantMemoryEmpty, color = Color.Gray)
+            }
+            else -> {
+                state.assistantMemory.forEach { item ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(item.content, fontWeight = FontWeight.SemiBold)
+                            val savedAt = fmt(item.updated_at)
+                            if (savedAt.isNotBlank()) {
+                                Text("${Strings.savedAtLabel}: $savedAt", fontSize = 11.sp, color = Color.Gray)
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { viewModel.deleteAssistantMemory(item.id) }) {
+                                    Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(Strings.delete)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

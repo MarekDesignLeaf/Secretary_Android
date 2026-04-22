@@ -17,6 +17,16 @@ interface SecretaryApi {
     @POST("process")
     suspend fun processMessage(@Body request: MessageRequest): Response<AssistantResponse>
 
+    // === ASSISTANT MEMORY ===
+    @GET("assistant/memory")
+    suspend fun getAssistantMemory(@Query("limit") limit: Int = 100): Response<List<AssistantMemoryItem>>
+
+    @POST("assistant/memory")
+    suspend fun rememberAssistantMemory(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<AssistantMemoryItem>
+
+    @DELETE("assistant/memory/{id}")
+    suspend fun deleteAssistantMemory(@Path("id") id: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === PLANTS ===
     @Multipart
     @POST("plants/identify")

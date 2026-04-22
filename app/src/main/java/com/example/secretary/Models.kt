@@ -26,6 +26,13 @@ data class AssistantResponse(
     val is_question: Boolean = false
 )
 
+data class AssistantMemoryItem(
+    val id: Long = 0,
+    val memory_type: String = "long",
+    val content: String = "",
+    val updated_at: String? = null
+)
+
 data class BackendPermission(
     val permission_code: String = "",
     val module_name: String = "",

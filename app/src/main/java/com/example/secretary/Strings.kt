@@ -584,6 +584,15 @@ object Strings {
     val speechRate get() = t("Speech rate", "Rychlost řeči", "Szybkość mowy")
     val voicePitch get() = t("Voice pitch", "Výška hlasu", "Wysokość głosu")
     val silenceLengthLabel get() = t("Silence length", "Délka ticha", "Długość ciszy")
+    val assistantMemoryTitle get() = t("Assistant memory", "Paměť asistentky", "Pamięć asystentki")
+    val assistantMemoryHint get() = t(
+        "Saved voice memories used by the assistant. Say 'remember...' to add and 'forget...' to remove by voice.",
+        "Uložené hlasové poznámky, které asistentka používá. Řekni „zapamatuj si...“ pro přidání a „zapomeň...“ pro smazání hlasem.",
+        "Zapisane notatki głosowe używane przez asystentkę. Powiedz „zapamiętaj...”, aby dodać, albo „zapomnij...”, aby usunąć głosem."
+    )
+    val assistantMemoryEmpty get() = t("No saved memories yet.", "Zatím žádná uložená paměť.", "Brak zapisanych wspomnień.")
+    val assistantMemoryLoadFailed get() = t("Failed to load assistant memory", "Nepodařilo se načíst paměť asistentky", "Nie udało się wczytać pamięci asystentki")
+    val assistantMemoryDeleteFailed get() = t("Failed to delete memory item", "Nepodařilo se smazat položku paměti", "Nie udało się usunąć elementu pamięci")
     val serverConnection get() = t("Server and connection", "Server a připojení", "Serwer i połączenie")
     val crmSettingsLabel get() = t("CRM", "CRM", "CRM")
     val autoRefreshLabel get() = t("Auto refresh", "Automatické obnovení", "Automatyczne odświeżanie")
