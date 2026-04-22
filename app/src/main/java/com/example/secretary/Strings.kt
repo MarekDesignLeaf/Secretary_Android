@@ -68,6 +68,23 @@ object Strings {
         "Te kontakty są współdzielone na serwerze i każdy użytkownik może ich używać oraz je uzupełniać."
     )
     val noSectionsAvailable get() = t("No contact sections available", "Nejsou dostupné žádné oddíly", "Brak dostępnych sekcji")
+    val updateContacts get() = t("Update contacts", "Aktualizovat kontakty", "Zaktualizuj kontakty")
+    val voiceOrManualUpdate get() = t("Manual or voice update? Say manual or voice.", "Manuální nebo hlasová aktualizace? Řekni manuální nebo hlasová.", "Ręcznie czy głosowo? Powiedz ręcznie albo głosowo.")
+    val voiceContactUpdateStarting get() = t("Starting voice contact update.", "Spouštím hlasovou aktualizaci kontaktů.", "Uruchamiam głosową aktualizację kontaktów.")
+    val contactUpdateComplete get() = t("Contact update complete.", "Aktualizace kontaktů dokončena.", "Aktualizacja kontaktów zakończona.")
+    val contactUpdateSkipped get() = t("Skipped.", "Přeskočeno.", "Pominięto.")
+    val contactUpdateDeleted get() = t("Deleted.", "Smazáno.", "Usunięto.")
+    val contactSectionUnknown get() = t("Section not recognized. Say the section name, skip, or delete.", "Sekce nerozpoznána. Řekni název sekce, přeskočit nebo smazat.", "Sekcja nierozpoznana. Podaj nazwę sekcji, pomiń lub usuń.")
+    val openContactsManually get() = t("Opening contacts. You can assign sections manually.", "Otevírám kontakty. Sekce můžete přiřadit ručně.", "Otwieram kontakty. Możesz przypisać sekcje ręcznie.")
+    val nextContactQuestion get() = t(
+        "When to contact next, and how? For example: in a week by phone, in 10 days by email. Or say skip.",
+        "Kdy příště kontaktovat a jakým způsobem? Třeba: za týden telefonicky, za 10 dní emailem. Nebo řekni přeskočit.",
+        "Kiedy kontaktować następnym razem i w jaki sposób? Np. za tydzień telefonicznie, za 10 dni emailem. Albo powiedz pomiń."
+    )
+    val nextContactSet get() = t("Next contact set.", "Příští kontakt nastaven.", "Ustawiono następny kontakt.")
+    val nextContactSkipped get() = t("Next contact not set.", "Příští kontakt nenastaveno.", "Następny kontakt nienastawiony.")
+    val nextContactDate get() = t("Next contact date", "Datum příštího kontaktu", "Data następnego kontaktu")
+    val nextContactMethodLabel get() = t("Method", "Způsob", "Sposób")
     val setClients get() = t("Set clients", "Nastavit klienty", "Ustaw klientów")
     val closeClientSetup get() = t("Close setup", "Zavřít nastavení", "Zamknij ustawianie")
     val saveClientSelection get() = t("Save client selection", "Uložit výběr klientů", "Zapisz wybór klientów")
@@ -730,7 +747,6 @@ object Strings {
     }
 
     fun biometricError(err: String): String = t("Biometric error: $err", "Chyba biometrie: $err", "Błąd biometrii: $err")
-    val biometricLockedOut get() = t("Too many failed attempts. Please use password.", "Příliš mnoho neúspěšných pokusů. Použijte heslo.", "Zbyt wiele nieudanych prób. Użyj hasła.") // A14
     fun connectionProblem(message: String): String = t(
         "Connection error: $message",
         "Chyba připojení: $message",
@@ -930,6 +946,16 @@ object Strings {
         "subcontractor" -> subcontractorsSection
         "material_supplier" -> materialSuppliersSection
         "equipment_vehicle_rental" -> rentalsSection
+        "zakaznici" -> t("Customers", "Zákazníci", "Klienci")
+        "zakaznici_aktivni" -> t("Active", "Aktivní", "Aktywni")
+        "zakaznici_stali" -> t("Regular", "Stálí", "Stali")
+        "zakaznici_ztraceni" -> t("Lost", "Ztracení", "Utraceni")
+        "zakaznici_potencialni" -> t("Potential", "Potenciální", "Potencjalni")
+        "dodavatele" -> t("Suppliers", "Dodavatelé", "Dostawcy")
+        "dodavatele_material" -> t("Materials", "Materiál", "Materiały")
+        "dodavatele_pujcovna" -> t("Rental", "Půjčovna", "Wypożyczalnia")
+        "zamestnanci" -> t("Employees", "Zaměstnanci", "Pracownicy")
+        "subkontraktori" -> t("Subcontractors", "Subkontraktoři", "Podwykonawcy")
         else -> fallback ?: sectionCode
     }
     fun localizePlantOrgan(organ: String): String = when (organ.lowercase()) {
@@ -1015,6 +1041,37 @@ object Strings {
         "export_data" -> t("Export CRM and operational data.", "Umožní exportovat CRM a provozní data.", "Pozwala eksportować CRM i dane operacyjne.")
         "manage_users" -> t("Create users, edit rights and remove users.", "Umožní vytvářet uživatele, měnit jejich práva a mazat je.", "Pozwala tworzyć użytkowników, zmieniać prawa i usuwać ich.")
         else -> fallback ?: ""
+    }
+    fun contactUpdatePrompt(contactInfo: String, currentSection: String, index: Int, total: Int): String = t(
+        "Contact $index of $total: $contactInfo. Currently in: $currentSection. Which section, skip, or delete?",
+        "Kontakt $index z $total: $contactInfo. Aktuálně v: $currentSection. Jaká sekce, přeskočit nebo smazat?",
+        "Kontakt $index z $total: $contactInfo. Aktualnie w: $currentSection. Jaka sekcja, pomiń lub usuń?"
+    )
+    fun contactUpdateAssigned(name: String, section: String): String = t(
+        "$name → $section",
+        "$name → $section",
+        "$name → $section"
+    )
+    fun nextContactConfirm(name: String, dateStr: String, method: String): String = t(
+        "$name — next contact: $dateStr by $method.",
+        "$name — příší kontakt: $dateStr, způsob: $method.",
+        "$name — następny kontakt: $dateStr, sposób: $method."
+    )
+    fun contactUpdateSummary(processed: Int): String = t(
+        "Done. Processed $processed contacts.",
+        "Hotovo. Zpracováno $processed kontaktů.",
+        "Gotowe. Przetworzono $processed kontaktów."
+    )
+    fun matchesUpdateContactsCommand(text: String): Boolean {
+        val normalized = normalizeCommandText(text)
+        return normalized.contains("proved aktualizaci kontaktu") ||
+            normalized.contains("proved aktualizaci kontaktech") ||
+            normalized.contains("aktualizuj kontakty") ||
+            normalized.contains("update contacts") ||
+            normalized.contains("aktualizovat kontakty") ||
+            normalized.contains("uprav kontakty") ||
+            normalized.contains("roztrid kontakty") ||
+            normalized.contains("roztridit kontakty")
     }
     fun matchesLogoutCommand(text: String): Boolean {
         val normalized = text.lowercase().trim()
