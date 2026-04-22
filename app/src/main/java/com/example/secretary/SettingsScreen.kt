@@ -264,10 +264,30 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 @Composable private fun AssistantMemorySection(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     var exp by remember { mutableStateOf(false) }
+    var newMemory by remember { mutableStateOf("") }
     fun fmt(ts: String?) = ts?.replace("T", " ")?.replace("Z", "")?.take(16).orEmpty()
     SCard(Strings.assistantMemoryTitle, Icons.Default.Info, exp, { exp = !exp }) {
         Text(Strings.assistantMemoryHint, fontSize = 12.sp, color = Color.Gray)
+        OutlinedTextField(
+            value = newMemory,
+            onValueChange = { newMemory = it },
+            label = { Text(Strings.assistantMemoryNewPlaceholder) },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2
+        )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Button(
+                onClick = {
+                    viewModel.rememberAssistantMemory(newMemory)
+                    newMemory = ""
+                },
+                enabled = newMemory.isNotBlank() && !state.assistantMemoryLoading
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(Strings.save)
+            }
+            Spacer(Modifier.width(8.dp))
             OutlinedButton(onClick = { viewModel.loadAssistantMemory() }) {
                 Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))

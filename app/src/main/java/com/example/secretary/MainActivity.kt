@@ -4616,6 +4616,31 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun rememberAssistantMemory(content: String) {
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(assistantMemoryLoading = true, assistantMemoryError = null)
+            try {
+                val res = api.rememberAssistantMemory(mapOf("content" to cleanContent, "memory_type" to "long"))
+                if (res.isSuccessful) {
+                    loadAssistantMemory()
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        assistantMemoryLoading = false,
+                        assistantMemoryError = Strings.assistantMemorySaveFailed
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Assistant memory save error", e)
+                _uiState.value = _uiState.value.copy(
+                    assistantMemoryLoading = false,
+                    assistantMemoryError = e.message ?: Strings.assistantMemorySaveFailed
+                )
+            }
+        }
+    }
+
     private fun shouldLoadHierarchyIntegrity(): Boolean {
         val state = _uiState.value
         return state.currentUserPermissions["manage_users"] == true ||
@@ -7362,6 +7387,9 @@ class SecretaryViewModel : ViewModel() {
     private fun handleAction(response: AssistantResponse) {
         when (response.action_type) {
             "REFRESH" -> { refreshCrmData() }
+            "MEMORY_REMEMBERED", "MEMORY_FORGOTTEN" -> {
+                loadAssistantMemory()
+            }
             "SEARCH_CONTACTS" -> {
                 val query = response.action_data?.get("query") as? String ?: return
                 val results = contactManager?.searchContact(query) ?: emptyList()
