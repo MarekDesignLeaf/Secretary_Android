@@ -6826,6 +6826,7 @@ class SecretaryViewModel : ViewModel() {
             .removePrefix("na ")
             .trim()
         if (normalizedQuery.length < 2) return null
+        forcedSannyNavigationCandidate(normalizedQuery)?.let { return it }
         fun score(labels: List<String>): Int? = scoreVoiceLabels(labels, voiceQueryVariants(normalizedQuery))?.first
         val clientMatches = _uiState.value.clients.mapNotNull { client ->
             val labels = listOfNotNull(
@@ -6858,6 +6859,44 @@ class SecretaryViewModel : ViewModel() {
             }
         return (clientMatches + contactMatches + phoneMatches).minWithOrNull(
             compareBy<NavigationAddressCandidate> { if (it.address.isNullOrBlank()) it.score + 50 else it.score }
+                .thenBy { it.score }
+                .thenBy { it.name.length }
+        )
+    }
+
+    private fun forcedSannyNavigationCandidate(normalizedQuery: String): NavigationAddressCandidate? {
+        val compactQuery = normalizedQuery.replace(" ", "")
+        val tokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        val sannyMisheardTokens = setOf(
+            "sanny", "sani", "sanni", "sany", "sunny", "sunnie",
+            "andy", "andi", "endy", "annie", "manny", "simy", "simi", "sammy"
+        )
+        val likelySanny = tokens.any { it in sannyMisheardTokens } ||
+            compactQuery in setOf("andymartin", "mannymartin", "simimartin", "sannymartin")
+        if (!likelySanny) return null
+
+        fun isSannyName(name: String): Boolean {
+            val compactName = normalizeVoiceCommand(name).replace(" ", "")
+            return compactName == "sanny" || compactName.startsWith("sanny")
+        }
+
+        val clientMatches = _uiState.value.clients
+            .filter { isSannyName(it.display_name) || it.company_name?.let(::isSannyName) == true }
+            .map { NavigationAddressCandidate(it.display_name, it.navigationAddress(), -20) }
+        val sharedMatches = _uiState.value.sharedContacts
+            .filter { isSannyName(it.display_name) || it.company_name?.let(::isSannyName) == true }
+            .map { NavigationAddressCandidate(it.display_name, it.navigationAddress(), -19) }
+        val phoneMatches = contactManager
+            ?.getAllContacts()
+            .orEmpty()
+            .mapNotNull { contact ->
+                val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                if (!isSannyName(name)) return@mapNotNull null
+                NavigationAddressCandidate(name, contact["address"]?.takeIf(String::isNotBlank), -18)
+            }
+
+        return (clientMatches + sharedMatches + phoneMatches).minWithOrNull(
+            compareBy<NavigationAddressCandidate> { if (it.address.isNullOrBlank()) 50 else 0 }
                 .thenBy { it.score }
                 .thenBy { it.name.length }
         )
