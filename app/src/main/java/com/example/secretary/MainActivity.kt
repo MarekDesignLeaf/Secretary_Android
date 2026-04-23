@@ -2516,13 +2516,13 @@ private fun openNavigation(context: Context, address: String): Boolean {
         addNavigationLaunchFlags(context)
     }
     val intents = listOf(
+        Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$encoded&mode=d")).apply {
+            setPackage("com.google.android.apps.maps")
+            addNavigationLaunchFlags(context)
+        },
         Intent(Intent.ACTION_VIEW, mapsDirectionsUri).apply {
             setPackage("com.google.android.apps.maps")
             addCategory(Intent.CATEGORY_BROWSABLE)
-            addNavigationLaunchFlags(context)
-        },
-        Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$encoded")).apply {
-            setPackage("com.google.android.apps.maps")
             addNavigationLaunchFlags(context)
         },
         mapIntent,
@@ -5276,11 +5276,13 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun onNavigationLaunchHandled(opened: Boolean, address: String) {
+        val status = if (opened) Strings.waitingForCommand else Strings.navigationUnavailable(address)
         _uiState.value = _uiState.value.copy(
             pendingNavigationAddress = null,
             awaitingNavigationAddress = false,
-            status = if (opened) Strings.waitingForCommand else Strings.navigationUnavailable(address)
+            status = status
         )
+        if (!opened) voiceManager?.speak(status, expectReply = false)
     }
 
     fun onCallLaunchHandled(opened: Boolean, phone: String) {
@@ -7135,10 +7137,12 @@ class SecretaryViewModel : ViewModel() {
         val askOnlyCommands = setOf(
             "spustit navigaci",
             "spust navigaci",
+            "spousti navigaci",
             "zapni navigaci",
             "otevri navigaci",
             "otevri mapy",
             "spust mapy",
+            "spousti mapy",
             "navigace",
             "naviguj",
             "trasa",
@@ -7165,14 +7169,19 @@ class SecretaryViewModel : ViewModel() {
             "maps to ",
             "spustit navigaci na ",
             "spust navigaci na ",
+            "spousti navigaci na ",
             "spustit navigaci do ",
             "spust navigaci do ",
+            "spousti navigaci do ",
             "spustit navigaci k ",
             "spust navigaci k ",
+            "spousti navigaci k ",
             "spustit navigaci ke ",
             "spust navigaci ke ",
+            "spousti navigaci ke ",
             "spustit navigaci ",
             "spust navigaci ",
+            "spousti navigaci ",
             "zapni navigaci na ",
             "zapni navigaci do ",
             "zapni navigaci k ",
@@ -7187,9 +7196,13 @@ class SecretaryViewModel : ViewModel() {
             "otevri mapy k ",
             "otevri mapy ke ",
             "spust mapy na ",
+            "spousti mapy na ",
             "spust mapy do ",
+            "spousti mapy do ",
             "spust mapy k ",
+            "spousti mapy k ",
             "spust mapy ke ",
+            "spousti mapy ke ",
             "mapy na ",
             "mapy do ",
             "mapy k ",

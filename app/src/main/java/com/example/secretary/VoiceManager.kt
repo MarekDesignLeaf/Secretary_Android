@@ -2,10 +2,10 @@ package com.example.secretary
 
 import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -36,12 +36,11 @@ class VoiceManager(
     private var stayIdleAfterSpeak = false
     private val handler = Handler(Looper.getMainLooper())
     private val TAG = "VoiceManager"
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private var wasMuted = false
 
     enum class ListenMode { IDLE, HOTWORD, COMMAND }
     private var mode = ListenMode.IDLE
     private var isRecognizerActive = false
+    private var lastRecognizerStartAt = 0L
     private var consecutiveErrors = 0
     private var hotwordMatchedInSession = false
     private val MAX_CONSECUTIVE_ERRORS = 5
@@ -126,7 +125,12 @@ class VoiceManager(
         "zero" to "nula",
         "know" to "no",
         "nah" to "ne",
-        "nee" to "ne"
+        "nee" to "ne",
+        "sani" to "sanny",
+        "sanni" to "sanny",
+        "sany" to "sanny",
+        "sunny" to "sanny",
+        "sunnie" to "sanny"
     )
 
     private fun normalizeRecognizedText(text: String): String {
@@ -256,19 +260,29 @@ class VoiceManager(
                     onStatusChange(Strings.speechRecognitionUnavailable)
                     return@post
                 }
+                val activeForMs = SystemClock.elapsedRealtime() - lastRecognizerStartAt
+                if (isRecognizerActive && activeForMs < 8000L) {
+                    Log.d(TAG, "Recognizer already active; skip duplicate startListening")
+                    return@post
+                } else if (isRecognizerActive) {
+                    Log.w(TAG, "Recognizer looked stale for ${activeForMs}ms; recreating")
+                    try { recognizer?.cancel() } catch (_: Exception) { }
+                    try { recognizer?.destroy() } catch (_: Exception) { }
+                    recognizer = null
+                    isRecognizerActive = false
+                }
                 if (recognizer == null) {
                     Log.d(TAG, "Creating new SpeechRecognizer")
                     recognizer = SpeechRecognizer.createSpeechRecognizer(context)
                     recognizer?.setRecognitionListener(createListener())
                 }
                 hotwordMatchedInSession = false
-                muteBeep()
                 Log.d(TAG, "Calling startListening on recognizer")
                 recognizer?.startListening(createRecognizerIntent())
                 isRecognizerActive = true
+                lastRecognizerStartAt = SystemClock.elapsedRealtime()
             } catch (e: Exception) {
                 isRecognizerActive = false
-                unmuteBeep()
                 scheduleRestart(1500)
             }
         }
@@ -282,11 +296,20 @@ class VoiceManager(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, mode == ListenMode.HOTWORD)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            putExtra("android.speech.extra.SUPPRESS_BEEP", true)
+            putExtra("android.speech.extra.DICTATION_MODE", mode == ListenMode.HOTWORD)
             // Do NOT use EXTRA_PREFER_OFFLINE — breaks recognizer if no offline model
 
             val silence = settings.silenceLength
-            putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", silence)
-            putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", silence + 1000L)
+            if (mode == ListenMode.HOTWORD) {
+                // Keep the passive wake-word recognizer open longer so Android does not chirp on every short restart.
+                putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 60_000L)
+                putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 60_000L)
+                putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 60_000L)
+            } else {
+                putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", silence)
+                putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", silence + 1000L)
+            }
         }
     }
 
@@ -294,7 +317,6 @@ class VoiceManager(
         isRecognizerActive = false
         handler.removeCallbacksAndMessages(null)
         try { recognizer?.cancel() } catch (_: Exception) { }
-        unmuteBeep()
     }
 
     private fun scheduleRestart(delayMs: Long) {
@@ -319,7 +341,6 @@ class VoiceManager(
         override fun onEndOfSpeech() { isRecognizerActive = false }
         override fun onError(error: Int) {
             isRecognizerActive = false
-            unmuteBeep()
             consecutiveErrors++
             if (mode == ListenMode.COMMAND) onRecognizerError(error)
             if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED) {
@@ -344,7 +365,6 @@ class VoiceManager(
         }
         override fun onResults(results: Bundle?) {
             isRecognizerActive = false
-            unmuteBeep()
             if (mode == ListenMode.HOTWORD && hotwordMatchedInSession) return
             val candidates = recognitionCandidates(results)
             when (mode) {
@@ -371,33 +391,6 @@ class VoiceManager(
         cancelRecognizer()
         onHotwordDetected()
         speak(Strings.listening, expectReply = true)
-    }
-
-    private var originalMusicVol = 0
-    private var originalNotifVol = 0
-    private var originalSystemVol = 0
-
-    private fun muteBeep() {
-        if (wasMuted) return
-        try {
-            originalNotifVol = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
-            originalSystemVol = audioManager.getStreamVolume(AudioManager.STREAM_SYSTEM)
-            audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0)
-            audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0)
-            wasMuted = true
-        } catch (e: Exception) { Log.e(TAG, "Mute error", e) }
-    }
-
-    private fun unmuteBeep() {
-        if (!wasMuted) return
-        try {
-            audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, originalNotifVol, 0)
-            audioManager.setStreamVolume(AudioManager.STREAM_SYSTEM, originalSystemVol, 0)
-        } catch (e: Exception) {
-            Log.e(TAG, "Unmute error", e)
-        } finally {
-            wasMuted = false
-        }
     }
 
     private fun setupTts() {
