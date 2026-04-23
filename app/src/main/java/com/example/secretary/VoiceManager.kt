@@ -390,7 +390,11 @@ class VoiceManager(
     private fun triggerHotword() {
         cancelRecognizer()
         onHotwordDetected()
-        speak(Strings.listening, expectReply = true)
+        mode = ListenMode.COMMAND
+        consecutiveErrors = 0
+        hotwordMatchedInSession = false
+        onStatusChange("${Strings.listening}...")
+        handler.postDelayed({ ensureRecognizerAndListen() }, 150)
     }
 
     private fun setupTts() {

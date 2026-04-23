@@ -6857,7 +6857,9 @@ class SecretaryViewModel : ViewModel() {
                 }
             }
         return (clientMatches + contactMatches + phoneMatches).minWithOrNull(
-            compareBy<NavigationAddressCandidate> { it.score }.thenBy { it.name.length }
+            compareBy<NavigationAddressCandidate> { if (it.address.isNullOrBlank()) it.score + 50 else it.score }
+                .thenBy { it.score }
+                .thenBy { it.name.length }
         )
     }
 
@@ -6970,6 +6972,18 @@ class SecretaryViewModel : ViewModel() {
     private fun voiceQueryVariants(normalizedQuery: String): List<VoiceQueryVariant> {
         val base = normalizedQuery.trim()
         val variants = mutableListOf(VoiceQueryVariant(base))
+        mapOf(
+            "andy" to "sanny",
+            "andi" to "sanny",
+            "endy" to "sanny",
+            "annie" to "sanny"
+        ).forEach { (heard, intended) ->
+            val tokenPattern = Regex("\\b${Regex.escape(heard)}\\b")
+            when {
+                base == heard -> variants += VoiceQueryVariant(intended, heard)
+                tokenPattern.containsMatchIn(base) -> variants += VoiceQueryVariant(tokenPattern.replace(base, intended).trim(), heard)
+            }
+        }
         settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
             val aliasNorm = normalizeVoiceCommand(alias.alias)
             val targetNorm = normalizeVoiceCommand(alias.target)
