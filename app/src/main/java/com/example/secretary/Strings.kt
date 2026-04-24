@@ -616,6 +616,16 @@ object Strings {
     val assistantMemorySaveFailed get() = t("Failed to save memory item", "Nepodařilo se uložit položku paměti", "Nie udało się zapisać elementu pamięci")
     val assistantMemoryDeleteFailed get() = t("Failed to delete memory item", "Nepodařilo se smazat položku paměti", "Nie udało się usunąć elementu pamięci")
     val assistantMemoryNewPlaceholder get() = t("What should the assistant remember?", "Co si má asistentka pamatovat?", "Co asystentka ma zapamiętać?")
+    val noAsteriskStyleRemembered get() = t(
+        "Saved. I will no longer use asterisks in contact names.",
+        "Uloženo. U jmen kontaktů už nebudu používat hvězdičky.",
+        "Zapisano. Nie będę już używać gwiazdek w nazwach kontaktów."
+    )
+    val noAsteriskStyleDisabled get() = t(
+        "Okay. I can use asterisks in names again.",
+        "Dobře. Můžu znovu používat hvězdičky ve jménech.",
+        "Dobrze. Mogę znów używać gwiazdek w nazwach."
+    )
     val serverConnection get() = t("Server and connection", "Server a připojení", "Serwer i połączenie")
     val crmSettingsLabel get() = t("CRM", "CRM", "CRM")
     val autoRefreshLabel get() = t("Auto refresh", "Automatické obnovení", "Automatyczne odświeżanie")

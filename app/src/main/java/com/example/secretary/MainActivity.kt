@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.SystemClock
 import android.provider.Telephony
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -4250,6 +4251,15 @@ class SecretaryViewModel : ViewModel() {
     private var contactManager: ContactManager? = null
     private var mailManager: MailManager? = null
     private var settingsManager: SettingsManager? = null
+    private var recentVoiceContact: RecentVoiceContact? = null
+    private val recentVoiceContactTtlMs = 5 * 60 * 1000L
+
+    private data class RecentVoiceContact(
+        val name: String,
+        val address: String?,
+        val phone: String?,
+        val savedAtMs: Long
+    )
     
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
@@ -6587,6 +6597,36 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    private fun sanitizeContactName(name: String): String =
+        name.replace(Regex("\\*+"), " ").replace(Regex("\\s+"), " ").trim()
+
+    private fun sanitizeAssistantText(text: String): String {
+        val avoidAsterisks = settingsManager?.avoidAsterisksInReplies != false
+        if (!avoidAsterisks) return text
+        val sanitized = text.replace(Regex("\\*+"), " ").replace(Regex(" {2,}"), " ").trim()
+        return sanitized.ifBlank { text }
+    }
+
+    private fun rememberRecentVoiceContact(name: String?, address: String?, phone: String?) {
+        val cleanName = name?.let(::sanitizeContactName)?.takeIf(String::isNotBlank) ?: return
+        recentVoiceContact = RecentVoiceContact(
+            name = cleanName,
+            address = address?.trim()?.takeIf(String::isNotBlank),
+            phone = phone?.trim()?.takeIf(String::isNotBlank),
+            savedAtMs = SystemClock.elapsedRealtime()
+        )
+    }
+
+    private fun currentRecentVoiceContact(): RecentVoiceContact? {
+        val current = recentVoiceContact ?: return null
+        val age = SystemClock.elapsedRealtime() - current.savedAtMs
+        if (age > recentVoiceContactTtlMs) {
+            recentVoiceContact = null
+            return null
+        }
+        return current
+    }
+
     fun onVoiceInput(text: String) {
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
@@ -6603,6 +6643,22 @@ class SecretaryViewModel : ViewModel() {
                 kotlinx.coroutines.delay(2500) // wait for TTS
                 logout()
             }
+            return
+        }
+        parseAsteriskPreference(normalized)?.let { avoidAsterisks ->
+            settingsManager?.avoidAsterisksInReplies = avoidAsterisks
+            if (avoidAsterisks) {
+                rememberAssistantMemory("Nepoužívej hvězdičky v názvech kontaktů.")
+            }
+            val message = sanitizeAssistantText(
+                if (avoidAsterisks) Strings.noAsteriskStyleRemembered else Strings.noAsteriskStyleDisabled
+            )
+            _uiState.value = _uiState.value.copy(
+                status = Strings.waitingForCommand,
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = false)
             return
         }
         if (_uiState.value.voiceAliasTraining != null) {
@@ -6638,7 +6694,13 @@ class SecretaryViewModel : ViewModel() {
         }
         parseVoiceNavigationAddress(text)?.let { address ->
             if (address.isBlank()) {
-                askForNavigationAddress(text)
+                val recent = currentRecentVoiceContact()
+                val recentAddress = recent?.address
+                if (!recentAddress.isNullOrBlank()) {
+                    startVoiceNavigation(recentAddress, recent.name, text)
+                } else {
+                    askForNavigationAddress(text)
+                }
             } else {
                 startVoiceNavigationTarget(address, text)
             }
@@ -6695,7 +6757,7 @@ class SecretaryViewModel : ViewModel() {
                 ))
                 if (res.isSuccessful) {
                     res.body()?.let { response ->
-                        val assistantReply = response.reply_cs
+                        val assistantReply = sanitizeAssistantText(response.reply_cs)
                         val newAssistantMessage = ChatMessage("assistant", assistantReply)
                         _uiState.value = _uiState.value.copy(
                             lastAiReply = assistantReply,
@@ -6852,6 +6914,7 @@ class SecretaryViewModel : ViewModel() {
         }
         val candidate = resolveNavigationTarget(cleanTarget)
         if (candidate != null) {
+            rememberRecentVoiceContact(candidate.name, candidate.address, null)
             val address = candidate.address
             if (address.isNullOrBlank()) {
                 val message = Strings.noAddressAvailableFor(candidate.name)
@@ -6883,6 +6946,9 @@ class SecretaryViewModel : ViewModel() {
             return
         }
         val candidate = resolveNavigationTarget(cleanTarget)
+        if (candidate != null) {
+            rememberRecentVoiceContact(candidate.name, candidate.address, null)
+        }
         val message = when {
             candidate == null -> Strings.noContactFound(cleanTarget)
             candidate.address.isNullOrBlank() -> Strings.noAddressAvailableFor(candidate.name)
@@ -7049,6 +7115,9 @@ class SecretaryViewModel : ViewModel() {
             candidate.phone.isNullOrBlank() -> Strings.noPhoneAvailableFor(candidate.name)
             else -> Strings.dialingContact(candidate.name)
         }
+        if (candidate != null) {
+            rememberRecentVoiceContact(candidate.name, null, candidate.phone)
+        }
         _uiState.value = _uiState.value.copy(
             pendingCall = candidate?.phone?.takeIf(String::isNotBlank),
             isListening = false,
@@ -7081,6 +7150,9 @@ class SecretaryViewModel : ViewModel() {
             candidate.phone.isNullOrBlank() -> Strings.noPhoneAvailableFor(candidate.name)
             cleanMessage.isBlank() -> Strings.sayWhatsAppMessage(candidate.name)
             else -> Strings.openingWhatsAppFor(candidate.name)
+        }
+        if (candidate != null) {
+            rememberRecentVoiceContact(candidate.name, null, candidate.phone)
         }
         _uiState.value = _uiState.value.copy(
             pendingWhatsAppPhone = if (!candidate?.phone.isNullOrBlank() && cleanMessage.isNotBlank()) candidate?.phone else null,
@@ -7266,11 +7338,13 @@ class SecretaryViewModel : ViewModel() {
         if (levenshteinDistance(compactQuery, compactLabel) <= maxDistance) return true
         val queryTokens = query.split(" ").filter { it.length >= 4 }
         val labelTokens = label.split(" ").filter { it.length >= 4 }
-        return queryTokens.any { q ->
+        if (queryTokens.isEmpty() || labelTokens.isEmpty()) return false
+        val matchedTokenCount = queryTokens.count { q ->
             labelTokens.any { l ->
                 kotlin.math.abs(q.length - l.length) <= 2 && levenshteinDistance(q, l) <= maxDistance
             }
         }
+        return if (queryTokens.size >= 2) matchedTokenCount >= 2 else matchedTokenCount >= 1
     }
 
     private fun levenshteinDistance(a: String, b: String): Int {
@@ -7303,12 +7377,6 @@ class SecretaryViewModel : ViewModel() {
             "whatsapp ", "send whatsapp ", "whatsapp message "
         ).forEach { prefix ->
             value = value.removePrefix(prefix)
-        }
-        val tokens = value.trim().split(" ").filter { it.isNotBlank() }
-        if (tokens.size > 1 && "designleaf" in tokens) {
-            value = tokens.filterNot { it == "designleaf" }.joinToString(" ")
-        } else if (tokens.size > 2 && tokens.contains("design") && tokens.contains("leaf")) {
-            value = tokens.filterNot { it == "design" || it == "leaf" }.joinToString(" ")
         }
         return value.trim()
     }
@@ -7633,6 +7701,35 @@ class SecretaryViewModel : ViewModel() {
             .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
             .replace("\\s+".toRegex(), " ")
 
+    private fun parseAsteriskPreference(normalized: String): Boolean? {
+        val text = normalized.trim()
+        if (text.isBlank()) return null
+        val disablePhrases = listOf(
+            "bez hvezdicek",
+            "nepouzivej hvezdicky",
+            "nepouzivej hvezdicku",
+            "nemas pouzivat hvezdicky",
+            "nechci hvezdicky",
+            "odstran hvezdicky",
+            "without asterisks",
+            "do not use asterisks",
+            "dont use asterisks",
+            "no asterisks"
+        )
+        if (disablePhrases.any { text.contains(it) }) return true
+
+        val enablePhrases = listOf(
+            "pouzivej hvezdicky",
+            "muzes pouzivat hvezdicky",
+            "muze pouzivat hvezdicky",
+            "allow asterisks",
+            "use asterisks again",
+            "asterisks again"
+        )
+        if (enablePhrases.any { text.contains(it) }) return false
+        return null
+    }
+
     private fun isVoiceCancelCommand(normalized: String): Boolean =
         normalized in setOf("ne", "nee", "no", "nie", "zadny", "zadna", "zadne", "nula", "zero", "nic", "zrusit", "zrus", "cancel", "stop")
 
@@ -7660,10 +7757,14 @@ class SecretaryViewModel : ViewModel() {
                 val query = response.action_data?.get("query") as? String ?: return
                 val results = contactManager?.searchContact(query) ?: emptyList()
                 if (results.isNotEmpty()) {
+                    results.firstOrNull()?.let {
+                        rememberRecentVoiceContact(it["name"], it["address"], it["phone"])
+                    }
                     _uiState.value = _uiState.value.copy(contactResults = results)
                     val names = results.joinToString(", ") {
+                        val name = sanitizeContactName(it["name"].orEmpty())
                         val address = it["address"]?.takeIf(String::isNotBlank)
-                        if (address == null) it["name"].orEmpty() else "${it["name"].orEmpty()} (${Strings.address}: $address)"
+                        if (address == null) name else "$name (${Strings.address}: $address)"
                     }
                     onVoiceInput("SYSTÉM: Našla jsem tyto kontakty: $names. Přečti je uživateli a nabídni volání, přečtení adresy a navigaci, pokud je adresa dostupná.")
                 } else {
@@ -7767,6 +7868,7 @@ class SecretaryViewModel : ViewModel() {
                 val target = listOf("contact_name", "client_name", "name", "query")
                     .firstNotNullOfOrNull { response.action_data?.get(it) as? String }
                 if (!phone.isNullOrBlank()) {
+                    rememberRecentVoiceContact(target, null, phone)
                     val label = target?.takeIf(String::isNotBlank) ?: phone
                     val message = Strings.dialingContact(label)
                     _uiState.value = _uiState.value.copy(
@@ -7786,6 +7888,7 @@ class SecretaryViewModel : ViewModel() {
                     .firstNotNullOfOrNull { data[it] as? String }
                 val message = (data["message"] as? String).orEmpty()
                 if (!phone.isNullOrBlank()) {
+                    rememberRecentVoiceContact(target, null, phone)
                     val label = target?.takeIf(String::isNotBlank) ?: phone
                     val reply = Strings.openingWhatsAppFor(label)
                     _uiState.value = _uiState.value.copy(

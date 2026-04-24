@@ -330,12 +330,16 @@ class VoiceManager(
             val silence = settings.silenceLength
             if (mode == ListenMode.HOTWORD) {
                 // Keep the passive wake-word recognizer open longer so Android does not chirp on every short restart.
-                putExtra("android.speech.extra.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 60_000L)
-                putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", 60_000L)
-                putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", 60_000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60_000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 60_000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 60_000L)
+                putExtra(
+                    RecognizerIntent.EXTRA_SEGMENTED_SESSION,
+                    RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS
+                )
             } else {
-                putExtra("android.speech.extra.SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS", silence)
-                putExtra("android.speech.extra.SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS", silence + 1000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence + 1000L)
             }
         }
     }
@@ -409,6 +413,20 @@ class VoiceManager(
             if (candidates.any(::matchesHotword)) {
                 hotwordMatchedInSession = true
                 triggerHotword()
+            }
+        }
+        override fun onSegmentResults(segmentResults: Bundle) {
+            if (mode != ListenMode.HOTWORD || hotwordMatchedInSession) return
+            val candidates = recognitionCandidates(segmentResults)
+            if (candidates.any(::matchesHotword)) {
+                hotwordMatchedInSession = true
+                triggerHotword()
+            }
+        }
+        override fun onEndOfSegmentedSession() {
+            isRecognizerActive = false
+            if (mode == ListenMode.HOTWORD && !hotwordMatchedInSession && !isSpeaking) {
+                scheduleRestart(200)
             }
         }
         override fun onEvent(eventType: Int, params: Bundle?) {}

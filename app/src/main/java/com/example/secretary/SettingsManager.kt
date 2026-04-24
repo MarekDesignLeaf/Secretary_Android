@@ -110,8 +110,11 @@ class SettingsManager(context: Context) {
         get() = getScopedBoolean("hotword_enabled", true)
         set(v) = setScopedBoolean("hotword_enabled", v)
     var activationWord: String
-        get() = getScopedString("activation_word", "hej kundo")
+        get() = getScopedString("activation_word", "sanny")
         set(v) = setScopedString("activation_word", v)
+    var avoidAsterisksInReplies: Boolean
+        get() = getScopedBoolean("avoid_asterisks_in_replies", true)
+        set(v) = setScopedBoolean("avoid_asterisks_in_replies", v)
     var recognitionLanguage: String
         get() = getScopedString("recognition_lang", "cs-CZ")
         set(v) = setScopedString("recognition_lang", v)
