@@ -173,7 +173,17 @@ fun ContactsDirectoryTab(state: UiState, viewModel: SecretaryViewModel) {
                                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(contact.display_name, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            contact.display_name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        VoiceAliasButton(contact.display_name, viewModel, compact = true)
+                                    }
                                     contact.company_name?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary) }
                                     contact.phone_primary?.let { Text("\u260E $it", fontSize = 13.sp) }
                                     contact.email_primary?.let { Text("\u2709 $it", fontSize = 13.sp, color = Color.Gray) }

@@ -422,6 +422,27 @@ object Strings {
         "Naučeno. Když uslyším '$alias', budu hledat '$target'.",
         "Nauczone. Gdy usłyszę '$alias', będę szukać '$target'."
     )
+    val voiceAliasButton get() = t("Voice alias", "Hlasový alias", "Alias głosowy")
+    fun voiceAliasTrainingPrompt(target: String, attempt: Int): String = t(
+        "Say the voice alias for $target. Attempt $attempt of 3.",
+        "Řekni hlasový alias pro $target. Pokus $attempt ze 3.",
+        "Powiedz alias głosowy dla $target. Próba $attempt z 3."
+    )
+    fun voiceAliasTrainingSaved(alias: String, target: String): String = t(
+        "Saved voice alias '$alias' for $target.",
+        "Uložila jsem hlasový alias '$alias' pro $target.",
+        "Zapisałam alias głosowy '$alias' dla $target."
+    )
+    val voiceAliasTrainingCancelled get() = t(
+        "Voice alias training cancelled.",
+        "Učení hlasového aliasu zrušeno.",
+        "Uczenie aliasu głosowego anulowane."
+    )
+    val voiceAliasTrainingNeedSpeech get() = t(
+        "I did not catch the alias. Say it again.",
+        "Alias jsem nezachytila. Řekni ho prosím znovu.",
+        "Nie złapałam aliasu. Powiedz go jeszcze raz."
+    )
     fun voiceAliasForgotten(alias: String): String = t(
         "I forgot the voice correction for '$alias'.",
         "Zapomněla jsem hlasovou opravu pro '$alias'.",

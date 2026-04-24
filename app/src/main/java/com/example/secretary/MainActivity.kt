@@ -1808,7 +1808,17 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Column(Modifier.weight(1f)) {
-                                        Text(contact.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                contact.name,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            VoiceAliasButton(contact.name, viewModel, compact = true)
+                                        }
                                         contact.phone?.takeIf { it.isNotBlank() }?.let { Text("\u260E $it", fontSize = 13.sp) }
                                         contact.email?.takeIf { it.isNotBlank() }?.let { Text("\u2709 $it", fontSize = 13.sp, color = Color.Gray) }
                                         contact.address?.takeIf { it.isNotBlank() }?.let { Text("${Strings.address}: $it", fontSize = 12.sp, color = Color.Gray, maxLines = 2, overflow = TextOverflow.Ellipsis) }
@@ -1839,7 +1849,17 @@ fun ClientsListTab(clients: List<Client>, navController: NavHostController, view
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Column(Modifier.weight(1f)) {
-                                Text(client.display_name, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        client.display_name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    VoiceAliasButton(client.display_name, viewModel, compact = true)
+                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     client.client_code?.let { Text(it, fontSize = 12.sp, color = Color.Gray) }
                                     if (client.is_commercial) Text(Strings.commercial, fontSize = 12.sp, color = MaterialTheme.colorScheme.tertiary)
@@ -2576,6 +2596,38 @@ fun AddressActionsRow(address: String?, viewModel: SecretaryViewModel, modifier:
 }
 
 @Composable
+fun VoiceAliasButton(
+    targetName: String,
+    viewModel: SecretaryViewModel,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    val cleanName = targetName.trim()
+    if (cleanName.isBlank()) return
+    if (compact) {
+        IconButton(
+            onClick = { viewModel.startVoiceAliasTraining(cleanName) },
+            modifier = modifier
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = Strings.voiceAliasButton,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    } else {
+        OutlinedButton(
+            onClick = { viewModel.startVoiceAliasTraining(cleanName) },
+            modifier = modifier
+        ) {
+            Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(Strings.voiceAliasButton, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     val c = detail.client
@@ -2622,6 +2674,13 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                     modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
                 ) { Icon(imageVector = Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(Strings.edit, fontSize = 12.sp) }
             }
+        }
+        item {
+            VoiceAliasButton(
+                targetName = c.display_name,
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            )
         }
         item {
             Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
@@ -6546,6 +6605,10 @@ class SecretaryViewModel : ViewModel() {
             }
             return
         }
+        if (_uiState.value.voiceAliasTraining != null) {
+            processVoiceAliasTrainingInput(text, normalized)
+            return
+        }
         if (_uiState.value.awaitingNavigationAddress) {
             if (isVoiceCancelCommand(normalized)) {
                 val message = Strings.navigationCancelled
@@ -6640,7 +6703,7 @@ class SecretaryViewModel : ViewModel() {
                             history = _uiState.value.history + newAssistantMessage
                         )
                         handleAction(response)
-                        if (response.action_type !in setOf("SEARCH_CONTACTS", "LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP", "START_NAVIGATION", "OPEN_NAVIGATION", "NAVIGATE")) {
+                        if (response.action_type !in setOf("LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP", "START_NAVIGATION", "OPEN_NAVIGATION", "NAVIGATE")) {
                             voiceManager?.speak(assistantReply, expectReply = response.is_question)
                         }
                         // Refresh CRM data ale NEZNICIT lokalni tasky
@@ -6673,6 +6736,85 @@ class SecretaryViewModel : ViewModel() {
     fun requestNavigationAddress() {
         askForNavigationAddress(Strings.startNavigation)
     }
+
+    fun startVoiceAliasTraining(targetName: String, targetType: String = "contact") {
+        val cleanTarget = targetName.trim()
+        if (cleanTarget.isBlank()) return
+        val training = VoiceAliasTrainingState(
+            target = cleanTarget,
+            targetType = targetType,
+            samples = emptyList()
+        )
+        val message = Strings.voiceAliasTrainingPrompt(cleanTarget, 1)
+        _uiState.value = _uiState.value.copy(
+            voiceAliasTraining = training,
+            awaitingNavigationAddress = false,
+            isListening = false,
+            status = Strings.listening,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = true)
+    }
+
+    private fun processVoiceAliasTrainingInput(text: String, normalized: String) {
+        val training = _uiState.value.voiceAliasTraining ?: return
+        if (isVoiceCancelCommand(normalized)) {
+            val message = Strings.voiceAliasTrainingCancelled
+            _uiState.value = _uiState.value.copy(
+                voiceAliasTraining = null,
+                status = Strings.waitingForCommand,
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = false)
+            return
+        }
+        val sample = stripContactCommandPrefixes(text).trim()
+        if (sample.length < 2) {
+            val message = Strings.voiceAliasTrainingNeedSpeech
+            _uiState.value = _uiState.value.copy(
+                status = Strings.listening,
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = true)
+            return
+        }
+        val samples = (training.samples + sample).takeLast(3)
+        if (samples.size < 3) {
+            val updatedTraining = training.copy(samples = samples)
+            val message = Strings.voiceAliasTrainingPrompt(training.target, samples.size + 1)
+            _uiState.value = _uiState.value.copy(
+                voiceAliasTraining = updatedTraining,
+                status = Strings.listening,
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = true)
+            return
+        }
+        val alias = chooseVoiceAliasSample(samples)
+        settingsManager?.upsertVoiceAlias(alias, training.target, training.targetType)
+        val message = Strings.voiceAliasTrainingSaved(alias, training.target)
+        _uiState.value = _uiState.value.copy(
+            voiceAliasTraining = null,
+            status = Strings.waitingForCommand,
+            lastAiReply = message,
+            history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
+        )
+        voiceManager?.speak(message, expectReply = false)
+    }
+
+    private fun chooseVoiceAliasSample(samples: List<String>): String =
+        samples
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenByDescending { it.key.length })
+            .firstOrNull()
+            ?.key
+            ?: samples.last()
 
     private data class NavigationAddressCandidate(
         val name: String,
@@ -6865,33 +7007,20 @@ class SecretaryViewModel : ViewModel() {
     }
 
     private fun forcedSannyNavigationCandidate(normalizedQuery: String): NavigationAddressCandidate? {
-        val compactQuery = normalizedQuery.replace(" ", "")
-        val tokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
-        val sannyMisheardTokens = setOf(
-            "sanny", "sani", "sanni", "sany", "sunny", "sunnie",
-            "andy", "andi", "endy", "annie", "manny", "simy", "simi", "sammy"
-        )
-        val likelySanny = tokens.any { it in sannyMisheardTokens } ||
-            compactQuery in setOf("andymartin", "mannymartin", "simimartin", "sannymartin")
-        if (!likelySanny) return null
-
-        fun isSannyName(name: String): Boolean {
-            val compactName = normalizeVoiceCommand(name).replace(" ", "")
-            return compactName == "sanny" || compactName.startsWith("sanny")
-        }
+        if (!looksLikeSannyQuery(normalizedQuery)) return null
 
         val clientMatches = _uiState.value.clients
-            .filter { isSannyName(it.display_name) || it.company_name?.let(::isSannyName) == true }
+            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
             .map { NavigationAddressCandidate(it.display_name, it.navigationAddress(), -20) }
         val sharedMatches = _uiState.value.sharedContacts
-            .filter { isSannyName(it.display_name) || it.company_name?.let(::isSannyName) == true }
+            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
             .map { NavigationAddressCandidate(it.display_name, it.navigationAddress(), -19) }
         val phoneMatches = contactManager
             ?.getAllContacts()
             .orEmpty()
             .mapNotNull { contact ->
                 val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                if (!isSannyName(name)) return@mapNotNull null
+                if (!isSannyLikeName(name)) return@mapNotNull null
                 NavigationAddressCandidate(name, contact["address"]?.takeIf(String::isNotBlank), -18)
             }
 
@@ -7003,9 +7132,16 @@ class SecretaryViewModel : ViewModel() {
                     PhoneContactCandidate(name, contact["phone"]?.takeIf(String::isNotBlank), score + 10 + index, alias)
                 }
             }
-        return (clientMatches + sharedMatches + deviceMatches).minWithOrNull(
+        val best = (clientMatches + sharedMatches + deviceMatches).minWithOrNull(
             compareBy<PhoneContactCandidate> { if (it.phone.isNullOrBlank()) it.score + 100 else it.score }.thenBy { it.name.length }
         )
+        val forcedSanny = forcedSannyPhoneCandidate(normalizedQuery)
+        return when {
+            best == null -> forcedSanny
+            !best.phone.isNullOrBlank() -> best
+            forcedSanny != null -> forcedSanny
+            else -> best
+        }
     }
 
     private fun voiceQueryVariants(normalizedQuery: String): List<VoiceQueryVariant> {
@@ -7015,7 +7151,13 @@ class SecretaryViewModel : ViewModel() {
             "andy" to "sanny",
             "andi" to "sanny",
             "endy" to "sanny",
-            "annie" to "sanny"
+            "annie" to "sanny",
+            "manny" to "sanny",
+            "simi" to "sanny",
+            "simy" to "sanny",
+            "sammy" to "sanny",
+            "samy" to "sanny",
+            "semi" to "sanny"
         ).forEach { (heard, intended) ->
             val tokenPattern = Regex("\\b${Regex.escape(heard)}\\b")
             when {
@@ -7034,6 +7176,64 @@ class SecretaryViewModel : ViewModel() {
             }
         }
         return variants.distinctBy { it.value }
+    }
+
+    private fun forcedSannyPhoneCandidate(normalizedQuery: String): PhoneContactCandidate? {
+        if (!looksLikeSannyQuery(normalizedQuery)) return null
+        val clientMatches = _uiState.value.clients
+            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
+            .map {
+                PhoneContactCandidate(
+                    name = it.display_name,
+                    phone = it.phone_primary?.takeIf(String::isNotBlank) ?: it.phone_secondary?.takeIf(String::isNotBlank),
+                    score = -20,
+                    matchedAlias = normalizedQuery
+                )
+            }
+        val sharedMatches = _uiState.value.sharedContacts
+            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
+            .map {
+                PhoneContactCandidate(
+                    name = it.display_name,
+                    phone = it.phone_primary?.takeIf(String::isNotBlank),
+                    score = -19,
+                    matchedAlias = normalizedQuery
+                )
+            }
+        val deviceMatches = contactManager
+            ?.getAllContacts()
+            .orEmpty()
+            .mapNotNull { contact ->
+                val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                if (!isSannyLikeName(name)) return@mapNotNull null
+                PhoneContactCandidate(
+                    name = name,
+                    phone = contact["phone"]?.takeIf(String::isNotBlank),
+                    score = -18,
+                    matchedAlias = normalizedQuery
+                )
+            }
+        return (clientMatches + sharedMatches + deviceMatches).minWithOrNull(
+            compareBy<PhoneContactCandidate> { if (it.phone.isNullOrBlank()) 50 else 0 }
+                .thenBy { it.score }
+                .thenBy { it.name.length }
+        )
+    }
+
+    private fun looksLikeSannyQuery(normalizedQuery: String): Boolean {
+        val compactQuery = normalizedQuery.replace(" ", "")
+        val tokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
+        val sannyMisheardTokens = setOf(
+            "sanny", "sani", "sanni", "sany", "sunny", "sunnie",
+            "andy", "andi", "endy", "annie", "manny", "simy", "simi", "sammy", "samy", "semi"
+        )
+        return tokens.any { it in sannyMisheardTokens } ||
+            compactQuery in setOf("andymartin", "mannymartin", "simimartin", "sannymartin")
+    }
+
+    private fun isSannyLikeName(name: String): Boolean {
+        val compactName = normalizeVoiceCommand(name).replace(" ", "")
+        return compactName == "sanny" || compactName.startsWith("sanny")
     }
 
     private fun scoreVoiceLabels(labels: List<String>, queries: List<VoiceQueryVariant>): Pair<Int, String?>? {
@@ -7697,6 +7897,12 @@ class SecretaryViewModel : ViewModel() {
     }
 }
 
+data class VoiceAliasTrainingState(
+    val target: String = "",
+    val targetType: String = "contact",
+    val samples: List<String> = emptyList()
+)
+
 data class UiState(
     val isListening: Boolean = false, 
     val appLanguage: String = Strings.getLangCode(),
@@ -7743,6 +7949,7 @@ data class UiState(
     val pendingCall: String? = null,
     val pendingWhatsAppPhone: String? = null,
     val pendingWhatsAppMessage: String? = null,
+    val voiceAliasTraining: VoiceAliasTrainingState? = null,
     val pendingPhotoTaskId: String? = null,
     val pendingPhotoTaskTitle: String? = null,
     val pendingPlantCaptureRequestId: Long? = null,

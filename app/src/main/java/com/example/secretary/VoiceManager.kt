@@ -34,6 +34,9 @@ class VoiceManager(
     private var isSpeaking = false
     private var expectReplyAfterSpeak = false
     private var stayIdleAfterSpeak = false
+    private var pendingSpeechText: String? = null
+    private var pendingSpeechExpectReply = false
+    private var pendingSpeechStayIdle = false
     private val handler = Handler(Looper.getMainLooper())
     private val TAG = "VoiceManager"
 
@@ -214,8 +217,22 @@ class VoiceManager(
     fun speak(text: String, expectReply: Boolean = false, stayIdle: Boolean = false) {
         expectReplyAfterSpeak = expectReply
         stayIdleAfterSpeak = stayIdle
-        // FIX A2: if TTS failed permanently or is not ready, skip audio and continue state machine
-        if (!isTtsReady || ttsFailedPermanently) {
+        if (!isTtsReady && !ttsFailedPermanently) {
+            pendingSpeechText = text
+            pendingSpeechExpectReply = expectReply
+            pendingSpeechStayIdle = stayIdle
+            Log.w(TAG, "TTS not ready; queued speech '${text.take(50)}...'")
+            handler.postDelayed({
+                if (!isTtsReady && !ttsFailedPermanently && pendingSpeechText == text) {
+                    Log.w(TAG, "TTS still not ready; reinitialising")
+                    tts?.shutdown()
+                    setupTts()
+                }
+            }, 800)
+            return
+        }
+        // FIX A2: if TTS failed permanently, skip audio but continue the state machine.
+        if (ttsFailedPermanently) {
             handler.post {
                 when {
                     stayIdleAfterSpeak -> stop()
@@ -236,7 +253,17 @@ class VoiceManager(
         tts?.setSpeechRate(settings.ttsRate)
         tts?.setPitch(settings.ttsPitch)
         Log.d(TAG, "TTS speak: '${text.take(50)}...' rate=${settings.ttsRate} pitch=${settings.ttsPitch}")
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "reply")
+        val result = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "reply") ?: TextToSpeech.ERROR
+        if (result == TextToSpeech.ERROR) {
+            Log.e(TAG, "TTS speak returned ERROR; reinitialising")
+            isSpeaking = false
+            isTtsReady = false
+            pendingSpeechText = text
+            pendingSpeechExpectReply = expectReply
+            pendingSpeechStayIdle = stayIdle
+            tts?.shutdown()
+            setupTts()
+        }
     }
 
     fun destroy() {
@@ -435,6 +462,12 @@ class VoiceManager(
                     .build()
                 tts?.setAudioAttributes(audioAttrs)
                 Log.d(TAG, "TTS ready with USAGE_MEDIA audio attributes")
+                pendingSpeechText?.let { pending ->
+                    val pendingExpectReply = pendingSpeechExpectReply
+                    val pendingStayIdle = pendingSpeechStayIdle
+                    pendingSpeechText = null
+                    handler.post { speak(pending, pendingExpectReply, pendingStayIdle) }
+                }
             } else {
                 // FIX A2: TTS engine failed to initialise – mark permanently and notify UI
                 Log.e(TAG, "TTS initialisation failed with status $status")
