@@ -17,6 +17,9 @@ interface SecretaryApi {
     @POST("process")
     suspend fun processMessage(@Body request: MessageRequest): Response<AssistantResponse>
 
+    @POST("translate")
+    suspend fun translateMessage(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === ASSISTANT MEMORY ===
     @GET("assistant/memory")
     suspend fun getAssistantMemory(@Query("limit") limit: Int = 100): Response<List<AssistantMemoryItem>>

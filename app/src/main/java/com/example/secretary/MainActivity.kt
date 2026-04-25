@@ -6784,7 +6784,7 @@ class SecretaryViewModel : ViewModel() {
                     context_entity_id = currentState.contextEntityId,
                     context_type = currentState.contextType,
                     internal_language = currentState.appLanguage,
-                    external_language = currentState.tenantConfig?.get("default_customer_lang")?.toString() ?: Strings.getLangCode(),
+                    external_language = currentState.tenantConfig?.get("default_customer_lang")?.toString()?.takeIf { it.isNotBlank() } ?: "en",
                     calendar_context = calendarManager?.getCalendarContext(),
                     current_datetime = nowStr
                 ))
@@ -7251,15 +7251,48 @@ class SecretaryViewModel : ViewModel() {
         if (candidate != null) {
             rememberRecentVoiceContact(candidate.name, null, candidate.phone)
         }
-        _uiState.value = _uiState.value.copy(
-            pendingWhatsAppPhone = if (!candidate?.phone.isNullOrBlank() && cleanMessage.isNotBlank()) candidate?.phone else null,
-            pendingWhatsAppMessage = if (!candidate?.phone.isNullOrBlank() && cleanMessage.isNotBlank()) cleanMessage else null,
-            isListening = false,
-            status = if (!candidate?.phone.isNullOrBlank() && cleanMessage.isNotBlank()) Strings.openingWhatsApp else Strings.waitingForCommand,
-            lastAiReply = reply,
-            history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", reply)).takeLast(30)
-        )
-        voiceManager?.speak(reply, expectReply = false)
+        val hasContact = !candidate?.phone.isNullOrBlank()
+        val hasMessage = cleanMessage.isNotBlank()
+        if (hasContact && hasMessage) {
+            // Translate message to customer language before sending
+            val targetLang = _uiState.value.tenantConfig?.get("default_customer_lang")?.toString() ?: "en"
+            val internalLang = _uiState.value.appLanguage
+            _uiState.value = _uiState.value.copy(
+                isListening = false,
+                status = Strings.processing,
+                lastAiReply = reply,
+                history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", reply)).takeLast(30)
+            )
+            voiceManager?.speak(reply, expectReply = false)
+            viewModelScope.launch {
+                val translatedMessage = if (internalLang != targetLang && targetLang.isNotBlank()) {
+                    try {
+                        val res = api.translateMessage(mapOf("text" to cleanMessage, "target_language" to targetLang))
+                        if (res.isSuccessful) {
+                            res.body()?.get("translated")?.toString()?.takeIf { it.isNotBlank() } ?: cleanMessage
+                        } else cleanMessage
+                    } catch (e: Exception) {
+                        android.util.Log.w("WhatsApp", "Translation failed, using original: ${e.message}")
+                        cleanMessage
+                    }
+                } else cleanMessage
+                _uiState.value = _uiState.value.copy(
+                    pendingWhatsAppPhone = candidate?.phone,
+                    pendingWhatsAppMessage = translatedMessage,
+                    status = Strings.openingWhatsApp
+                )
+            }
+        } else {
+            _uiState.value = _uiState.value.copy(
+                pendingWhatsAppPhone = null,
+                pendingWhatsAppMessage = null,
+                isListening = false,
+                status = Strings.waitingForCommand,
+                lastAiReply = reply,
+                history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", reply)).takeLast(30)
+            )
+            voiceManager?.speak(reply, expectReply = false)
+        }
     }
 
     private fun resolvePhoneTarget(query: String): PhoneContactCandidate? {
