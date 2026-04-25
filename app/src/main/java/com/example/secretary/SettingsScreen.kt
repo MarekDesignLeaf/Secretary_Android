@@ -128,7 +128,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     var customerLanguageFeedback by remember { mutableStateOf<String?>(null) }
     val currentLang = state.appLanguage.ifBlank { sm.getCurrentAppLanguage() }
     val langName = Strings.languageDisplayName(currentLang)
-    val currentCustomerLang = state.tenantConfig?.get("default_customer_lang")?.toString() ?: currentLang
+    val currentCustomerLang = state.tenantConfig?.get("default_customer_lang")?.toString()?.takeIf { it.isNotBlank() } ?: "en"
     val canEditCustomerLanguage = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
     SCard(Strings.language + ": $langName", Icons.Default.Star, exp, { exp = !exp }) {
         val langs = listOf("en" to "🇬🇧 English", "cs" to "🇨🇿 Čeština", "pl" to "🇵🇱 Polski")
@@ -239,6 +239,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 // 1. HLASOVE OVLADANI
 @Composable private fun VoiceSection(sm: SettingsManager) {
     var exp by remember { mutableStateOf(true) }
+    val voiceCtx = androidx.compose.ui.platform.LocalContext.current
     SCard(Strings.voiceControl, Icons.Default.Call, exp, { exp = !exp }) {
         var hw by remember { mutableStateOf(sm.hotwordEnabled) }
         SSwitch(Strings.hotwordDetection, Strings.hotwordListeningHint, hw) { hw = it; sm.hotwordEnabled = it }
@@ -249,7 +250,17 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { word = sm.activationWord; wordChanged = false }) { Text(Strings.cancel) }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { sm.activationWord = word; wordChanged = false }) { Text(Strings.save) }
+                Button(onClick = {
+                    sm.activationWord = word
+                    wordChanged = false
+                    val svcIntent = android.content.Intent(voiceCtx, VoiceService::class.java)
+                    voiceCtx.stopService(svcIntent)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        voiceCtx.startForegroundService(svcIntent)
+                    } else {
+                        voiceCtx.startService(svcIntent)
+                    }
+                }) { Text(Strings.save) }
             }
         }
         var rate by remember { mutableFloatStateOf(sm.ttsRate) }

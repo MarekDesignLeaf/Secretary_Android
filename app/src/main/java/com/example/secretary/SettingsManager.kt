@@ -197,10 +197,10 @@ class SettingsManager(context: Context) {
         set(v) = setScopedBoolean("work_hours_enabled", v)
     var workHoursStart: String
         get() = getScopedString("work_start", "07:00")
-        set(v) = setScopedString("work_start", v)
+        set(v) = setScopedString("work_start", normalizeTimeInput(v, "07:00"))
     var workHoursEnd: String
         get() = getScopedString("work_end", "19:00")
-        set(v) = setScopedString("work_end", v)
+        set(v) = setScopedString("work_end", normalizeTimeInput(v, "19:00"))
     // FIX A4: store timezone for work hours so check is correct when user travels
     var workHoursTimezone: String
         get() = getScopedString("work_hours_timezone", java.util.TimeZone.getDefault().id)
@@ -438,6 +438,13 @@ class SettingsManager(context: Context) {
     }
 
     // Utility
+    private fun normalizeTimeInput(value: String, default: String): String {
+        val parts = value.trim().split(":")
+        val h = parts.getOrNull(0)?.toIntOrNull()
+        val m = parts.getOrNull(1)?.toIntOrNull()
+        if (h == null || m == null || h !in 0..23 || m !in 0..59) return default
+        return "%02d:%02d".format(h, m)
+    }
     fun resetAll() = prefs.edit { clear() }
 
     // FIX A4: use stored timezone so work hours check is correct when user travels
