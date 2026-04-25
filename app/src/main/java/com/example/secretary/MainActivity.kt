@@ -178,7 +178,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         mailManager = MailManager(this)
         settingsManager = SettingsManager(this)
         Strings.setLanguage(settingsManager.getCurrentAppLanguage())
-        settingsManager.recognitionLanguage = Strings.getRecognitionLocale()
         viewModel = androidx.lifecycle.ViewModelProvider(this)[SecretaryViewModel::class.java]
 
         val perms = mutableListOf(
@@ -279,6 +278,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     private fun startAndBindVoiceService() {
+        // Reset flag if service died and was not properly unbound
+        if (voiceServiceStarted && !serviceBound) {
+            voiceServiceStarted = false
+        }
         if (voiceServiceStarted) return
         voiceServiceStarted = true
         val intent = Intent(this, VoiceService::class.java)
@@ -4312,8 +4315,9 @@ class SecretaryViewModel : ViewModel() {
             settingsManager?.setCurrentAppLanguage(normalized)
         }
         Strings.setLanguage(normalized)
-        val recognitionLocale = Strings.getRecognitionLocale()
-        settingsManager?.recognitionLanguage = recognitionLocale
+        val recognitionLocale = settingsManager?.recognitionLanguage
+            ?.takeIf { it.isNotBlank() }
+            ?: Strings.getRecognitionLocale()
         _uiState.value = _uiState.value.copy(
             appLanguage = normalized,
             recognitionLocale = recognitionLocale
@@ -4366,6 +4370,7 @@ class SecretaryViewModel : ViewModel() {
     fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager) {
         voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
         applyAppLanguage(sm.getCurrentAppLanguage(), persist = false, refreshVoice = false)
+        sanitizeVoiceAliasesStore()
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
@@ -6927,7 +6932,6 @@ class SecretaryViewModel : ViewModel() {
                 voiceManager?.speak(message, expectReply = false)
                 return
             }
-            rememberVoiceAliasIfUseful(cleanTarget, candidate.name)
             startVoiceNavigation(address, candidate.name, originalText)
             return
         }
@@ -6992,6 +6996,10 @@ class SecretaryViewModel : ViewModel() {
         val resolvedTarget = resolvePhoneTarget(cleanTarget)?.name
             ?: resolveNavigationTarget(cleanTarget)?.name
             ?: cleanTarget
+        val aliasNorm = normalizeVoiceCommand(cleanAlias)
+        val targetNorm = normalizeVoiceCommand(resolvedTarget)
+        if (isReservedWakeAlias(aliasNorm) || looksLikeCommandAlias(aliasNorm)) return
+        if (aliasNorm in knownVoiceNameSet() && aliasNorm != targetNorm) return
         settingsManager?.upsertVoiceAlias(cleanAlias, resolvedTarget)
         val message = Strings.voiceAliasLearned(cleanAlias, resolvedTarget)
         _uiState.value = _uiState.value.copy(
@@ -7014,13 +7022,67 @@ class SecretaryViewModel : ViewModel() {
         voiceManager?.speak(message, expectReply = false)
     }
 
-    private fun rememberVoiceAliasIfUseful(spoken: String, resolvedName: String) {
-        val cleanAlias = stripContactCommandPrefixes(spoken)
-        val aliasNorm = normalizeVoiceCommand(cleanAlias)
-        val targetNorm = normalizeVoiceCommand(resolvedName)
-        if (aliasNorm.length < 3 || targetNorm.length < 3 || aliasNorm == targetNorm) return
-        if (isReservedWakeAlias(aliasNorm)) return
-        settingsManager?.upsertVoiceAlias(cleanAlias, resolvedName)
+    private fun knownVoiceNameSet(): Set<String> {
+        val names = linkedSetOf<String>()
+        _uiState.value.clients.forEach { client ->
+            names += client.display_name
+            client.company_name?.let { names += it }
+        }
+        _uiState.value.sharedContacts.forEach { contact ->
+            names += contact.display_name
+            contact.company_name?.let { names += it }
+        }
+        contactManager?.getAllContacts().orEmpty().forEach { contact ->
+            contact["name"]?.let { names += it }
+        }
+        return names
+            .map(::normalizeVoiceCommand)
+            .filter { it.length >= 2 }
+            .toSet()
+    }
+
+    private fun looksLikeCommandAlias(aliasNorm: String): Boolean {
+        if (aliasNorm.isBlank()) return false
+        val commandPrefixes = listOf(
+            "zavolej ", "volej ", "volat ", "vytoc ", "vytocit ", "call ", "dial ",
+            "posli ", "napis ", "whatsapp ", "send ",
+            "spust ", "spustit ", "naviguj ", "navigace ", "navigate ",
+            "zapamatuj ", "remember ", "alias "
+        )
+        if (commandPrefixes.any { aliasNorm.startsWith(it) }) return true
+        val commandTokens = setOf(
+            "zavolej", "volej", "volat", "vytoc", "vytocit", "call", "dial",
+            "posli", "napis", "zpravu", "message", "whatsapp", "send",
+            "spust", "spustit", "naviguj", "navigace", "navigate",
+            "zapamatuj", "remember", "alias"
+        )
+        val tokens = aliasNorm.split(" ").filter { it.isNotBlank() }
+        return tokens.size >= 3 && tokens.any { it in commandTokens }
+    }
+
+    private fun effectiveVoiceAliases(): List<VoiceAlias> {
+        val knownNames = knownVoiceNameSet()
+        return settingsManager?.getVoiceAliases().orEmpty()
+            .filter { alias ->
+                val aliasNorm = normalizeVoiceCommand(alias.alias)
+                val targetNorm = normalizeVoiceCommand(alias.target)
+                if (aliasNorm.length < 2 || targetNorm.length < 2) return@filter false
+                if (isReservedWakeAlias(aliasNorm)) return@filter false
+                if (looksLikeCommandAlias(aliasNorm)) return@filter false
+                if (aliasNorm in knownNames && aliasNorm != targetNorm) return@filter false
+                true
+            }
+            .distinctBy { normalizeVoiceCommand(it.alias) }
+    }
+
+    private fun sanitizeVoiceAliasesStore() {
+        val sm = settingsManager ?: return
+        val current = sm.getVoiceAliases()
+        if (current.isEmpty()) return
+        val sanitized = effectiveVoiceAliases()
+        if (sanitized.size != current.size) {
+            sm.saveVoiceAliases(sanitized)
+        }
     }
 
     private fun isReservedWakeAlias(aliasNorm: String): Boolean {
@@ -7114,9 +7176,6 @@ class SecretaryViewModel : ViewModel() {
             lastAiReply = message,
             history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
         )
-        if (!candidate?.phone.isNullOrBlank()) {
-            rememberVoiceAliasIfUseful(candidate?.matchedAlias ?: cleanTarget, candidate?.name.orEmpty())
-        }
         voiceManager?.speak(message, expectReply = false)
     }
 
@@ -7151,9 +7210,6 @@ class SecretaryViewModel : ViewModel() {
             lastAiReply = reply,
             history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", reply)).takeLast(30)
         )
-        if (!candidate?.phone.isNullOrBlank()) {
-            rememberVoiceAliasIfUseful(candidate?.matchedAlias ?: cleanTarget, candidate?.name.orEmpty())
-        }
         voiceManager?.speak(reply, expectReply = false)
     }
 
@@ -7202,15 +7258,13 @@ class SecretaryViewModel : ViewModel() {
     private fun voiceQueryVariants(normalizedQuery: String): List<VoiceQueryVariant> {
         val base = normalizedQuery.trim()
         val variants = mutableListOf(VoiceQueryVariant(base))
-        settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
+        effectiveVoiceAliases().forEach { alias ->
             val aliasNorm = normalizeVoiceCommand(alias.alias)
             val targetNorm = normalizeVoiceCommand(alias.target)
             if (aliasNorm.isBlank() || targetNorm.isBlank()) return@forEach
             if (isReservedWakeAlias(aliasNorm)) return@forEach
             if (base == aliasNorm) {
                 variants += VoiceQueryVariant(targetNorm, alias.alias)
-            } else if (base.contains(aliasNorm)) {
-                variants += VoiceQueryVariant(base.replace(aliasNorm, targetNorm).trim(), alias.alias)
             }
         }
         return variants.distinctBy { it.value }
@@ -7291,13 +7345,12 @@ class SecretaryViewModel : ViewModel() {
 
     private fun applyVoiceAliasToQuery(normalizedQuery: String): String {
         var value = normalizedQuery
-        settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
+        effectiveVoiceAliases().forEach { alias ->
             val aliasNorm = normalizeVoiceCommand(alias.alias)
             val targetNorm = normalizeVoiceCommand(alias.target)
             if (aliasNorm.isBlank() || targetNorm.isBlank()) return@forEach
             if (isReservedWakeAlias(aliasNorm)) return@forEach
             if (value == aliasNorm) value = targetNorm
-            else if (value.contains(aliasNorm)) value = value.replace(aliasNorm, targetNorm).trim()
         }
         return value
     }
@@ -7305,14 +7358,13 @@ class SecretaryViewModel : ViewModel() {
     private fun applyVoiceAliasesToFreeText(text: String): String {
         var normalized = normalizeVoiceCommand(text)
         var changed = false
-        settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
+        effectiveVoiceAliases().forEach { alias ->
             val aliasNorm = normalizeVoiceCommand(alias.alias)
             val target = alias.target.trim()
             if (aliasNorm.isBlank() || target.isBlank()) return@forEach
             if (isReservedWakeAlias(aliasNorm)) return@forEach
-            val updated = normalized.replace(Regex("\\b${Regex.escape(aliasNorm)}\\b"), target)
-            if (updated != normalized) {
-                normalized = updated
+            if (normalized == aliasNorm) {
+                normalized = target
                 changed = true
             }
         }

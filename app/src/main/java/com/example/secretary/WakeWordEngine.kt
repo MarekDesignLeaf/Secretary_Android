@@ -233,6 +233,11 @@ class WakeWordEngine(
         if (File(modelDir, "am/final.mdl").exists()) {
             return modelDir
         }
+        // Delete incomplete/broken model directory before re-downloading
+        if (modelDir.exists()) {
+            Log.w(tag, "Incomplete model at ${modelDir.absolutePath}, deleting and re-downloading")
+            modelDir.deleteRecursively()
+        }
         if (!modelBaseDir.exists()) {
             modelBaseDir.mkdirs()
         }

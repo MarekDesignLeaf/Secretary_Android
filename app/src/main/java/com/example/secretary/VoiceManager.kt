@@ -66,16 +66,24 @@ class VoiceManager(
             .trim()
     }
 
+    private fun normalizeRecognitionLanguage(value: String?): String {
+        val normalized = value.orEmpty().trim().lowercase(Locale.ROOT)
+        return when {
+            normalized.startsWith("cs") -> "cs-CZ"
+            normalized.startsWith("pl") -> "pl-PL"
+            normalized.startsWith("en") -> "en-GB"
+            else -> ""
+        }
+    }
+
     private fun currentRecognitionLanguage(): String {
-        val lang = when (Strings.fromCode(settings.getCurrentAppLanguage())) {
+        val configured = normalizeRecognitionLanguage(settings.recognitionLanguage)
+        if (configured.isNotBlank()) return configured
+        return when (Strings.fromCode(settings.getCurrentAppLanguage())) {
             Strings.Lang.CS -> "cs-CZ"
             Strings.Lang.PL -> "pl-PL"
             Strings.Lang.EN -> "en-GB"
         }
-        if (settings.recognitionLanguage != lang) {
-            settings.recognitionLanguage = lang
-        }
-        return lang
     }
 
     private fun applyTtsLanguage(): Boolean {
@@ -311,12 +319,15 @@ class VoiceManager(
             onError = { message, throwable ->
                 Log.e(TAG, message, throwable)
                 if (mode == ListenMode.HOTWORD && !isSpeaking && !isDestroyed) {
-                    onStatusChange("Offline wake-word není dostupný. Kontroluji model...")
+                    Log.w(TAG, "Offline wake-word failed; falling back to recognizer hotword loop")
+                    onStatusChange("Offline wake-word není dostupný. Používám online rozpoznávání...")
+                    // Nullify broken engine so it doesn't block fallback
+                    wakeWordEngine = null
                     handler.postDelayed({
                         if (mode == ListenMode.HOTWORD && !isSpeaking && !isDestroyed) {
-                            startOfflineHotwordLoop()
+                            startRecognizerHotwordLoop()
                         }
-                    }, 30_000L)
+                    }, 2_000L)
                 }
             }
         )
@@ -547,6 +558,9 @@ class VoiceManager(
                     }
                 }
                 ListenMode.COMMAND -> {
+                    if (candidates.isNotEmpty()) {
+                        Log.d(TAG, "Command candidates: ${candidates.joinToString(" | ")}")
+                    }
                     val text = candidates.firstOrNull()?.let(::normalizeRecognizedText).orEmpty()
                     if (text.isNotBlank()) onResult(text) else startHotwordLoop()
                 }
