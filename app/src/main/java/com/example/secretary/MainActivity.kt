@@ -299,7 +299,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             onResult = { text -> viewModel.onVoiceInput(text) },
             onReady = { viewModel.setListening(true) },
             onRecognizerError = { viewModel.setListening(false) },
-            onHotwordDetected = { viewModel.setStatus(Strings.listening) },
+            onHotwordDetected = { viewModel.enterDialogMode() },
             onStatusChange = { status -> viewModel.setStatus(status) }
         )
         service.voiceManager?.let { vm ->
@@ -1453,8 +1453,21 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
         )
     }
     Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        if (state.isDialogMode) {
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                androidx.compose.material3.Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                    Text("●", fontSize = 10.sp)
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(Strings.dialogModeStatus.uppercase(), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+        }
         Text(state.status.uppercase(), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = if (state.isListening) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.height(48.dp))
-        Card(Modifier.fillMaxWidth().height(120.dp), colors = CardDefaults.cardColors(containerColor = if (state.isListening) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant)) {
+        Card(Modifier.fillMaxWidth().height(120.dp), colors = CardDefaults.cardColors(containerColor = if (state.isDialogMode) MaterialTheme.colorScheme.primaryContainer else if (state.isListening) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant)) {
             Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
                 Text(state.lastAiReply, fontSize = 18.sp, textAlign = TextAlign.Center)
             }
@@ -5364,6 +5377,109 @@ class SecretaryViewModel : ViewModel() {
     fun setListening(isL: Boolean) { _uiState.value = _uiState.value.copy(isListening = isL) }
     fun startListening() { voiceManager?.startListening() }
 
+    // ===== DIALOG MODE =====
+
+    private val dialogEndPhrases = setOf(
+        // Czech
+        "to staci", "konec rozhovoru", "diky", "dekuji", "ok sbohem", "sbohem",
+        "konec", "to je vse", "staci", "prestanem", "dost", "zavriet",
+        "ukoncit rozhovor", "ukoncime", "ukoncit dialog",
+        // English
+        "that's enough", "end conversation", "goodbye", "stop", "thank you",
+        "thanks", "we're done", "stop listening", "end dialog", "close",
+        // Polish
+        "to wystarczy", "koniec", "do widzenia", "dziekuje", "zakonczymy"
+    )
+
+    private fun isDialogEndPhrase(text: String): Boolean {
+        val norm = text.trim().lowercase()
+            .filter { it.isLetterOrDigit() || it == ' ' }
+            .replace(Regex(" +"), " ")
+            .trim()
+        return dialogEndPhrases.any { phrase ->
+            norm == phrase || norm.startsWith("$phrase ") || norm.endsWith(" $phrase")
+        }
+    }
+
+    fun enterDialogMode() {
+        val greeting = Strings.dialogModeGreeting
+        val now = System.currentTimeMillis()
+        _uiState.value = _uiState.value.copy(
+            isDialogMode = true,
+            dialogSessionHistory = emptyList(),
+            dialogSessionStartMs = now,
+            status = "Dialog...",
+            lastAiReply = greeting
+        )
+        // Load history from persistent storage
+        val savedHistory = loadPersistedHistory()
+        if (savedHistory.isNotEmpty()) {
+            _uiState.value = _uiState.value.copy(
+                history = savedHistory.takeLast(20)
+            )
+        }
+        voiceManager?.speak(greeting, expectReply = false)
+        voiceManager?.startDialogMode()
+    }
+
+    fun exitDialogMode(triggerText: String = "") {
+        val state = _uiState.value
+        val farewell = Strings.dialogModeFarewell
+        _uiState.value = state.copy(
+            isDialogMode = false,
+            status = Strings.waitingForCommand
+        )
+        voiceManager?.speak(farewell, expectReply = false)
+        // Summarize and store session in background
+        val sessionHistory = state.dialogSessionHistory
+        if (sessionHistory.size >= 4) {
+            viewModelScope.launch {
+                try {
+                    val langCode = state.appLanguage.substringBefore("-").take(2)
+                    val req = SummarizeRequest(
+                        history = sessionHistory,
+                        user_id = state.currentUserId,
+                        tenant_id = 1,
+                        internal_language = langCode
+                    )
+                    val token = settingsManager?.accessToken?.let { "Bearer $it" }
+                    if (token != null) {
+                        api.summarizeSession(req)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("Dialog", "Session summarize failed: ${e.message}")
+                }
+            }
+        }
+        // Persist history for next session
+        persistHistory(state.history.takeLast(30))
+    }
+
+    private fun persistHistory(history: List<ChatMessage>) {
+        try {
+            val sm = settingsManager ?: return
+            val json = history.joinToString("|||") { "${it.role}::${it.content.replace("|||", "")}" }
+            sm.prefsPublic.edit().putString("dialog_history_v1", json).apply()
+        } catch (e: Exception) {
+            android.util.Log.w("Dialog", "Persist history failed: ${e.message}")
+        }
+    }
+
+    private fun loadPersistedHistory(): List<ChatMessage> {
+        return try {
+            val sm = settingsManager ?: return emptyList()
+            val raw = sm.prefsPublic.getString("dialog_history_v1", null) ?: return emptyList()
+            raw.split("|||").mapNotNull { entry ->
+                val parts = entry.split("::", limit = 2)
+                if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank())
+                    ChatMessage(parts[0], parts[1])
+                else null
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     fun speakAddress(address: String) {
         val cleanAddress = address.trim()
         if (cleanAddress.isBlank()) {
@@ -6662,6 +6778,26 @@ class SecretaryViewModel : ViewModel() {
         // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
         val normalized = normalizeVoiceCommand(text)
+
+        // Dialog mode: check for end phrase first
+        if (_uiState.value.isDialogMode && isDialogEndPhrase(lower)) {
+            // Add to session history before exiting
+            val userMsg = ChatMessage("user", text)
+            _uiState.value = _uiState.value.copy(
+                dialogSessionHistory = _uiState.value.dialogSessionHistory + userMsg
+            )
+            exitDialogMode(text)
+            return
+        }
+
+        // Dialog mode: accumulate session history
+        if (_uiState.value.isDialogMode) {
+            val userMsg = ChatMessage("user", text)
+            _uiState.value = _uiState.value.copy(
+                dialogSessionHistory = _uiState.value.dialogSessionHistory + userMsg
+            )
+        }
+
         if (Strings.matchesLogoutCommand(lower)) {
             val logoutMessage = Strings.loggingOutMessage()
             val msg = ChatMessage("assistant", logoutMessage)
@@ -6792,14 +6928,20 @@ class SecretaryViewModel : ViewModel() {
                     res.body()?.let { response ->
                         val assistantReply = sanitizeAssistantText(response.reply_cs)
                         val newAssistantMessage = ChatMessage("assistant", assistantReply)
+                        // Accumulate in dialog session history if active
+                        val newSessionHistory = if (_uiState.value.isDialogMode) {
+                            (_uiState.value.dialogSessionHistory + newAssistantMessage).takeLast(100)
+                        } else _uiState.value.dialogSessionHistory
                         _uiState.value = _uiState.value.copy(
                             lastAiReply = assistantReply,
                             status = if (response.is_question) "${Strings.listening}..." else Strings.waitingForCommand,
-                            history = _uiState.value.history + newAssistantMessage
+                            history = _uiState.value.history + newAssistantMessage,
+                            dialogSessionHistory = newSessionHistory
                         )
                         handleAction(response)
+                        val isDialogActive = _uiState.value.isDialogMode
                         if (response.action_type !in setOf("LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP", "START_NAVIGATION", "OPEN_NAVIGATION", "NAVIGATE")) {
-                            voiceManager?.speak(assistantReply, expectReply = response.is_question)
+                            voiceManager?.speak(assistantReply, expectReply = response.is_question || isDialogActive)
                         }
                         // Refresh CRM data ale NEZNICIT lokalni tasky
                         refreshCrmDataKeepTasks()
@@ -8139,5 +8281,9 @@ data class UiState(
     val mustChangePassword: Boolean = false,
     val awaitingBiometricEnrollment: Boolean = false,
     val loginNotice: String? = null,
-    val loggedIn: Boolean? = null
+    val loggedIn: Boolean? = null,
+    // Dialog mode — continuous conversation until end phrase
+    val isDialogMode: Boolean = false,
+    val dialogSessionHistory: List<ChatMessage> = emptyList(),  // full session for summarization
+    val dialogSessionStartMs: Long = 0L
 )

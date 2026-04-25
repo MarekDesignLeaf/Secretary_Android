@@ -26,6 +26,20 @@ data class AssistantResponse(
     val is_question: Boolean = false
 )
 
+data class SummarizeRequest(
+    val history: List<ChatMessage>,
+    val user_id: Long? = null,
+    val tenant_id: Int = 1,
+    val internal_language: String = "cs"
+)
+
+data class SummarizeResponse(
+    val stored: Boolean = false,
+    val summary: String? = null,
+    val reason: String? = null,
+    val error: String? = null
+)
+
 data class AssistantMemoryItem(
     val id: Long = 0,
     val memory_type: String = "long",

@@ -49,6 +49,7 @@ data class VoiceAlias(
 
 class SettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("secretary_settings", Context.MODE_PRIVATE)
+    internal val prefsPublic: SharedPreferences get() = prefs
     private val gson = Gson()
 
     private fun scopedKey(base: String, userId: Long = currentBackendUserId): String? =

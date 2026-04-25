@@ -835,6 +835,17 @@ object Strings {
     val minSdkLabel get() = t("Min SDK", "Min SDK", "Min SDK")
     val targetSdkLabel get() = t("Target SDK", "Target SDK", "Target SDK")
     val ready get() = t("Ready", "Připravena", "Gotowe")
+    val dialogModeGreeting get() = t(
+        "I'm listening. You can speak freely, I'll remember everything.",
+        "Poslouchám. Mluvte, zapamatuji si vše.",
+        "Słucham. Możesz mówić swobodnie, zapamiętam wszystko."
+    )
+    val dialogModeFarewell get() = t(
+        "Understood. I'll remember our conversation. Call me anytime.",
+        "Dobře. Zapamatuji si náš rozhovor. Zavolejte kdykoli.",
+        "Dobrze. Zapamiętam naszą rozmowę. Zadzwoń w dowolnym czasie."
+    )
+    val dialogModeStatus get() = t("In conversation...", "V rozhovoru...", "W rozmowie...")
     val waitingForYourCommand get() = t("Waiting for your command...", "Čekám na váš povel...", "Czekam na Twoje polecenie...")
     val speechRecognitionUnavailable get() = t("Speech recognition not available", "Rozpoznávání řeči není k dispozici", "Rozpoznawanie mowy nie jest dostępne")
     val connectionError get() = t("Connection error to server.", "Chyba spojení se serverem.", "Błąd połączenia z serwerem.")

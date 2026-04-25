@@ -44,7 +44,7 @@ class VoiceManager(
     private val TAG = "VoiceManager"
     private var wakeWordEngine: WakeWordEngine? = null
 
-    enum class ListenMode { IDLE, HOTWORD, COMMAND }
+    enum class ListenMode { IDLE, HOTWORD, COMMAND, DIALOG }
     private var mode = ListenMode.IDLE
     private var isRecognizerActive = false
     private var lastRecognizerStartAt = 0L
@@ -118,6 +118,7 @@ class VoiceManager(
                     when (previousMode) {
                         ListenMode.HOTWORD -> startHotwordLoop()
                         ListenMode.COMMAND -> startListening()
+                        ListenMode.DIALOG -> startDialogMode()
                         ListenMode.IDLE -> Unit
                     }
                 }, 700)
@@ -235,6 +236,19 @@ class VoiceManager(
         handler.postDelayed({ ensureRecognizerAndListen() }, 400)
     }
 
+    fun startDialogMode() {
+        if (isSpeaking) return
+        wakeWordEngine?.stop()
+        cancelRecognizer()
+        mode = ListenMode.DIALOG
+        consecutiveErrors = 0
+        commandNoMatchRetries = 0
+        onStatusChange("Dialog...")
+        handler.postDelayed({ ensureRecognizerAndListen() }, 300)
+    }
+
+    fun isInDialogMode(): Boolean = mode == ListenMode.DIALOG
+
     fun stop() {
         mode = ListenMode.IDLE
         wakeWordEngine?.stop()
@@ -264,6 +278,7 @@ class VoiceManager(
             handler.post {
                 when {
                     stayIdleAfterSpeak -> stop()
+                    mode == ListenMode.DIALOG -> startDialogMode()
                     expectReply -> startListening()
                     else -> startHotwordLoop()
                 }
@@ -477,6 +492,7 @@ class VoiceManager(
             if (isSpeaking) return@postDelayed
             when (mode) {
                 ListenMode.COMMAND -> ensureRecognizerAndListen()
+                ListenMode.DIALOG -> ensureRecognizerAndListen()
                 ListenMode.HOTWORD -> {
                     if (shouldUseOfflineWakeWord()) startOfflineHotwordLoop() else startRecognizerHotwordLoop()
                 }
@@ -617,6 +633,7 @@ class VoiceManager(
                             if (isDestroyed) return@post  // FIX A7: guard in callback
                             when {
                                 stayIdleAfterSpeak -> stop()
+                                mode == ListenMode.DIALOG -> startDialogMode()
                                 expectReplyAfterSpeak -> startListening()
                                 else -> startHotwordLoop()
                             }
