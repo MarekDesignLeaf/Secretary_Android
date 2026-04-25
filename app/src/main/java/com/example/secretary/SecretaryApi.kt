@@ -23,6 +23,9 @@ interface SecretaryApi {
     @POST("session/summarize")
     suspend fun summarizeSession(@Body request: SummarizeRequest): Response<SummarizeResponse>
 
+    @POST("whatsapp/send")
+    suspend fun sendWhatsAppMessage(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === ASSISTANT MEMORY ===
     @GET("assistant/memory")
     suspend fun getAssistantMemory(@Query("limit") limit: Int = 100): Response<List<AssistantMemoryItem>>

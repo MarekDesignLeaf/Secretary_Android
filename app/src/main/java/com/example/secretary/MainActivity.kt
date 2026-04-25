@@ -6691,7 +6691,8 @@ class SecretaryViewModel : ViewModel() {
         val sid = _uiState.value.voiceSessionId ?: return
         viewModelScope.launch {
             try {
-                val data = mapOf<String, Any?>("session_id" to sid, "text" to text, "tenant_id" to 1, "language" to _uiState.value.appLanguage)
+                val aliasedText = applyVoiceAliasesToFreeText(text)
+                val data = mapOf<String, Any?>("session_id" to sid, "text" to aliasedText, "tenant_id" to 1, "language" to _uiState.value.appLanguage)
                 val res = api.voiceSessionInput(data)
                 if (res.isSuccessful) {
                     val body = res.body() ?: return@launch
@@ -6885,7 +6886,7 @@ class SecretaryViewModel : ViewModel() {
         }
         // If voice work report session is active, redirect to session
         if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
-            processVoiceSessionInput(text)
+            processVoiceSessionInput(applyVoiceAliasesToFreeText(text))
             return
         }
         if (matchesStartWorkReportCommand(normalized)) {
@@ -7328,7 +7329,7 @@ class SecretaryViewModel : ViewModel() {
     }
 
     private fun startVoiceCallTarget(target: String, originalText: String = target) {
-        val cleanTarget = target.trim()
+        val cleanTarget = applyVoiceAliasToQuery(normalizeVoiceCommand(target.trim()))
         if (cleanTarget.isBlank()) {
             val message = Strings.sayCallContact
             _uiState.value = _uiState.value.copy(
@@ -7371,7 +7372,7 @@ class SecretaryViewModel : ViewModel() {
             voiceManager?.speak(message, expectReply = false)
             return
         }
-        val cleanTarget = command.target.trim()
+        val cleanTarget = applyVoiceAliasToQuery(normalizeVoiceCommand(command.target.trim()))
         val cleanMessage = command.message.trim()
         if (cleanTarget.isBlank()) {
             val message = Strings.sayWhatsAppContact
@@ -7418,11 +7419,36 @@ class SecretaryViewModel : ViewModel() {
                         cleanMessage
                     }
                 } else cleanMessage
-                _uiState.value = _uiState.value.copy(
-                    pendingWhatsAppPhone = candidate?.phone,
-                    pendingWhatsAppMessage = translatedMessage,
-                    status = Strings.openingWhatsApp
-                )
+                // Try to send via server (Meta WhatsApp Business API)
+                val phone = candidate?.phone ?: return@launch
+                var sentViaServer = false
+                try {
+                    val sendRes = api.sendWhatsAppMessage(mapOf(
+                        "to" to phone,
+                        "message" to translatedMessage,
+                        "target_language" to targetLang
+                    ))
+                    if (sendRes.isSuccessful) {
+                        sentViaServer = true
+                        val confirmMsg = Strings.whatsAppSentViaServer
+                        _uiState.value = _uiState.value.copy(
+                            status = Strings.waitingForCommand,
+                            lastAiReply = confirmMsg,
+                            history = (_uiState.value.history + ChatMessage("assistant", confirmMsg)).takeLast(30)
+                        )
+                        voiceManager?.speak(confirmMsg, expectReply = _uiState.value.isDialogMode)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("WhatsApp", "Server send failed, falling back to intent: ${e.message}")
+                }
+                if (!sentViaServer) {
+                    // Fallback: open WhatsApp with prefilled message
+                    _uiState.value = _uiState.value.copy(
+                        pendingWhatsAppPhone = phone,
+                        pendingWhatsAppMessage = translatedMessage,
+                        status = Strings.openingWhatsApp
+                    )
+                }
             }
         } else {
             _uiState.value = _uiState.value.copy(
@@ -7438,7 +7464,7 @@ class SecretaryViewModel : ViewModel() {
     }
 
     private fun resolvePhoneTarget(query: String): PhoneContactCandidate? {
-        val normalizedQuery = stripContactCommandPrefixes(query)
+        val normalizedQuery = stripContactCommandPrefixes(applyVoiceAliasToQuery(normalizeVoiceCommand(query)))
         if (normalizedQuery.length < 2) return null
         val queryVariants = voiceQueryVariants(normalizedQuery)
         fun score(labels: List<String>): Pair<Int, String?>? = scoreVoiceLabels(labels, queryVariants)
@@ -7580,19 +7606,22 @@ class SecretaryViewModel : ViewModel() {
     }
 
     private fun applyVoiceAliasesToFreeText(text: String): String {
-        var normalized = normalizeVoiceCommand(text)
-        var changed = false
-        effectiveVoiceAliases().forEach { alias ->
-            val aliasNorm = normalizeVoiceCommand(alias.alias)
-            val target = alias.target.trim()
-            if (aliasNorm.isBlank() || target.isBlank()) return@forEach
-            if (isReservedWakeAlias(aliasNorm)) return@forEach
-            if (normalized == aliasNorm) {
-                normalized = target
-                changed = true
+        // Apply aliases as word-boundary replacements across entire text (same as VoiceManager)
+        var result = normalizeVoiceCommand(text)
+        effectiveVoiceAliases()
+            .sortedByDescending { normalizeVoiceCommand(it.alias).length }
+            .forEach { alias ->
+                val aliasNorm = normalizeVoiceCommand(alias.alias)
+                val targetNorm = normalizeVoiceCommand(alias.target)
+                if (aliasNorm.length < 2 || targetNorm.isBlank()) return@forEach
+                if (isReservedWakeAlias(aliasNorm)) return@forEach
+                // Word-boundary replace — same logic as VoiceManager.applyVoiceAliases()
+                result = result.replace(
+                    Regex("(?<![a-z])${Regex.escape(aliasNorm)}(?![a-z])"),
+                    targetNorm
+                )
             }
-        }
-        return if (changed) normalized.ifBlank { text } else text
+        return result
     }
 
     private fun parseVoiceAliasLearning(text: String): VoiceAliasCommand? {
@@ -7892,10 +7921,12 @@ class SecretaryViewModel : ViewModel() {
         return WhatsAppVoiceCommand(remainder, "")
     }
 
-    private fun normalizeVoiceCommand(text: String): String =
-        java.text.Normalizer.normalize(text.trim().lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+    private fun normalizeVoiceCommand(text: String): String {
+        val normalized = java.text.Normalizer.normalize(text.trim().lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
             .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
             .replace("\\s+".toRegex(), " ")
+        return applyVoiceAliasToQuery(normalized)
+    }
 
     private fun parseAsteriskPreference(normalized: String): Boolean? {
         val text = normalized.trim()
@@ -8086,14 +8117,38 @@ class SecretaryViewModel : ViewModel() {
                 if (!phone.isNullOrBlank()) {
                     rememberRecentVoiceContact(target, null, phone)
                     val label = target?.takeIf(String::isNotBlank) ?: phone
-                    val reply = Strings.openingWhatsAppFor(label)
-                    _uiState.value = _uiState.value.copy(
-                        pendingWhatsAppPhone = phone,
-                        pendingWhatsAppMessage = message,
-                        lastAiReply = reply,
-                        history = (_uiState.value.history + ChatMessage("assistant", reply)).takeLast(30)
-                    )
-                    voiceManager?.speak(reply, expectReply = false)
+                    val targetLang = _uiState.value.tenantConfig?.get("default_customer_lang")?.toString()?.takeIf { it.isNotBlank() } ?: "en"
+                    viewModelScope.launch {
+                        var sentViaServer = false
+                        try {
+                            val sendRes = api.sendWhatsAppMessage(mapOf(
+                                "to" to phone,
+                                "message" to message,
+                                "target_language" to targetLang
+                            ))
+                            if (sendRes.isSuccessful) {
+                                sentViaServer = true
+                                val confirmMsg = Strings.whatsAppSentViaServer
+                                _uiState.value = _uiState.value.copy(
+                                    lastAiReply = confirmMsg,
+                                    history = (_uiState.value.history + ChatMessage("assistant", confirmMsg)).takeLast(30)
+                                )
+                                voiceManager?.speak(confirmMsg, expectReply = _uiState.value.isDialogMode)
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("WhatsApp", "Server send failed, fallback: ${e.message}")
+                        }
+                        if (!sentViaServer) {
+                            val reply = Strings.openingWhatsAppFor(label)
+                            _uiState.value = _uiState.value.copy(
+                                pendingWhatsAppPhone = phone,
+                                pendingWhatsAppMessage = message,
+                                lastAiReply = reply,
+                                history = (_uiState.value.history + ChatMessage("assistant", reply)).takeLast(30)
+                            )
+                            voiceManager?.speak(reply, expectReply = false)
+                        }
+                    }
                 } else if (!target.isNullOrBlank()) {
                     startVoiceWhatsApp(WhatsAppVoiceCommand(target, message), target)
                 }

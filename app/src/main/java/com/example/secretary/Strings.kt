@@ -846,6 +846,11 @@ object Strings {
         "Dobrze. Zapamiętam naszą rozmowę. Zadzwoń w dowolnym czasie."
     )
     val dialogModeStatus get() = t("In conversation...", "V rozhovoru...", "W rozmowie...")
+    val whatsAppSentViaServer get() = t(
+        "Message sent via WhatsApp.",
+        "Zpráva odeslána přes WhatsApp.",
+        "Wiadomość wysłana przez WhatsApp."
+    )
     val waitingForYourCommand get() = t("Waiting for your command...", "Čekám na váš povel...", "Czekam na Twoje polecenie...")
     val speechRecognitionUnavailable get() = t("Speech recognition not available", "Rozpoznávání řeči není k dispozici", "Rozpoznawanie mowy nie jest dostępne")
     val connectionError get() = t("Connection error to server.", "Chyba spojení se serverem.", "Błąd połączenia z serwerem.")
