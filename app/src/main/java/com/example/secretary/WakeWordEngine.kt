@@ -309,6 +309,15 @@ class WakeWordEngine(
 
     private fun buildHotwordVariants(hotwords: List<String>): Set<String> {
         val variants = linkedSetOf<String>()
+        // Phonetic aliases: Vosk CS model often mishears these words.
+        // Map what the model actually returns → the intended hotword phonetic equivalent.
+        val phoneticAliases = mapOf(
+            "katko" to listOf("katka", "katku", "kadko", "gatko"),
+            "kundo" to listOf("kunda", "kundu", "condo"),
+            "sanny" to listOf("sandy", "sani", "sane"),
+            "secretary" to listOf("sekretar", "sekretarka"),
+            "asistentka" to listOf("asistentko", "asistentku")
+        )
         hotwords
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -318,6 +327,12 @@ class WakeWordEngine(
                 variants += normalized
                 variants += "hej $normalized"
                 variants += "hey $normalized"
+                // Add phonetic aliases for this hotword if known
+                phoneticAliases[normalized]?.forEach { alias ->
+                    variants += alias
+                    variants += "hej $alias"
+                    variants += "hey $alias"
+                }
             }
         return variants
     }
