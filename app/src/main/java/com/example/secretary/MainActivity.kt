@@ -291,7 +291,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             onResult = { text -> viewModel.onVoiceInput(text) },
             onReady = { viewModel.setListening(true) },
             onRecognizerError = { viewModel.setListening(false) },
-            onHotwordDetected = { viewModel.startListening() },
+            onHotwordDetected = { viewModel.setStatus(Strings.listening) },
             onStatusChange = { status -> viewModel.setStatus(status) }
         )
         service.voiceManager?.let { vm ->
@@ -7019,7 +7019,22 @@ class SecretaryViewModel : ViewModel() {
         val aliasNorm = normalizeVoiceCommand(cleanAlias)
         val targetNorm = normalizeVoiceCommand(resolvedName)
         if (aliasNorm.length < 3 || targetNorm.length < 3 || aliasNorm == targetNorm) return
+        if (isReservedWakeAlias(aliasNorm)) return
         settingsManager?.upsertVoiceAlias(cleanAlias, resolvedName)
+    }
+
+    private fun isReservedWakeAlias(aliasNorm: String): Boolean {
+        val activation = settingsManager?.activationWord?.let(::normalizeVoiceCommand).orEmpty()
+        if (activation.isBlank()) return false
+        val reservedExact = setOf(
+            activation,
+            "hej $activation",
+            "hey $activation"
+        )
+        if (aliasNorm in reservedExact) return true
+        return aliasNorm.startsWith("$activation ") ||
+            aliasNorm.endsWith(" $activation") ||
+            aliasNorm.contains(" $activation ")
     }
 
     private fun resolveNavigationTarget(query: String): NavigationAddressCandidate? {
@@ -7034,7 +7049,6 @@ class SecretaryViewModel : ViewModel() {
             .removePrefix("na ")
             .trim()
         if (normalizedQuery.length < 2) return null
-        forcedSannyNavigationCandidate(normalizedQuery)?.let { return it }
         fun score(labels: List<String>): Int? = scoreVoiceLabels(labels, voiceQueryVariants(normalizedQuery))?.first
         val clientMatches = _uiState.value.clients.mapNotNull { client ->
             val labels = listOfNotNull(
@@ -7067,31 +7081,6 @@ class SecretaryViewModel : ViewModel() {
             }
         return (clientMatches + contactMatches + phoneMatches).minWithOrNull(
             compareBy<NavigationAddressCandidate> { if (it.address.isNullOrBlank()) it.score + 50 else it.score }
-                .thenBy { it.score }
-                .thenBy { it.name.length }
-        )
-    }
-
-    private fun forcedSannyNavigationCandidate(normalizedQuery: String): NavigationAddressCandidate? {
-        if (!looksLikeSannyQuery(normalizedQuery)) return null
-
-        val clientMatches = _uiState.value.clients
-            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
-            .map { NavigationAddressCandidate(it.display_name, it.navigationAddress(), -20) }
-        val sharedMatches = _uiState.value.sharedContacts
-            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
-            .map { NavigationAddressCandidate(it.display_name, it.navigationAddress(), -19) }
-        val phoneMatches = contactManager
-            ?.getAllContacts()
-            .orEmpty()
-            .mapNotNull { contact ->
-                val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                if (!isSannyLikeName(name)) return@mapNotNull null
-                NavigationAddressCandidate(name, contact["address"]?.takeIf(String::isNotBlank), -18)
-            }
-
-        return (clientMatches + sharedMatches + phoneMatches).minWithOrNull(
-            compareBy<NavigationAddressCandidate> { if (it.address.isNullOrBlank()) 50 else 0 }
                 .thenBy { it.score }
                 .thenBy { it.name.length }
         )
@@ -7207,40 +7196,17 @@ class SecretaryViewModel : ViewModel() {
         val best = (clientMatches + sharedMatches + deviceMatches).minWithOrNull(
             compareBy<PhoneContactCandidate> { if (it.phone.isNullOrBlank()) it.score + 100 else it.score }.thenBy { it.name.length }
         )
-        val forcedSanny = forcedSannyPhoneCandidate(normalizedQuery)
-        return when {
-            best == null -> forcedSanny
-            !best.phone.isNullOrBlank() -> best
-            forcedSanny != null -> forcedSanny
-            else -> best
-        }
+        return best
     }
 
     private fun voiceQueryVariants(normalizedQuery: String): List<VoiceQueryVariant> {
         val base = normalizedQuery.trim()
         val variants = mutableListOf(VoiceQueryVariant(base))
-        mapOf(
-            "andy" to "sanny",
-            "andi" to "sanny",
-            "endy" to "sanny",
-            "annie" to "sanny",
-            "manny" to "sanny",
-            "simi" to "sanny",
-            "simy" to "sanny",
-            "sammy" to "sanny",
-            "samy" to "sanny",
-            "semi" to "sanny"
-        ).forEach { (heard, intended) ->
-            val tokenPattern = Regex("\\b${Regex.escape(heard)}\\b")
-            when {
-                base == heard -> variants += VoiceQueryVariant(intended, heard)
-                tokenPattern.containsMatchIn(base) -> variants += VoiceQueryVariant(tokenPattern.replace(base, intended).trim(), heard)
-            }
-        }
         settingsManager?.getVoiceAliases().orEmpty().forEach { alias ->
             val aliasNorm = normalizeVoiceCommand(alias.alias)
             val targetNorm = normalizeVoiceCommand(alias.target)
             if (aliasNorm.isBlank() || targetNorm.isBlank()) return@forEach
+            if (isReservedWakeAlias(aliasNorm)) return@forEach
             if (base == aliasNorm) {
                 variants += VoiceQueryVariant(targetNorm, alias.alias)
             } else if (base.contains(aliasNorm)) {
@@ -7248,64 +7214,6 @@ class SecretaryViewModel : ViewModel() {
             }
         }
         return variants.distinctBy { it.value }
-    }
-
-    private fun forcedSannyPhoneCandidate(normalizedQuery: String): PhoneContactCandidate? {
-        if (!looksLikeSannyQuery(normalizedQuery)) return null
-        val clientMatches = _uiState.value.clients
-            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
-            .map {
-                PhoneContactCandidate(
-                    name = it.display_name,
-                    phone = it.phone_primary?.takeIf(String::isNotBlank) ?: it.phone_secondary?.takeIf(String::isNotBlank),
-                    score = -20,
-                    matchedAlias = normalizedQuery
-                )
-            }
-        val sharedMatches = _uiState.value.sharedContacts
-            .filter { isSannyLikeName(it.display_name) || it.company_name?.let(::isSannyLikeName) == true }
-            .map {
-                PhoneContactCandidate(
-                    name = it.display_name,
-                    phone = it.phone_primary?.takeIf(String::isNotBlank),
-                    score = -19,
-                    matchedAlias = normalizedQuery
-                )
-            }
-        val deviceMatches = contactManager
-            ?.getAllContacts()
-            .orEmpty()
-            .mapNotNull { contact ->
-                val name = contact["name"]?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                if (!isSannyLikeName(name)) return@mapNotNull null
-                PhoneContactCandidate(
-                    name = name,
-                    phone = contact["phone"]?.takeIf(String::isNotBlank),
-                    score = -18,
-                    matchedAlias = normalizedQuery
-                )
-            }
-        return (clientMatches + sharedMatches + deviceMatches).minWithOrNull(
-            compareBy<PhoneContactCandidate> { if (it.phone.isNullOrBlank()) 50 else 0 }
-                .thenBy { it.score }
-                .thenBy { it.name.length }
-        )
-    }
-
-    private fun looksLikeSannyQuery(normalizedQuery: String): Boolean {
-        val compactQuery = normalizedQuery.replace(" ", "")
-        val tokens = normalizedQuery.split(" ").filter { it.isNotBlank() }
-        val sannyMisheardTokens = setOf(
-            "sanny", "sani", "sanni", "sany", "sunny", "sunnie",
-            "andy", "andi", "endy", "annie", "manny", "simy", "simi", "sammy", "samy", "semi"
-        )
-        return tokens.any { it in sannyMisheardTokens } ||
-            compactQuery in setOf("andymartin", "mannymartin", "simimartin", "sannymartin")
-    }
-
-    private fun isSannyLikeName(name: String): Boolean {
-        val compactName = normalizeVoiceCommand(name).replace(" ", "")
-        return compactName == "sanny" || compactName.startsWith("sanny")
     }
 
     private fun scoreVoiceLabels(labels: List<String>, queries: List<VoiceQueryVariant>): Pair<Int, String?>? {
@@ -7387,6 +7295,7 @@ class SecretaryViewModel : ViewModel() {
             val aliasNorm = normalizeVoiceCommand(alias.alias)
             val targetNorm = normalizeVoiceCommand(alias.target)
             if (aliasNorm.isBlank() || targetNorm.isBlank()) return@forEach
+            if (isReservedWakeAlias(aliasNorm)) return@forEach
             if (value == aliasNorm) value = targetNorm
             else if (value.contains(aliasNorm)) value = value.replace(aliasNorm, targetNorm).trim()
         }
@@ -7400,6 +7309,7 @@ class SecretaryViewModel : ViewModel() {
             val aliasNorm = normalizeVoiceCommand(alias.alias)
             val target = alias.target.trim()
             if (aliasNorm.isBlank() || target.isBlank()) return@forEach
+            if (isReservedWakeAlias(aliasNorm)) return@forEach
             val updated = normalized.replace(Regex("\\b${Regex.escape(aliasNorm)}\\b"), target)
             if (updated != normalized) {
                 normalized = updated

@@ -75,6 +75,7 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    implementation("com.alphacephei:vosk-android:0.3.47")
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.landscapist.coil)
     implementation(libs.androidx.compose.material.icons.extended)

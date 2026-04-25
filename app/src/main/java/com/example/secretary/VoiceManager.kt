@@ -2,11 +2,14 @@ package com.example.secretary
 
 import android.content.Context
 import android.content.Intent
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
@@ -39,6 +42,7 @@ class VoiceManager(
     private var pendingSpeechStayIdle = false
     private val handler = Handler(Looper.getMainLooper())
     private val TAG = "VoiceManager"
+    private var wakeWordEngine: WakeWordEngine? = null
 
     enum class ListenMode { IDLE, HOTWORD, COMMAND }
     private var mode = ListenMode.IDLE
@@ -47,6 +51,8 @@ class VoiceManager(
     private var consecutiveErrors = 0
     private var hotwordMatchedInSession = false
     private val MAX_CONSECUTIVE_ERRORS = 5
+    private var commandNoMatchRetries = 0
+    private val MAX_COMMAND_NO_MATCH_RETRIES = 0
 
     init {
         setupTts()
@@ -128,12 +134,7 @@ class VoiceManager(
         "zero" to "nula",
         "know" to "no",
         "nah" to "ne",
-        "nee" to "ne",
-        "sani" to "sanny",
-        "sanni" to "sanny",
-        "sany" to "sanny",
-        "sunny" to "sanny",
-        "sunnie" to "sanny"
+        "nee" to "ne"
     )
 
     private fun normalizeRecognizedText(text: String): String {
@@ -167,16 +168,28 @@ class VoiceManager(
     }
 
     private fun getHotwords(): List<String> {
-        val custom = settings.activationWord.trim()
-        return listOf(custom).filter { it.isNotBlank() }.distinct()
+        return listOf(settings.activationWord.trim())
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
     }
 
+    private fun shouldUseOfflineWakeWord(): Boolean = true
+
     private fun matchesHotword(text: String): Boolean {
-        val normText = normalizeRecognizedText(text)
-        if (normText.isBlank()) return false
-        return getHotwords().any {
-            val normHw = normalizeRecognizedText(it)
-            normText == normHw || normText.startsWith("$normHw ") || normText.contains(" $normHw ")
+        val normalizedText = normalize(text)
+        if (normalizedText.isBlank()) return false
+        val base = normalize(settings.activationWord.trim())
+        if (base.isBlank()) return false
+        val phrases = linkedSetOf(base)
+        if (base != "hej" && base != "hey") {
+            phrases += "hej $base"
+            phrases += "hey $base"
+        }
+        return phrases.any { hotword ->
+            normalizedText == hotword ||
+                normalizedText.startsWith("$hotword ") ||
+                normalizedText.contains(" $hotword ")
         }
     }
 
@@ -196,20 +209,27 @@ class VoiceManager(
         consecutiveErrors = 0
         hotwordMatchedInSession = false
         onStatusChange(Strings.waitingForCommand)
-        ensureRecognizerAndListen()
+        if (shouldUseOfflineWakeWord()) {
+            startOfflineHotwordLoop()
+        } else {
+            startRecognizerHotwordLoop()
+        }
     }
 
     fun startListening() {
         if (isSpeaking) return
+        wakeWordEngine?.stop()
         cancelRecognizer()
         mode = ListenMode.COMMAND
         consecutiveErrors = 0
+        commandNoMatchRetries = 0
         onStatusChange("${Strings.listening}...")
         handler.postDelayed({ ensureRecognizerAndListen() }, 400)
     }
 
     fun stop() {
         mode = ListenMode.IDLE
+        wakeWordEngine?.stop()
         cancelRecognizer()
         handler.removeCallbacksAndMessages(null)
     }
@@ -243,6 +263,7 @@ class VoiceManager(
             return
         }
         isSpeaking = true
+        wakeWordEngine?.stop()
         cancelRecognizer()
         // Update TTS locale before every utterance so language switches apply immediately.
         applyTtsLanguage()
@@ -270,16 +291,70 @@ class VoiceManager(
         // FIX A7: set flag first so any pending handler posts abort immediately
         isDestroyed = true
         stop()
+        wakeWordEngine?.shutdown()
+        wakeWordEngine = null
         recognizer?.destroy()
         recognizer = null
         tts?.shutdown()
         tts = null
     }
 
+    private fun ensureWakeWordEngine(): WakeWordEngine {
+        wakeWordEngine?.let { return it }
+        val engine = WakeWordEngine(
+            context = context,
+            onStatus = { status ->
+                if (mode == ListenMode.HOTWORD && !isSpeaking && !isDestroyed) {
+                    onStatusChange(status)
+                }
+            },
+            onError = { message, throwable ->
+                Log.e(TAG, message, throwable)
+                if (mode == ListenMode.HOTWORD && !isSpeaking && !isDestroyed) {
+                    onStatusChange("Offline wake-word není dostupný. Kontroluji model...")
+                    handler.postDelayed({
+                        if (mode == ListenMode.HOTWORD && !isSpeaking && !isDestroyed) {
+                            startOfflineHotwordLoop()
+                        }
+                    }, 30_000L)
+                }
+            }
+        )
+        wakeWordEngine = engine
+        return engine
+    }
+
+    private fun startOfflineHotwordLoop() {
+        if (mode != ListenMode.HOTWORD || isSpeaking || isDestroyed) return
+        cancelRecognizer()
+        hotwordMatchedInSession = false
+        val hotwords = getHotwords()
+        if (hotwords.isEmpty()) {
+            onStatusChange(Strings.hotwordDisabledStatus)
+            return
+        }
+        Log.d(TAG, "Starting offline hotword loop with: ${hotwords.joinToString(", ")}")
+        ensureWakeWordEngine().start(hotwords, currentRecognitionLanguage()) {
+            if (mode == ListenMode.HOTWORD && !isSpeaking && !isDestroyed) {
+                hotwordMatchedInSession = true
+                triggerHotword()
+            }
+        }
+    }
+
+    private fun startRecognizerHotwordLoop() {
+        if (mode != ListenMode.HOTWORD || isSpeaking || isDestroyed) return
+        wakeWordEngine?.stop()
+        cancelRecognizer()
+        hotwordMatchedInSession = false
+        ensureRecognizerAndListen()
+    }
+
     private fun ensureRecognizerAndListen() {
         handler.post {
             // FIX A7: abort if VoiceManager was destroyed between posting and executing
             if (isDestroyed) return@post
+            if (mode != ListenMode.COMMAND && mode != ListenMode.HOTWORD) return@post
             try {
                 Log.d(TAG, "ensureRecognizerAndListen: mode=$mode isSpeaking=$isSpeaking")
                 if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -300,7 +375,13 @@ class VoiceManager(
                 }
                 if (recognizer == null) {
                     Log.d(TAG, "Creating new SpeechRecognizer")
-                    recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                    val preferredService = resolvePreferredRecognitionService()
+                    if (preferredService != null) {
+                        Log.d(TAG, "Using recognition service: ${preferredService.flattenToShortString()}")
+                        recognizer = SpeechRecognizer.createSpeechRecognizer(context, preferredService)
+                    } else {
+                        recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                    }
                     recognizer?.setRecognitionListener(createListener())
                 }
                 hotwordMatchedInSession = false
@@ -321,15 +402,13 @@ class VoiceManager(
             val lang = currentRecognitionLanguage()
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, mode == ListenMode.HOTWORD)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra("android.speech.extra.SUPPRESS_BEEP", true)
-            putExtra("android.speech.extra.DICTATION_MODE", mode == ListenMode.HOTWORD)
             // Do NOT use EXTRA_PREFER_OFFLINE — breaks recognizer if no offline model
 
-            val silence = settings.silenceLength
             if (mode == ListenMode.HOTWORD) {
-                // Keep the passive wake-word recognizer open longer so Android does not chirp on every short restart.
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra("android.speech.extra.DICTATION_MODE", true)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60_000L)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 60_000L)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 60_000L)
@@ -338,9 +417,39 @@ class VoiceManager(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS
                 )
             } else {
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                putExtra("android.speech.extra.DICTATION_MODE", false)
+                val silence = settings.silenceLength
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence + 1000L)
             }
+        }
+    }
+
+    private fun resolvePreferredRecognitionService(): ComponentName? {
+        return try {
+            val pm = context.packageManager
+            val available = pm.queryIntentServices(
+                Intent(RecognitionService.SERVICE_INTERFACE),
+                PackageManager.MATCH_DEFAULT_ONLY
+            ).mapNotNull { info ->
+                val si = info.serviceInfo ?: return@mapNotNull null
+                ComponentName(si.packageName, si.name)
+            }
+            if (available.isEmpty()) return null
+
+            val preferredPackages = listOf(
+                "com.google.android.tts",
+                "com.google.android.as"
+            )
+            preferredPackages.forEach { pkg ->
+                available.firstOrNull { it.packageName == pkg }?.let { return it }
+            }
+            available.firstOrNull()
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to resolve recognition service", e)
+            null
         }
     }
 
@@ -354,7 +463,14 @@ class VoiceManager(
         handler.postDelayed({
             // FIX A7: abort if destroyed
             if (isDestroyed) return@postDelayed
-            if (mode != ListenMode.IDLE && !isSpeaking) ensureRecognizerAndListen()
+            if (isSpeaking) return@postDelayed
+            when (mode) {
+                ListenMode.COMMAND -> ensureRecognizerAndListen()
+                ListenMode.HOTWORD -> {
+                    if (shouldUseOfflineWakeWord()) startOfflineHotwordLoop() else startRecognizerHotwordLoop()
+                }
+                ListenMode.IDLE -> Unit
+            }
         }, delayMs)
     }
 
@@ -373,7 +489,29 @@ class VoiceManager(
         override fun onError(error: Int) {
             isRecognizerActive = false
             consecutiveErrors++
+            Log.w(TAG, "Recognizer onError code=$error mode=$mode consecutive=$consecutiveErrors")
+            if (mode == ListenMode.HOTWORD) {
+                if (shouldUseOfflineWakeWord()) {
+                    cancelRecognizer()
+                    startOfflineHotwordLoop()
+                } else {
+                    scheduleRestart(1200L)
+                }
+                return
+            }
             if (mode == ListenMode.COMMAND) onRecognizerError(error)
+            if (mode == ListenMode.COMMAND &&
+                (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+            ) {
+                if (commandNoMatchRetries >= MAX_COMMAND_NO_MATCH_RETRIES) {
+                    Log.d(TAG, "No command captured; returning to hotword mode")
+                    startHotwordLoop()
+                    return
+                }
+                commandNoMatchRetries++
+            } else if (mode == ListenMode.COMMAND) {
+                commandNoMatchRetries = 0
+            }
             if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED) {
                 try { recognizer?.cancel() } catch (_: Exception) { }
                 try { recognizer?.destroy() } catch (_: Exception) { }
@@ -392,14 +530,22 @@ class VoiceManager(
                 SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> 1500L
                 else -> 1000L
             }
+            Log.d(TAG, "Scheduling recognizer restart in ${delay}ms")
             scheduleRestart(delay)
         }
         override fun onResults(results: Bundle?) {
             isRecognizerActive = false
-            if (mode == ListenMode.HOTWORD && hotwordMatchedInSession) return
             val candidates = recognitionCandidates(results)
             when (mode) {
-                ListenMode.HOTWORD -> if (candidates.any(::matchesHotword)) triggerHotword() else scheduleRestart(200)
+                ListenMode.HOTWORD -> {
+                    if (hotwordMatchedInSession) return
+                    if (candidates.any(::matchesHotword)) {
+                        hotwordMatchedInSession = true
+                        triggerHotword()
+                    } else if (!isSpeaking) {
+                        scheduleRestart(300L)
+                    }
+                }
                 ListenMode.COMMAND -> {
                     val text = candidates.firstOrNull()?.let(::normalizeRecognizedText).orEmpty()
                     if (text.isNotBlank()) onResult(text) else startHotwordLoop()
@@ -426,13 +572,14 @@ class VoiceManager(
         override fun onEndOfSegmentedSession() {
             isRecognizerActive = false
             if (mode == ListenMode.HOTWORD && !hotwordMatchedInSession && !isSpeaking) {
-                scheduleRestart(200)
+                scheduleRestart(300L)
             }
         }
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 
     private fun triggerHotword() {
+        wakeWordEngine?.stop()
         cancelRecognizer()
         onHotwordDetected()
         speak(Strings.listening, expectReply = true)
