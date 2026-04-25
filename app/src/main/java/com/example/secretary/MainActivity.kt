@@ -240,8 +240,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
                 LaunchedEffect(state.pendingWhatsAppPhone, state.pendingWhatsAppMessage) {
                     val phone = state.pendingWhatsAppPhone?.trim()?.takeIf(String::isNotBlank) ?: return@LaunchedEffect
-                    val opened = openWhatsApp(this@MainActivity, phone, state.pendingWhatsAppMessage.orEmpty())
-                    vm.onWhatsAppLaunchHandled(opened, phone)
+                    if (phone == "__INBOX__") {
+                        val opened = openWhatsAppInbox(this@MainActivity)
+                        vm.onWhatsAppLaunchHandled(opened, phone)
+                    } else {
+                        val opened = openWhatsApp(this@MainActivity, phone, state.pendingWhatsAppMessage.orEmpty())
+                        vm.onWhatsAppLaunchHandled(opened, phone)
+                    }
                 }
                 
                 when (state.loggedIn) {
@@ -2493,6 +2498,26 @@ private fun openDialer(context: Context, phone: String): Boolean {
     return false
 }
 
+private fun openWhatsAppInbox(context: Context): Boolean {
+    val intents = listOf(
+        android.content.Intent("android.intent.action.MAIN").apply {
+            addCategory("android.intent.category.LAUNCHER")
+            setPackage("com.whatsapp")
+        },
+        android.content.Intent("android.intent.action.MAIN").apply {
+            addCategory("android.intent.category.LAUNCHER")
+            setPackage("com.whatsapp.w4b")
+        },
+        android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("whatsapp://")).apply {
+            setPackage("com.whatsapp")
+        }
+    )
+    for (intent in intents) {
+        try { context.startActivity(intent); return true } catch (_: Exception) {}
+    }
+    return false
+}
+
 private fun normalizePhoneForWhatsApp(phone: String): String {
     val raw = phone.trim().filter { it.isDigit() || it == '+' }
     val international = when {
@@ -2531,6 +2556,7 @@ private fun openWhatsApp(context: Context, phone: String, message: String): Bool
 }
 
 private fun openNavigation(context: Context, address: String): Boolean {
+    android.util.Log.d("VoiceNav", "openNavigation called address=[$address]")
     val query = address.trim()
     if (query.isBlank()) return false
     val encoded = Uri.encode(query)
@@ -6697,7 +6723,9 @@ class SecretaryViewModel : ViewModel() {
             readVoiceAddressTarget(target, text)
             return
         }
+        android.util.Log.d("VoiceNav", "checking nav: [$normalized]")
         parseVoiceNavigationAddress(text)?.let { address ->
+            android.util.Log.d("VoiceNav", "nav matched addr=[$address]")
             if (address.isBlank()) {
                 val recent = currentRecentVoiceContact()
                 val recentAddress = recent?.address
@@ -6968,6 +6996,7 @@ class SecretaryViewModel : ViewModel() {
     }
 
     private fun startVoiceNavigation(address: String, label: String? = null, originalText: String = address) {
+        android.util.Log.d("VoiceNav", "startVoiceNavigation address=[$address] label=[$label]")
         val cleanAddress = address.trim()
         if (cleanAddress.isBlank()) {
             askForNavigationAddress(Strings.startNavigation)
@@ -7035,10 +7064,17 @@ class SecretaryViewModel : ViewModel() {
         contactManager?.getAllContacts().orEmpty().forEach { contact ->
             contact["name"]?.let { names += it }
         }
-        return names
-            .map(::normalizeVoiceCommand)
+        val expanded = linkedSetOf<String>()
+        names.map(::normalizeVoiceCommand)
             .filter { it.length >= 2 }
-            .toSet()
+            .forEach { normalized ->
+                expanded += normalized
+                val tokens = normalized.split(" ").filter { it.length >= 3 }
+                tokens.forEach { token -> expanded += token }
+                tokens.firstOrNull()?.let { expanded += it }
+                tokens.lastOrNull()?.let { expanded += it }
+            }
+        return expanded
     }
 
     private fun looksLikeCommandAlias(aliasNorm: String): Boolean {
@@ -7081,6 +7117,7 @@ class SecretaryViewModel : ViewModel() {
         if (current.isEmpty()) return
         val sanitized = effectiveVoiceAliases()
         if (sanitized.size != current.size) {
+            Log.d("SecretaryViewModel", "Sanitized voice aliases: ${current.size} -> ${sanitized.size}")
             sm.saveVoiceAliases(sanitized)
         }
     }
@@ -7180,6 +7217,18 @@ class SecretaryViewModel : ViewModel() {
     }
 
     private fun startVoiceWhatsApp(command: WhatsAppVoiceCommand, originalText: String) {
+        if (command.target == "__INBOX__") {
+            val message = "Otevírám WhatsApp."
+            _uiState.value = _uiState.value.copy(
+                pendingWhatsAppPhone = "__INBOX__",
+                pendingWhatsAppMessage = "",
+                status = Strings.waitingForCommand,
+                lastAiReply = message,
+                history = (_uiState.value.history + ChatMessage("user", originalText) + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = false)
+            return
+        }
         val cleanTarget = command.target.trim()
         val cleanMessage = command.message.trim()
         if (cleanTarget.isBlank()) {
@@ -7625,6 +7674,16 @@ class SecretaryViewModel : ViewModel() {
 
     private fun parseVoiceWhatsAppCommand(text: String): WhatsAppVoiceCommand? {
         val normalized = normalizeVoiceCommand(text)
+        // Open WhatsApp inbox (no target, no message)
+        val openOnlyPhrases = listOf(
+            "otevri whatsapp", "otevri whats app", "otevri zpravy whatsapp",
+            "otevri whatsapp zpravy", "whatsapp zpravy", "zpravy whatsapp",
+            "open whatsapp", "open whats app", "whatsapp messages",
+            "zobraz whatsapp", "whatsapp inbox", "whatsapp otevrit"
+        )
+        if (openOnlyPhrases.any { normalized == it || normalized.startsWith("$it ") }) {
+            return WhatsAppVoiceCommand("__INBOX__", "")
+        }
         val prefixes = listOf(
             "posli whatsapp ",
             "posli zpravu whatsapp ",
