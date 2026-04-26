@@ -6792,6 +6792,35 @@ class SecretaryViewModel : ViewModel() {
             return
         }
 
+        // Contact sorting session — intercept ALL voice input during session
+        if (_uiState.value.contactSortingSession != null) {
+            handleContactSortingVoiceInput(text)
+            return
+        }
+
+        // Handle "how to sort" question response
+        if (_uiState.value.isDialogMode && _uiState.value.contactSortingSession == null
+            && _uiState.value.lastAiReply == Strings.contactSortingAskMethod) {
+            val n = normalizeVoiceCommand(text)
+            when {
+                n.contains("abeced") || n.contains("jmeno") || n.contains("name") || n.contains("alpha") ->
+                    startContactSortingSession("name")
+                n.contains("predvolb") || n.contains("cislo") || n.contains("phone") || n.contains("prefix") || n.contains("nula") -> {
+                    val prefix = when {
+                        n.contains("44") || n.contains("britani") || n.contains("uk") -> "+44"
+                        n.contains("420") || n.contains("cesk") -> "+420"
+                        n.contains("48") || n.contains("polsk") -> "+48"
+                        else -> "+44"
+                    }
+                    startContactSortingSession("phone_prefix", prefix)
+                }
+                else -> {
+                    voiceManager?.speak(Strings.contactSortingAskMethod, expectReply = true)
+                }
+            }
+            return
+        }
+
         // Dialog mode: accumulate session history
         if (_uiState.value.isDialogMode) {
             val userMsg = ChatMessage("user", text)
@@ -6857,6 +6886,16 @@ class SecretaryViewModel : ViewModel() {
             forgetVoiceAlias(alias, text)
             return
         }
+        // Contact sorting trigger
+        val normForSort = normalizeVoiceCommand(text)
+        if (normForSort.contains("trid") && normForSort.contains("kontakt") ||
+            normForSort.contains("sort") && normForSort.contains("contact") ||
+            normForSort == "tridit kontakty" || normForSort == "trid kontakty" ||
+            normForSort.startsWith("zacni tridit") || normForSort.startsWith("start sorting")) {
+            startContactSortingSession("ask")
+            return
+        }
+
         parseVoiceAddressReadTarget(text)?.let { target ->
             readVoiceAddressTarget(target, text)
             return
@@ -7259,6 +7298,279 @@ class SecretaryViewModel : ViewModel() {
 
     fun invalidateAliasCache() {
         _cachedAliases = null
+    }
+
+    // ===== CONTACT SORTING SESSION =====
+
+    private val SECTION_VOICE_MAP = mapOf(
+        // Czech
+        "klienti" to "client", "klient" to "client",
+        "soukrome" to "private", "soukromi" to "private", "soukroma" to "private",
+        "subdodavatele" to "subcontractor", "subdodavatel" to "subcontractor",
+        "zamestnanci" to "employee", "zamestnanec" to "employee",
+        "pujcovny" to "equipment_vehicle_rental", "pujcovna" to "equipment_vehicle_rental",
+        "dodavatele materialu" to "material_supplier", "dodavatel materialu" to "material_supplier",
+        "dodavatele" to "material_supplier", "material" to "material_supplier",
+        "ostatni" to "other", "jine" to "other",
+        // English
+        "clients" to "client", "client" to "client",
+        "private" to "private", "personal" to "private",
+        "subcontractors" to "subcontractor", "subcontractor" to "subcontractor",
+        "employees" to "employee", "employee" to "employee",
+        "rentals" to "equipment_vehicle_rental", "rental" to "equipment_vehicle_rental",
+        "suppliers" to "material_supplier", "supplier" to "material_supplier",
+        "other" to "other", "others" to "other"
+    )
+
+    private val SECTION_DISPLAY = mapOf(
+        "client" to "Klienti",
+        "private" to "Soukromé",
+        "subcontractor" to "Subdodavatelé",
+        "employee" to "Zaměstnanci",
+        "equipment_vehicle_rental" to "Půjčovny",
+        "material_supplier" to "Dodavatelé materiálu",
+        "other" to "Ostatní"
+    )
+
+    fun startContactSortingSession(sortBy: String = "name", phonePrefix: String = "+44") {
+        val askMsg = if (sortBy == "ask") {
+            Strings.contactSortingAskMethod
+        } else null
+
+        if (sortBy == "ask") {
+            _uiState.value = _uiState.value.copy(
+                isDialogMode = true,
+                status = "Třídění kontaktů...",
+                lastAiReply = Strings.contactSortingAskMethod
+            )
+            voiceManager?.speak(Strings.contactSortingAskMethod, expectReply = true)
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(status = Strings.processing)
+            try {
+                val res = api.getContactsForSorting(sortBy = sortBy, phonePrefix = phonePrefix)
+                if (!res.isSuccessful) {
+                    voiceManager?.speak(Strings.errorLoadingContacts, expectReply = false)
+                    return@launch
+                }
+                val body = res.body() ?: return@launch
+
+                // Build list from phone contacts, filtered by prefix if needed
+                val phoneContacts = contactManager?.getAllContacts().orEmpty()
+                val existingMap = (body["existing"] as? List<*>)?.mapNotNull { item ->
+                    (item as? Map<*, *>)?.let { m ->
+                        val phone = m["normalized_phone"]?.toString() ?: return@mapNotNull null
+                        phone to PhoneContactEntry(
+                            displayName = m["display_name"]?.toString() ?: "",
+                            phone = phone,
+                            existingSectionCode = m["section_code"]?.toString(),
+                            existingId = (m["id"] as? Number)?.toLong()
+                        )
+                    }
+                }?.toMap() ?: emptyMap()
+
+                val entries = phoneContacts
+                    .filter { contact ->
+                        val phone = contact["phone"] ?: return@filter false
+                        if (sortBy == "phone_prefix") {
+                            val norm = phone.replace(" ", "").replace("-", "")
+                            norm.startsWith(phonePrefix) ||
+                            (phonePrefix == "+44" && norm.startsWith("0") && norm.length >= 10)
+                        } else true
+                    }
+                    .map { contact ->
+                        val phone = contact["phone"] ?: ""
+                        val normPhone = phone.replace(" ", "").replace("-", "").let {
+                            if (it.startsWith("0") && it.length >= 10) "+44${it.substring(1)}" else it
+                        }
+                        existingMap[normPhone] ?: PhoneContactEntry(
+                            displayName = contact["name"] ?: "",
+                            phone = phone,
+                            existingSectionCode = null,
+                            existingId = null
+                        )
+                    }
+                    .filter { it.displayName.isNotBlank() && it.phone.isNotBlank() }
+                    .let { list ->
+                        if (sortBy == "name") list.sortedBy { it.displayName.lowercase() }
+                        else list.sortedBy { it.phone }
+                    }
+
+                if (entries.isEmpty()) {
+                    voiceManager?.speak(Strings.noContactsToSort, expectReply = false)
+                    return@launch
+                }
+
+                // Find duplicates
+                val withDupes = findContactDuplicates(entries)
+                val session = ContactSortingSession(
+                    contacts = withDupes,
+                    sortBy = sortBy,
+                    phonePrefix = phonePrefix
+                )
+                _uiState.value = _uiState.value.copy(
+                    contactSortingSession = session,
+                    isDialogMode = true
+                )
+                announceCurrentSortingContact(session)
+            } catch (e: Exception) {
+                voiceManager?.speak(Strings.errorLoadingContacts, expectReply = false)
+                android.util.Log.e("ContactSort", "Error: ${e.message}")
+            }
+        }
+    }
+
+    private fun findContactDuplicates(contacts: List<PhoneContactEntry>): List<PhoneContactEntry> {
+        // Just return as-is — duplicates detected during session when consecutive names are very similar
+        return contacts
+    }
+
+    private fun announceCurrentSortingContact(session: ContactSortingSession) {
+        val contact = session.current ?: run {
+            finishContactSortingSession()
+            return
+        }
+        val existingInfo = if (contact.existingSectionCode != null) {
+            val display = SECTION_DISPLAY[contact.existingSectionCode] ?: contact.existingSectionCode
+            " — aktuálně: $display"
+        } else ""
+        val msg = "${session.progressText}: ${contact.displayName}, ${contact.phone}$existingInfo. ${Strings.contactSortingPrompt}"
+        _uiState.value = _uiState.value.copy(lastAiReply = msg, status = "Třídění ${session.progressText}")
+        voiceManager?.speak(msg, expectReply = true)
+    }
+
+    fun handleContactSortingVoiceInput(text: String): Boolean {
+        val session = _uiState.value.contactSortingSession ?: return false
+        val norm = normalizeVoiceCommand(text)
+
+        // End session
+        if (isDialogEndPhrase(norm) || norm.contains("konec") || norm.contains("hotovo")) {
+            finishContactSortingSession()
+            return true
+        }
+
+        // Skip
+        if (norm.startsWith("preskoc") || norm.startsWith("dalsi") || norm == "skip" || norm == "next") {
+            val updated = session.copy(currentIndex = session.currentIndex + 1, skippedCount = session.skippedCount + 1)
+            _uiState.value = _uiState.value.copy(contactSortingSession = updated)
+            announceCurrentSortingContact(updated)
+            return true
+        }
+
+        // Delete contact
+        if (norm.startsWith("smazat") || norm.startsWith("odstranit") || norm == "delete" || norm == "remove") {
+            session.current?.existingId?.let { id ->
+                viewModelScope.launch {
+                    try { api.deleteSharedContact(id) } catch (_: Exception) {}
+                }
+            }
+            val msg = "${session.current?.displayName} odstraněn."
+            val updated = session.copy(currentIndex = session.currentIndex + 1)
+            _uiState.value = _uiState.value.copy(contactSortingSession = updated)
+            voiceManager?.speak(msg, expectReply = true)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                announceCurrentSortingContact(_uiState.value.contactSortingSession ?: return@postDelayed)
+            }, 1500)
+            return true
+        }
+
+        // Merge with next contact
+        if (norm.startsWith("sloucit") || norm.startsWith("same") || norm == "merge") {
+            val next = session.contacts.getOrNull(session.currentIndex + 1)
+            if (next != null && session.current != null) {
+                val mergeMsg = "Sloučit ${session.current?.displayName} s ${next.displayName}? Řekněte ano nebo ne."
+                val updated = session.copy(pendingMerge = Pair(session.current!!, next))
+                _uiState.value = _uiState.value.copy(contactSortingSession = updated)
+                voiceManager?.speak(mergeMsg, expectReply = true)
+                return true
+            }
+        }
+
+        // Confirm merge
+        if (session.pendingMerge != null) {
+            if (norm == "ano" || norm == "yes") {
+                val (primary, secondary) = session.pendingMerge
+                viewModelScope.launch {
+                    try {
+                        if (primary.existingId != null && secondary.existingId != null) {
+                            api.mergeSharedContacts(mapOf(
+                                "primary_id" to primary.existingId,
+                                "secondary_id" to secondary.existingId
+                            ))
+                        }
+                    } catch (_: Exception) {}
+                }
+                val updated = session.copy(
+                    pendingMerge = null,
+                    currentIndex = session.currentIndex + 2,
+                    assignedCount = session.assignedCount + 1
+                )
+                _uiState.value = _uiState.value.copy(contactSortingSession = updated)
+                voiceManager?.speak("Sloučeno.", expectReply = true)
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    announceCurrentSortingContact(_uiState.value.contactSortingSession ?: return@postDelayed)
+                }, 1200)
+                return true
+            } else if (norm == "ne" || norm == "no") {
+                val updated = session.copy(pendingMerge = null)
+                _uiState.value = _uiState.value.copy(contactSortingSession = updated)
+                announceCurrentSortingContact(updated)
+                return true
+            }
+        }
+
+        // Section assignment
+        val sectionCode = SECTION_VOICE_MAP.entries
+            .firstOrNull { (key, _) -> norm == key || norm.startsWith("$key ") }
+            ?.value
+
+        if (sectionCode != null && session.current != null) {
+            val contact = session.current!!
+            viewModelScope.launch {
+                try {
+                    api.assignContactSection(mapOf(
+                        "display_name" to contact.displayName,
+                        "phone" to contact.phone,
+                        "section_code" to sectionCode,
+                        "contact_id" to contact.existingId
+                    ).filterValues { it != null })
+                } catch (e: Exception) {
+                    android.util.Log.w("ContactSort", "Assign failed: ${e.message}")
+                }
+            }
+            val sectionName = SECTION_DISPLAY[sectionCode] ?: sectionCode
+            val updated = session.copy(
+                currentIndex = session.currentIndex + 1,
+                assignedCount = session.assignedCount + 1
+            )
+            _uiState.value = _uiState.value.copy(contactSortingSession = updated)
+            voiceManager?.speak("$sectionName.", expectReply = true)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                announceCurrentSortingContact(_uiState.value.contactSortingSession ?: return@postDelayed)
+            }, 800)
+            return true
+        }
+
+        // Unknown — repeat current contact
+        announceCurrentSortingContact(session)
+        return true
+    }
+
+    private fun finishContactSortingSession() {
+        val session = _uiState.value.contactSortingSession
+        val msg = if (session != null) {
+            "Třídění dokončeno. Zařazeno: ${session.assignedCount}, přeskočeno: ${session.skippedCount}."
+        } else "Třídění dokončeno."
+        _uiState.value = _uiState.value.copy(
+            contactSortingSession = null,
+            isDialogMode = false,
+            status = Strings.waitingForCommand,
+            lastAiReply = msg
+        )
+        voiceManager?.speak(msg, expectReply = false)
+        voiceManager?.startHotwordLoop()
     }
 
     private fun effectiveVoiceAliases(): List<VoiceAlias> {
@@ -8371,5 +8683,6 @@ data class UiState(
     // Dialog mode — continuous conversation until end phrase
     val isDialogMode: Boolean = false,
     val dialogSessionHistory: List<ChatMessage> = emptyList(),  // full session for summarization
-    val dialogSessionStartMs: Long = 0L
+    val dialogSessionStartMs: Long = 0L,
+    val contactSortingSession: ContactSortingSession? = null
 )

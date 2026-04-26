@@ -846,6 +846,26 @@ object Strings {
         "Dobrze. Zapamiętam naszą rozmowę. Zadzwoń w dowolnym czasie."
     )
     val dialogModeStatus get() = t("In conversation...", "V rozhovoru...", "W rozmowie...")
+    val contactSortingAskMethod get() = t(
+        "How would you like to sort? Say 'alphabetically' or 'by phone prefix'.",
+        "Jak chcete třídit? Řekněte 'podle abecedy' nebo 'podle předvolby čísla'.",
+        "Jak chcete třídit?"
+    )
+    val contactSortingPrompt get() = t(
+        "Which category? Or say skip, delete, or merge.",
+        "Do jaké kategorie? Nebo řekněte přeskoč, smaž nebo sloučit.",
+        "Do jaké kategorie?"
+    )
+    val noContactsToSort get() = t(
+        "No contacts found to sort.",
+        "Nenalezeny žádné kontakty k třídění.",
+        "Nenalezeny kontakty."
+    )
+    val errorLoadingContacts get() = t(
+        "Error loading contacts. Please try again.",
+        "Chyba při načítání kontaktů.",
+        "Chyba kontaktů."
+    )
     val whatsAppSentViaServer get() = t(
         "Message sent via WhatsApp.",
         "Zpráva odeslána přes WhatsApp.",

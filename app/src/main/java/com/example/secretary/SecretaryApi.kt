@@ -136,6 +136,19 @@ interface SecretaryApi {
     @DELETE("crm/contacts/{contactId}")
     suspend fun deleteSharedContact(@Path("contactId") contactId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    @GET("crm/contacts/sort-session")
+    suspend fun getContactsForSorting(
+        @Query("sort_by") sortBy: String = "name",
+        @Query("phone_prefix") phonePrefix: String = "+44",
+        @Query("limit") limit: Int = 500
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("crm/contacts/assign-section")
+    suspend fun assignContactSection(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("crm/contacts/merge")
+    suspend fun mergeSharedContacts(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     @POST("crm/contacts/import")
     suspend fun importSharedContacts(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<SharedContactImportResult>
 

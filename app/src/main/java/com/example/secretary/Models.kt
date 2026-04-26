@@ -26,6 +26,28 @@ data class AssistantResponse(
     val is_question: Boolean = false
 )
 
+// Contact sorting session state
+data class PhoneContactEntry(
+    val displayName: String,
+    val phone: String,
+    val existingSectionCode: String? = null,
+    val existingId: Long? = null
+)
+
+data class ContactSortingSession(
+    val contacts: List<PhoneContactEntry>,
+    val currentIndex: Int = 0,
+    val sortBy: String = "name",   // "name" or "phone_prefix"
+    val phonePrefix: String = "+44",
+    val pendingMerge: Pair<PhoneContactEntry, PhoneContactEntry>? = null,
+    val assignedCount: Int = 0,
+    val skippedCount: Int = 0
+) {
+    val current: PhoneContactEntry? get() = contacts.getOrNull(currentIndex)
+    val isFinished: Boolean get() = currentIndex >= contacts.size
+    val progressText: String get() = "${currentIndex + 1} / ${contacts.size}"
+}
+
 data class SummarizeRequest(
     val history: List<ChatMessage>,
     val user_id: Long? = null,
