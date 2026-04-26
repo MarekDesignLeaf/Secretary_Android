@@ -7921,12 +7921,10 @@ class SecretaryViewModel : ViewModel() {
         return WhatsAppVoiceCommand(remainder, "")
     }
 
-    private fun normalizeVoiceCommand(text: String): String {
-        val normalized = java.text.Normalizer.normalize(text.trim().lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+    private fun normalizeVoiceCommand(text: String): String =
+        java.text.Normalizer.normalize(text.trim().lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
             .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
             .replace("\\s+".toRegex(), " ")
-        return applyVoiceAliasToQuery(normalized)
-    }
 
     private fun parseAsteriskPreference(normalized: String): Boolean? {
         val text = normalized.trim()
