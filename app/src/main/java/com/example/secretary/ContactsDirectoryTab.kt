@@ -132,8 +132,10 @@ fun ContactsDirectoryTab(state: UiState, viewModel: SecretaryViewModel) {
             Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TextButton(onClick = { viewModel.startContactSortingSession("ask") }) {
-                Text("🎙 Třídit")
+            if (state.currentUserPermissions["contacts_manage"] == true || state.currentUserRole == "admin") {
+                TextButton(onClick = { viewModel.startContactSortingSession("ask") }) {
+                    Text("🎙 Třídit")
+                }
             }
             TextButton(onClick = { showSectionDialog = true }) { Text(Strings.addSection) }
             TextButton(
