@@ -4446,6 +4446,7 @@ class SecretaryViewModel : ViewModel() {
                             )
                             return@launch
                         }
+                        invalidateAliasCache()
                         _uiState.value = _uiState.value.copy(loggedIn = true)
                         loadTenantConfig()
                         checkOnboardingStatus()
@@ -5885,7 +5886,7 @@ class SecretaryViewModel : ViewModel() {
     fun refreshCrmData() {
         viewModelScope.launch {
             try {
-                val cl = api.getClients(); if (cl.isSuccessful) _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList())
+                val cl = api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
                 val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
                 val sc = api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
                 val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
@@ -5906,7 +5907,7 @@ class SecretaryViewModel : ViewModel() {
     private fun refreshCrmDataKeepTasks() {
         viewModelScope.launch {
             try {
-                val cl = api.getClients(); if (cl.isSuccessful) _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList())
+                val cl = api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
                 val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
                 val sc = api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
                 val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
@@ -7173,6 +7174,7 @@ class SecretaryViewModel : ViewModel() {
         if (isReservedWakeAlias(aliasNorm) || looksLikeCommandAlias(aliasNorm)) return
         if (aliasNorm in knownVoiceNameSet() && aliasNorm != targetNorm) return
         settingsManager?.upsertVoiceAlias(cleanAlias, resolvedTarget)
+        invalidateAliasCache()
         val message = Strings.voiceAliasLearned(cleanAlias, resolvedTarget)
         _uiState.value = _uiState.value.copy(
             status = Strings.waitingForCommand,
@@ -7185,6 +7187,7 @@ class SecretaryViewModel : ViewModel() {
     private fun forgetVoiceAlias(alias: String, originalText: String) {
         val cleanAlias = stripContactCommandPrefixes(alias)
         val removed = settingsManager?.removeVoiceAlias(cleanAlias) == true
+        if (removed) invalidateAliasCache()
         val message = if (removed) Strings.voiceAliasForgotten(cleanAlias) else Strings.voiceAliasNotFound(cleanAlias)
         _uiState.value = _uiState.value.copy(
             status = Strings.waitingForCommand,
@@ -7194,7 +7197,15 @@ class SecretaryViewModel : ViewModel() {
         voiceManager?.speak(message, expectReply = false)
     }
 
+    // Cache for knownVoiceNameSet — invalidated when clients refresh
+    private var _cachedKnownNames: Set<String>? = null
+    private var _cachedKnownNamesClientCount: Int = -1
+
     private fun knownVoiceNameSet(): Set<String> {
+        val clientCount = _uiState.value.clients.size
+        if (_cachedKnownNames != null && _cachedKnownNamesClientCount == clientCount) {
+            return _cachedKnownNames!!
+        }
         val names = linkedSetOf<String>()
         _uiState.value.clients.forEach { client ->
             names += client.display_name
@@ -7217,6 +7228,8 @@ class SecretaryViewModel : ViewModel() {
                 tokens.firstOrNull()?.let { expanded += it }
                 tokens.lastOrNull()?.let { expanded += it }
             }
+        _cachedKnownNames = expanded
+        _cachedKnownNamesClientCount = clientCount
         return expanded
     }
 
@@ -7239,9 +7252,25 @@ class SecretaryViewModel : ViewModel() {
         return tokens.size >= 3 && tokens.any { it in commandTokens }
     }
 
+    // Cache for effectiveVoiceAliases — invalidate when aliases change
+    private var _cachedAliases: List<VoiceAlias>? = null
+    private var _cachedAliasesUserId: Long = -1L
+    private var _cachedAliasesCount: Int = -1
+
+    fun invalidateAliasCache() {
+        _cachedAliases = null
+    }
+
     private fun effectiveVoiceAliases(): List<VoiceAlias> {
+        val sm = settingsManager ?: return emptyList()
+        val userId = sm.currentBackendUserId
+        val rawAliases = sm.getVoiceAliases()
+        // Return cache if user and count unchanged
+        if (_cachedAliases != null && _cachedAliasesUserId == userId && _cachedAliasesCount == rawAliases.size) {
+            return _cachedAliases!!
+        }
         val knownNames = knownVoiceNameSet()
-        return settingsManager?.getVoiceAliases().orEmpty()
+        val filtered = rawAliases
             .filter { alias ->
                 val aliasNorm = normalizeVoiceCommand(alias.alias)
                 val targetNorm = normalizeVoiceCommand(alias.target)
@@ -7252,6 +7281,10 @@ class SecretaryViewModel : ViewModel() {
                 true
             }
             .distinctBy { normalizeVoiceCommand(it.alias) }
+        _cachedAliases = filtered
+        _cachedAliasesUserId = userId
+        _cachedAliasesCount = rawAliases.size
+        return filtered
     }
 
     private fun sanitizeVoiceAliasesStore() {
