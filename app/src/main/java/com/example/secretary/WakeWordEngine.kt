@@ -316,7 +316,9 @@ class WakeWordEngine(
             "kundo" to listOf("kunda", "kundu", "condo"),
             "sanny" to listOf("sandy", "sani", "sane"),
             "secretary" to listOf("sekretar", "sekretarka"),
-            "asistentka" to listOf("asistentko", "asistentku")
+            "asistentka" to listOf("asistentko", "asistentku"),
+            "hej designleaf" to listOf("hej design leaf", "hej dizajnlif", "hej designlif", "hej design"),
+            "hey designleaf" to listOf("hey design leaf", "hey dizajnlif", "hey designlif")
         )
         hotwords
             .map { it.trim() }
