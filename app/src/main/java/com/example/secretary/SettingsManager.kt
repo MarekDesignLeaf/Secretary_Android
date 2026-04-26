@@ -111,8 +111,27 @@ class SettingsManager(context: Context) {
         get() = getScopedBoolean("hotword_enabled", true)
         set(v) = setScopedBoolean("hotword_enabled", v)
     var activationWord: String
-        get() = getScopedString("activation_word", "sanny")
-        set(v) = setScopedString("activation_word", v)
+        get() {
+            // Read scoped first; if scoped is default/blank, fall back to global override
+            val scoped = scopedKey("activation_word")
+            val scopedVal = if (scoped != null) prefs.getString(scoped, null) else null
+            val globalVal = prefs.getString("activation_word", null)
+            // Prefer non-default value: global "Katko" should win over scoped "hej"/"sanny"
+            return when {
+                !globalVal.isNullOrBlank() && (scopedVal.isNullOrBlank() || scopedVal == "sanny" || scopedVal == "hej") -> globalVal
+                !scopedVal.isNullOrBlank() -> scopedVal
+                !globalVal.isNullOrBlank() -> globalVal
+                else -> "sanny"
+            }
+        }
+        set(v) {
+            // Save both global and scoped so it works regardless of login state
+            val scoped = scopedKey("activation_word")
+            prefs.edit().apply {
+                putString("activation_word", v)
+                if (scoped != null) putString(scoped, v)
+            }.apply()
+        }
     var avoidAsterisksInReplies: Boolean
         get() = getScopedBoolean("avoid_asterisks_in_replies", true)
         set(v) = setScopedBoolean("avoid_asterisks_in_replies", v)
