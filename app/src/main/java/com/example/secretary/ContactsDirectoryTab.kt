@@ -71,6 +71,44 @@ fun ContactsDirectoryTab(state: UiState, viewModel: SecretaryViewModel) {
             }
         )
     }
+    // Merge dialog
+    val mergePending = state.pendingMergeDialog
+    if (mergePending != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.dismissMergeDialog() },
+            title = { Text("Sloučit kontakty") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Zachovat jako primární:")
+                    val p1info = mergePending.name1 + if (!mergePending.phone1.isNullOrBlank()) " (${mergePending.phone1})" else ""
+                    Text(p1info, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Smazat (data se sloučí):")
+                    val p2info = mergePending.name2 + if (!mergePending.phone2.isNullOrBlank()) " (${mergePending.phone2})" else ""
+                    Text(p2info)
+                    Text("(Klepněte Přepnout pro opačné pořadí)", fontSize = 11.sp, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.mergeContactsById(mergePending.id1, mergePending.id2)
+                }) { Text("Sloučit") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        // Swap primary/secondary
+                        viewModel.showMergeDialog(mergePending.copy(
+                            id1 = mergePending.id2, name1 = mergePending.name2, phone1 = mergePending.phone2, section1 = mergePending.section2,
+                            id2 = mergePending.id1, name2 = mergePending.name1, phone2 = mergePending.phone1, section2 = mergePending.section1
+                        ))
+                    }) { Text("Přepnout") }
+                    TextButton(onClick = { viewModel.dismissMergeDialog() }) { Text("Zrušit") }
+                }
+            }
+        )
+    }
+
     if (editContact != null) {
         SharedContactDialog(
             sections = state.contactSections,
@@ -135,6 +173,17 @@ fun ContactsDirectoryTab(state: UiState, viewModel: SecretaryViewModel) {
             if (state.currentUserPermissions["contacts_manage"] == true || state.currentUserRole == "admin") {
                 TextButton(onClick = { viewModel.startContactSortingSession("ask") }) {
                     Text("🎙 Třídit")
+                }
+            }
+            if (state.contactDuplicates.isNotEmpty()) {
+                TextButton(onClick = {
+                    viewModel.showMergeDialog(state.contactDuplicates.first())
+                }) {
+                    androidx.compose.material3.BadgedBox(
+                        badge = { androidx.compose.material3.Badge { Text("${state.contactDuplicates.size}") } }
+                    ) {
+                        Text("⚡ Duplikáty")
+                    }
                 }
             }
             TextButton(onClick = { showSectionDialog = true }) { Text(Strings.addSection) }

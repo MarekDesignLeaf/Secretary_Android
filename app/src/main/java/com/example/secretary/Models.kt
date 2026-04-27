@@ -27,6 +27,18 @@ data class AssistantResponse(
 )
 
 // Contact sorting session state
+data class ContactDuplicate(
+    val id1: Long = 0,
+    val name1: String = "",
+    val phone1: String? = null,
+    val section1: String? = null,
+    val id2: Long = 0,
+    val name2: String = "",
+    val phone2: String? = null,
+    val section2: String? = null,
+    val reason: String = "same_phone"
+)
+
 data class PhoneContactEntry(
     val displayName: String,
     val phone: String,

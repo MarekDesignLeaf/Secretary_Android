@@ -136,10 +136,14 @@ interface SecretaryApi {
     @DELETE("crm/contacts/{contactId}")
     suspend fun deleteSharedContact(@Path("contactId") contactId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    @GET("crm/contacts/duplicates")
+    suspend fun getContactDuplicates(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     @GET("crm/contacts/sort-session")
     suspend fun getContactsForSorting(
         @Query("sort_by") sortBy: String = "name",
         @Query("phone_prefix") phonePrefix: String = "+44",
+        @Query("filter_role") filterRole: String = "unclassified",
         @Query("limit") limit: Int = 500
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 

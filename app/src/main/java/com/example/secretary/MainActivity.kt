@@ -5888,7 +5888,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val cl = api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
                 val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
-                val sc = api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
+                val sc = api.getSharedContacts(); if (sc.isSuccessful) { _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList()); checkContactDuplicates() }
                 val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
                 val jb = api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
                 val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
@@ -6886,6 +6886,9 @@ class SecretaryViewModel : ViewModel() {
             forgetVoiceAlias(alias, text)
             return
         }
+        // Merge/duplicate voice trigger
+        if (handleMergeVoiceCommand(text)) return
+
         // Contact sorting trigger
         val normForSort = normalizeVoiceCommand(text)
         if (normForSort.contains("trid") && normForSort.contains("kontakt") ||
@@ -7333,10 +7336,6 @@ class SecretaryViewModel : ViewModel() {
     )
 
     fun startContactSortingSession(sortBy: String = "name", phonePrefix: String = "+44") {
-        val askMsg = if (sortBy == "ask") {
-            Strings.contactSortingAskMethod
-        } else null
-
         if (sortBy == "ask") {
             _uiState.value = _uiState.value.copy(
                 isDialogMode = true,
@@ -7357,63 +7356,37 @@ class SecretaryViewModel : ViewModel() {
                 }
                 val body = res.body() ?: return@launch
 
-                // Build list from phone contacts, filtered by prefix if needed
-                val phoneContacts = contactManager?.getAllContacts().orEmpty()
-                val existingMap = (body["existing"] as? List<*>)?.mapNotNull { item ->
-                    (item as? Map<*, *>)?.let { m ->
-                        val phone = m["normalized_phone"]?.toString() ?: return@mapNotNull null
-                        phone to PhoneContactEntry(
-                            displayName = m["display_name"]?.toString() ?: "",
-                            phone = phone,
-                            existingSectionCode = m["section_code"]?.toString(),
-                            existingId = (m["id"] as? Number)?.toLong()
-                        )
-                    }
-                }?.toMap() ?: emptyMap()
-
-                val entries = phoneContacts
-                    .filter { contact ->
-                        val phone = contact["phone"] ?: return@filter false
-                        if (sortBy == "phone_prefix") {
-                            val norm = phone.replace(" ", "").replace("-", "")
-                            norm.startsWith(phonePrefix) ||
-                            (phonePrefix == "+44" && norm.startsWith("0") && norm.length >= 10)
-                        } else true
-                    }
-                    .map { contact ->
-                        val phone = contact["phone"] ?: ""
-                        val normPhone = phone.replace(" ", "").replace("-", "").let {
-                            if (it.startsWith("0") && it.length >= 10) "+44${it.substring(1)}" else it
+                @Suppress("UNCHECKED_CAST")
+                val serverContacts = try {
+                    (body["contacts"] as? List<*>)?.mapNotNull { item ->
+                        (item as? Map<*, *>)?.let { m ->
+                            PhoneContactEntry(
+                                displayName = m["display_name"]?.toString() ?: return@mapNotNull null,
+                                phone = m["phone_primary"]?.toString() ?: "",
+                                existingSectionCode = m["contact_role"]?.toString(),
+                                existingId = (m["id"] as? Number)?.toLong()
+                            )
                         }
-                        existingMap[normPhone] ?: PhoneContactEntry(
-                            displayName = contact["name"] ?: "",
-                            phone = phone,
-                            existingSectionCode = null,
-                            existingId = null
-                        )
-                    }
-                    .filter { it.displayName.isNotBlank() && it.phone.isNotBlank() }
-                    .let { list ->
-                        if (sortBy == "name") list.sortedBy { it.displayName.lowercase() }
-                        else list.sortedBy { it.phone }
-                    }
+                    } ?: emptyList()
+                } catch (e: Exception) {
+                    android.util.Log.w("ContactSort", "Parse error: ${e.message}")
+                    emptyList()
+                }
 
-                if (entries.isEmpty()) {
-                    voiceManager?.speak(Strings.noContactsToSort, expectReply = false)
+                if (serverContacts.isEmpty()) {
+                    val msg = "Žádné kontakty k třídění. Všechny jsou již zařazeny."
+                    voiceManager?.speak(msg, expectReply = false)
+                    _uiState.value = _uiState.value.copy(status = Strings.waitingForCommand, lastAiReply = msg)
                     return@launch
                 }
 
-                // Find duplicates
-                val withDupes = findContactDuplicates(entries)
-                val session = ContactSortingSession(
-                    contacts = withDupes,
-                    sortBy = sortBy,
-                    phonePrefix = phonePrefix
-                )
-                _uiState.value = _uiState.value.copy(
-                    contactSortingSession = session,
-                    isDialogMode = true
-                )
+                val sorted = when (sortBy) {
+                    "phone_prefix" -> serverContacts.sortedBy { it.phone }
+                    else -> serverContacts.sortedBy { it.displayName.lowercase() }
+                }
+
+                val session = ContactSortingSession(contacts = sorted, sortBy = sortBy, phonePrefix = phonePrefix)
+                _uiState.value = _uiState.value.copy(contactSortingSession = session, isDialogMode = true)
                 announceCurrentSortingContact(session)
             } catch (e: Exception) {
                 voiceManager?.speak(Strings.errorLoadingContacts, expectReply = false)
@@ -7421,6 +7394,7 @@ class SecretaryViewModel : ViewModel() {
             }
         }
     }
+
 
     private fun findContactDuplicates(contacts: List<PhoneContactEntry>): List<PhoneContactEntry> {
         // Just return as-is — duplicates detected during session when consecutive names are very similar
@@ -7558,7 +7532,88 @@ class SecretaryViewModel : ViewModel() {
         return true
     }
 
-    private fun finishContactSortingSession() {
+    // ===== DUPLICATE DETECTION & MERGE =====
+
+    fun checkContactDuplicates() {
+        viewModelScope.launch {
+            try {
+                val res = api.getContactDuplicates()
+                if (res.isSuccessful) {
+                    val body = res.body() ?: return@launch
+                    @Suppress("UNCHECKED_CAST")
+                    val dupes = (body["duplicates"] as? List<Map<String, Any?>>)?.map { d ->
+                        ContactDuplicate(
+                            id1 = (d["id1"] as? Number)?.toLong() ?: 0,
+                            name1 = d["name1"]?.toString() ?: "",
+                            phone1 = d["phone1"]?.toString(),
+                            section1 = d["section1"]?.toString(),
+                            id2 = (d["id2"] as? Number)?.toLong() ?: 0,
+                            name2 = d["name2"]?.toString() ?: "",
+                            phone2 = d["phone2"]?.toString(),
+                            section2 = d["section2"]?.toString(),
+                            reason = d["reason"]?.toString() ?: "same_phone"
+                        )
+                    } ?: emptyList()
+                    _uiState.value = _uiState.value.copy(contactDuplicates = dupes)
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("ContactMerge", "Duplicate check failed: ${e.message}")
+            }
+        }
+    }
+
+    fun mergeContactsById(primaryId: Long, secondaryId: Long) {
+        viewModelScope.launch {
+            try {
+                val res = api.mergeSharedContacts(mapOf("primary_id" to primaryId, "secondary_id" to secondaryId))
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        contactDuplicates = _uiState.value.contactDuplicates.filter {
+                            it.id1 != primaryId && it.id2 != secondaryId && it.id1 != secondaryId && it.id2 != primaryId
+                        },
+                        pendingMergeDialog = null
+                    )
+                    refreshSharedContacts()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ContactMerge", "Merge failed: ${e.message}")
+            }
+        }
+    }
+
+    fun showMergeDialog(dupe: ContactDuplicate) {
+        _uiState.value = _uiState.value.copy(pendingMergeDialog = dupe)
+    }
+
+    fun dismissMergeDialog() {
+        _uiState.value = _uiState.value.copy(pendingMergeDialog = null)
+    }
+
+    private fun refreshSharedContacts() {
+        viewModelScope.launch {
+            try {
+                val res = api.getSharedContacts()
+                if (res.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = res.body() ?: emptyList())
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun handleMergeVoiceCommand(text: String): Boolean {
+        val norm = normalizeVoiceCommand(text)
+        if (!norm.contains("sloucit") && !norm.contains("duplikat") && !norm.contains("merge contact")) return false
+        val dupes = _uiState.value.contactDuplicates
+        if (dupes.isEmpty()) {
+            checkContactDuplicates()
+            voiceManager?.speak("Kontroluji duplicitní kontakty...", expectReply = false)
+            return true
+        }
+        val first = dupes.first()
+        _uiState.value = _uiState.value.copy(pendingMergeDialog = first)
+        voiceManager?.speak("Našel jsem ${dupes.size} duplicit. Otevírám dialog.", expectReply = false)
+        return true
+    }
+
+        private fun finishContactSortingSession() {
         val session = _uiState.value.contactSortingSession
         val msg = if (session != null) {
             "Třídění dokončeno. Zařazeno: ${session.assignedCount}, přeskočeno: ${session.skippedCount}."
@@ -8684,5 +8739,7 @@ data class UiState(
     val isDialogMode: Boolean = false,
     val dialogSessionHistory: List<ChatMessage> = emptyList(),  // full session for summarization
     val dialogSessionStartMs: Long = 0L,
-    val contactSortingSession: ContactSortingSession? = null
+    val contactSortingSession: ContactSortingSession? = null,
+    val contactDuplicates: List<ContactDuplicate> = emptyList(),
+    val pendingMergeDialog: ContactDuplicate? = null
 )
