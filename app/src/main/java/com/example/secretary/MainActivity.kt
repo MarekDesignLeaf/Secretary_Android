@@ -31,7 +31,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material3.*
@@ -177,7 +179,15 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         contactManager = ContactManager(this)
         mailManager = MailManager(this)
         settingsManager = SettingsManager(this)
-        Strings.setLanguage(settingsManager.getCurrentAppLanguage())
+        val appLang = settingsManager.getCurrentAppLanguage()
+        Strings.setLanguage(appLang)
+        
+        // Reset recognition language if it was stuck on English while app is in Czech
+        if (appLang == "cs" && settingsManager.recognitionLanguage.startsWith("en", ignoreCase = true)) {
+            Log.i("MainActivity", "Resetting stale English recognition language for Czech app")
+            settingsManager.recognitionLanguage = ""
+        }
+
         viewModel = androidx.lifecycle.ViewModelProvider(this)[SecretaryViewModel::class.java]
 
         val perms = mutableListOf(
@@ -335,6 +345,41 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
         }
     }
 
+    // Notify voice resolver whenever the user switches screens
+    LaunchedEffect(currentRoute) {
+        val screenCode = when (currentRoute) {
+            Screen.Home.route     -> "home"
+            Screen.Crm.route      -> "crm"
+            Screen.Tasks.route    -> "tasks"
+            Screen.Calendar.route -> "calendar"
+            Screen.Tools.route    -> "tools"
+            Screen.Settings.route -> "settings"
+            else -> currentRoute?.substringBefore("/") ?: return@LaunchedEffect
+        }
+        viewModel.updateVoiceContext(screenCode)
+    }
+
+    LaunchedEffect(state.pendingAppNavigation) {
+        state.pendingAppNavigation?.let { target ->
+            val route = when (target) {
+                "home" -> Screen.Home.route
+                "crm", "clients", "jobs", "leads", "quotes", "invoices", "reports", "contacts" -> Screen.Crm.route
+                "tasks" -> Screen.Tasks.route
+                "calendar" -> Screen.Calendar.route
+                "tools" -> Screen.Tools.route
+                "settings" -> Screen.Settings.route
+                else -> null
+            }
+            if (route != null) {
+                navController.navigate(route) {
+                    popUpTo(navController.graph.startDestinationId)
+                    launchSingleTop = true
+                }
+            }
+            viewModel.onAppNavigationHandled()
+        }
+    }
+
     LaunchedEffect(showAddClientDialog) {
         if (showAddClientDialog) viewModel.ensureBackendUsersLoaded()
     }
@@ -344,6 +389,16 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
             backendUsers = state.backendUsers,
             onDismiss = { showAddClientDialog = false },
             onConfirm = viewModel::createClientManual
+        )
+    }
+
+    // Voice resolve overlay: disambiguation or risk-confirmation dialog
+    state.pendingVoiceResolve?.let { resolve ->
+        VoiceResolveDialog(
+            result = resolve,
+            onSelectCandidate = viewModel::selectVoiceDisambiguationCandidate,
+            onConfirmAction  = viewModel::confirmVoiceResolvedAction,
+            onDismiss        = viewModel::dismissVoiceResolve
         )
     }
 
@@ -404,7 +459,10 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                 arguments = listOf(navArgument("clientId") { type = NavType.LongType })
             ) { backStackEntry ->
                 val clientId = backStackEntry.arguments?.getLong("clientId") ?: 0L
-                LaunchedEffect(clientId) { viewModel.updateContext(clientId, "client") }
+                LaunchedEffect(clientId) {
+                    viewModel.updateContext(clientId, "client")
+                    viewModel.updateVoiceContext("client_detail", "client", clientId.toString())
+                }
                 ClientDetailScreen(clientId, viewModel, navController)
             }
             composable(
@@ -412,6 +470,9 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                 arguments = listOf(navArgument("jobId") { type = NavType.LongType })
             ) { backStackEntry ->
                 val jobId = backStackEntry.arguments?.getLong("jobId") ?: 0L
+                LaunchedEffect(jobId) {
+                    viewModel.updateVoiceContext("job_detail", "job", jobId.toString())
+                }
                 JobDetailScreen(jobId, viewModel, navController)
             }
             composable(
@@ -437,10 +498,14 @@ fun ToolsScreen(viewModel: SecretaryViewModel) {
     }
 
     if (selectedToolMode == null) {
-        ToolsHubScreen { mode ->
-            viewModel.setPlantCaptureMode(mode)
+        ToolsHubScreen(viewModel = viewModel) { mode ->
+            if (mode != "import" && mode != "packages") viewModel.setPlantCaptureMode(mode)
             selectedToolMode = mode
         }
+    } else if (selectedToolMode == "import") {
+        ImportScreen(viewModel = viewModel, onBack = { selectedToolMode = null })
+    } else if (selectedToolMode == "packages") {
+        ToolPackagesScreen(viewModel = viewModel, onBack = { selectedToolMode = null })
     } else {
         Column(Modifier.fillMaxSize()) {
             Row(
@@ -470,12 +535,51 @@ fun ToolsScreen(viewModel: SecretaryViewModel) {
 }
 
 @Composable
-private fun ToolsHubScreen(onOpenMode: (String) -> Unit) {
-    val tools = listOf(
-        Triple("identify", Strings.plantModeRecognition, Strings.plantRecognitionHint),
-        Triple("health", Strings.plantModeHealth, Strings.plantHealthHint),
-        Triple("mushroom", Strings.mushroomModeRecognition, Strings.mushroomRecognitionHint)
+private fun ToolsHubScreen(viewModel: SecretaryViewModel, onOpenMode: (String) -> Unit) {
+    val state by viewModel.uiState.collectAsState()
+
+    // Fetch dynamic tiles from DB on first display
+    LaunchedEffect(Unit) { viewModel.loadToolHubTiles() }
+
+    // Built-in system tiles (always shown at bottom)
+    val builtInTiles = listOf(
+        Triple(
+            "import",
+            Strings.t("Data import", "Import dat", "Import danych"),
+            Strings.t(
+                "Import contacts, clients or other data from CSV, Excel or JSON",
+                "Importuj kontakty, klienty nebo jiná data z CSV, Excel nebo JSON",
+                "Importuj kontakty, klientów lub inne dane z CSV, Excel lub JSON"
+            )
+        ),
+        Triple(
+            "packages",
+            Strings.t("Tool packages", "Balíčky nástrojů", "Pakiety narzędzi"),
+            Strings.t(
+                "Install, configure and manage tool extension packages",
+                "Instaluj, konfiguruj a spravuj rozšiřující balíčky nástrojů",
+                "Instaluj, konfiguruj i zarządzaj pakietami rozszerzeń narzędzi"
+            )
+        )
     )
+
+    // DB-sourced tiles from installed plugins, localised per app language
+    val lang = Strings.getLangCode()
+    val pluginTiles = state.toolHubTiles.sortedBy { it.sort_order }.map { tile ->
+        val title = when (lang) {
+            "cs" -> tile.tile_title_cs?.takeIf { it.isNotBlank() } ?: tile.tile_title_en
+            "pl" -> tile.tile_title_pl?.takeIf { it.isNotBlank() } ?: tile.tile_title_en
+            else -> tile.tile_title_en
+        }
+        val hint = when (lang) {
+            "cs" -> tile.tile_hint_cs?.takeIf { it.isNotBlank() } ?: tile.tile_hint_en ?: ""
+            "pl" -> tile.tile_hint_pl?.takeIf { it.isNotBlank() } ?: tile.tile_hint_en ?: ""
+            else -> tile.tile_hint_en ?: ""
+        }
+        Triple(tile.tile_key, title, hint)
+    }
+
+    val allTiles = pluginTiles + builtInTiles
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -492,8 +596,12 @@ private fun ToolsHubScreen(onOpenMode: (String) -> Unit) {
                 ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (state.toolHubTilesLoading) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
         }
-        items(tools) { (mode, title, description) ->
+        items(allTiles) { (mode, title, description) ->
             Button(
                 onClick = { onOpenMode(mode) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
@@ -501,7 +609,8 @@ private fun ToolsHubScreen(onOpenMode: (String) -> Unit) {
             ) {
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text(description, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (description.isNotBlank())
+                        Text(description, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -1435,6 +1544,217 @@ fun AddTaskDialog(
     )
 }
 
+// ==================== VOICE RESOLVE DIALOG ====================
+
+/**
+ * Modal dialog shown whenever the voice resolver returns a result requiring
+ * user interaction — either disambiguation between multiple contacts, or
+ * confirmation of a medium/high-risk action.
+ */
+@Composable
+fun VoiceResolveDialog(
+    result: VoiceResolveResult,
+    onSelectCandidate: (VoiceDisambiguationCandidate) -> Unit,
+    onConfirmAction: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (result.requiresClarification && result.candidates.isNotEmpty()) {
+        // ---- DISAMBIGUATION: multiple contacts matched ----
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    text = result.clarificationQuestion ?: "Koho myslíš?",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "\"${result.originalText}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    result.candidates.forEach { candidate ->
+                        OutlinedCard(
+                            onClick = { onSelectCandidate(candidate) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (candidate.aliasType == "company") Icons.Default.Business else Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = candidate.displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (!candidate.companyName.isNullOrBlank() &&
+                                        candidate.companyName != candidate.displayName) {
+                                        Text(
+                                            text = candidate.companyName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (candidate.disambiguationHint.isNotBlank()) {
+                                        Text(
+                                            text = candidate.disambiguationHint,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
+                                }
+                                val pct = (candidate.matchConfidence * 100).toInt()
+                                Text(
+                                    text = "$pct%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text(Strings.cancel) }
+            }
+        )
+    } else if (result.resolved && result.riskLevel != "low") {
+        // ---- CONFIRMATION: medium/high-risk action ----
+        val riskColor = if (result.riskLevel == "high")
+            MaterialTheme.colorScheme.error
+        else
+            MaterialTheme.colorScheme.tertiary
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = riskColor
+                )
+            },
+            title = {
+                Text(
+                    text = if (result.riskLevel == "high") "Potvrdit akci (vysoké riziko)"
+                           else "Potvrdit akci",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "\"${result.originalText}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = riskColor.copy(alpha = 0.1f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = riskColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = result.actionCode ?: result.controlCode ?: "—",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                result.resolutionMethod?.let { method ->
+                                    Text(
+                                        text = "rozpoznáno přes: $method",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = onConfirmAction,
+                    colors = ButtonDefaults.buttonColors(containerColor = riskColor)
+                ) {
+                    Text("Potvrdit")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text(Strings.cancel) }
+            }
+        )
+    }
+    // If neither condition is met (e.g. stale state), auto-dismiss
+    else {
+        LaunchedEffect(Unit) { onDismiss() }
+    }
+}
+
+// ==================== VOICE STATUS BADGE ====================
+
+/**
+ * Small inline card showing current voice context + last resolve result.
+ * Shown in HomeScreen below the main reply card.
+ */
+@Composable
+fun VoiceContextBadge(state: UiState) {
+    val screenCode = state.currentScreenCode ?: return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Mic,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = "Kontext: $screenCode",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// ===================================================================
+
 @Composable
 fun HomeScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
@@ -1472,7 +1792,8 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
                 Text(state.lastAiReply, fontSize = 18.sp, textAlign = TextAlign.Center)
             }
         }
-        
+        VoiceContextBadge(state)
+
         if (state.contactResults.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             Text(Strings.foundContacts, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Gray)
@@ -1554,7 +1875,7 @@ fun HomeScreen(viewModel: SecretaryViewModel) {
                 onClick = { viewModel.logout() },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(imageVector = Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(imageVector = Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
                 Text(Strings.logout, fontSize = 11.sp)
             }
@@ -1603,6 +1924,7 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
     val state by viewModel.uiState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAddClient by remember { mutableStateOf(false) }
+    var showAddTask by remember { mutableStateOf(false) }
     var showAddJob by remember { mutableStateOf(false) }
     var showAddLead by remember { mutableStateOf(false) }
     var showAddInvoice by remember { mutableStateOf(false) }
@@ -1619,11 +1941,49 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
         viewModel.ensureBackendUsersLoaded()
     }
 
+    LaunchedEffect(state.pendingAppNavigation) {
+        state.pendingAppNavigation?.let { target ->
+            val index = when (target) {
+                "today", "home" -> 0
+                "clients" -> 1
+                "jobs", "crm" -> 2
+                "tasks" -> 3
+                "leads" -> 4
+                "quotes" -> 5
+                "invoices" -> 6
+                "reports" -> 7
+                "contacts" -> 8
+                "communications" -> 9
+                else -> -1
+            }
+            if (index >= 0) {
+                selectedTab = index
+            }
+        }
+    }
+
+    LaunchedEffect(state.pendingAppAction) {
+        state.pendingAppAction?.let { action ->
+            when (action) {
+                "add_client" -> { selectedTab = 1; showAddClient = true }
+                "add_job" -> { selectedTab = 2; showAddJob = true }
+                "add_task" -> { selectedTab = 3; showAddTask = true }
+                "add_lead" -> { selectedTab = 4; showAddLead = true }
+                "add_quote" -> { selectedTab = 5; showAddQuote = true }
+                "add_invoice" -> { selectedTab = 6; showAddInvoice = true }
+                "add_work_report" -> { selectedTab = 7; showAddWorkReport = true }
+                "add_contact" -> { selectedTab = 8; showAddSharedContact = true }
+            }
+            viewModel.onAppActionHandled()
+        }
+    }
+
     Scaffold(
         floatingActionButton = {
             when (selectedTab) {
                 1 -> FloatingActionButton(onClick = { showAddClient = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Klient") }
                 2 -> FloatingActionButton(onClick = { showAddJob = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Zakázka") }
+                3 -> FloatingActionButton(onClick = { showAddTask = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Úkol") }
                 4 -> FloatingActionButton(onClick = { showAddLead = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Lead") }
                 5 -> FloatingActionButton(onClick = { showAddQuote = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Nabídka") }
                 6 -> FloatingActionButton(onClick = { showAddInvoice = true }) { Icon(imageVector = Icons.Default.Add, contentDescription = "Faktura") }
@@ -1671,6 +2031,14 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
             backendUsers = state.backendUsers,
             onDismiss = { showAddClient = false },
             onConfirm = viewModel::createClientManual
+        )
+    }
+    if (showAddTask) {
+        AddTaskDialog(
+            clients = state.clients,
+            backendUsers = state.backendUsers,
+            onDismiss = { showAddTask = false },
+            onConfirm = viewModel::createTaskManual
         )
     }
     if (showAddJob) {
@@ -2706,7 +3074,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                         val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$phone"))
                         ctx.startActivity(waIntent)
                     }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
-                    ) { Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("WhatsApp", fontSize = 12.sp) }
+                    ) { Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("WhatsApp", fontSize = 12.sp) }
                 }
                 if (!c.email_primary.isNullOrBlank()) {
                     Button(onClick = { ctx.startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${c.email_primary}"))) },
@@ -4352,6 +4720,8 @@ class SecretaryViewModel : ViewModel() {
         val normalized = normalizedAppLanguageCode(langCode)
         if (persist) {
             settingsManager?.setCurrentAppLanguage(normalized)
+            // Reset recognition language to match new app language by default
+            settingsManager?.recognitionLanguage = ""
         }
         Strings.setLanguage(normalized)
         val recognitionLocale = settingsManager?.recognitionLanguage
@@ -6021,6 +6391,26 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun loadToolHubTiles() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(toolHubTilesLoading = true)
+            try {
+                val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
+                val res = api.getToolHubTiles(auth)
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        toolHubTiles = res.body()?.tiles ?: emptyList(),
+                        toolHubTilesLoading = false
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(toolHubTilesLoading = false)
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(toolHubTilesLoading = false)
+            }
+        }
+    }
+
     fun testConnection() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.TESTING, status = Strings.testing)
@@ -6776,230 +7166,414 @@ class SecretaryViewModel : ViewModel() {
         return current
     }
 
+    // =================== VOICE CONTEXT + RESOLVE ===================
+
+    /** Fire-and-forget: tell the server which screen the user is on. */
+    fun updateVoiceContext(
+        screenCode: String,
+        entityType: String? = null,
+        entityId: String? = null
+    ) {
+        _uiState.value = _uiState.value.copy(currentScreenCode = screenCode)
+        val uid = _uiState.value.currentUserId?.toInt() ?: 1
+        viewModelScope.launch {
+            try {
+                api.voiceContext(
+                    mapOf(
+                        "tenant_id" to 1,
+                        "user_id" to uid,
+                        "screen_code" to screenCode,
+                        "entity_type" to entityType,
+                        "entity_id" to entityId
+                    )
+                )
+            } catch (_: Exception) {
+                // non-critical — ignore silently
+            }
+        }
+    }
+
+    /**
+     * Suspend version of voice resolve — called directly from the AI fallback coroutine.
+     * Returns true if the command was handled (show disambiguation / execute / confirm),
+     * false if we should fall through to the AI server.
+     */
+    private suspend fun tryVoiceResolveSuspend(text: String, screenCode: String): Boolean {
+        val uid  = _uiState.value.currentUserId?.toInt() ?: 1
+        val lang = _uiState.value.appLanguage.ifBlank { "cs" }
+        return try {
+            val resp = api.voiceResolve(
+                mapOf(
+                    "text"       to text,
+                    "tenant_id"  to 1,
+                    "user_id"    to uid,
+                    "lang"       to lang,
+                    "session_id" to screenCode
+                )
+            )
+            if (!resp.isSuccessful) return false
+            val body = resp.body() ?: return false
+
+            val resolved              = body["resolved"] as? Boolean ?: false
+            val requiresClarification = body["requires_clarification"] as? Boolean ?: false
+            if (!resolved && !requiresClarification) return false
+
+            @Suppress("UNCHECKED_CAST")
+            val candidates = (body["candidates"] as? List<Map<String, Any?>>)
+                ?.map { c ->
+                    VoiceDisambiguationCandidate(
+                        contactId          = c["contact_id"]?.toString() ?: "",
+                        displayName        = c["display_name"]?.toString() ?: "",
+                        companyName        = c["company_name"]?.toString(),
+                        matchedAlias       = c["matched_alias"]?.toString() ?: "",
+                        matchConfidence    = (c["match_confidence"] as? Number)?.toFloat() ?: 0f,
+                        disambiguationHint = c["disambiguation_hint"]?.toString() ?: "",
+                        aliasType          = c["alias_type"]?.toString() ?: ""
+                    )
+                } ?: emptyList()
+
+            val result = VoiceResolveResult(
+                originalText          = text,
+                resolved              = resolved,
+                controlCode           = body["control_code"]?.toString(),
+                actionCode            = body["action_code"]?.toString(),
+                confidence            = (body["confidence"] as? Number)?.toFloat() ?: 0f,
+                resolutionMethod      = body["resolution_method"]?.toString(),
+                requiresClarification = requiresClarification,
+                clarificationQuestion = body["clarification_question"]?.toString(),
+                candidates            = candidates,
+                args                  = @Suppress("UNCHECKED_CAST")
+                                        (body["args"] as? Map<String, Any?>) ?: emptyMap(),
+                riskLevel             = body["risk_level"]?.toString() ?: "low",
+                error                 = body["error"]?.toString()
+            )
+
+            when {
+                requiresClarification -> {
+                    _uiState.value = _uiState.value.copy(
+                        status = Strings.waitingForCommand,
+                        pendingVoiceResolve = result
+                    )
+                    val q = result.clarificationQuestion ?: "Koho myslíš?"
+                    voiceManager?.speak(q, expectReply = true)
+                    true
+                }
+                resolved && result.riskLevel == "low" -> {
+                    _uiState.value = _uiState.value.copy(
+                        status = Strings.waitingForCommand,
+                        pendingVoiceResolve = null
+                    )
+                    executeVoiceResolvedAction(result)
+                    true
+                }
+                else -> {
+                    // Medium/high risk — store for confirmation UI
+                    _uiState.value = _uiState.value.copy(
+                        status = Strings.waitingForCommand,
+                        pendingVoiceResolve = result
+                    )
+                    val msg = "Chceš opravdu: ${result.actionCode ?: result.controlCode}?"
+                    voiceManager?.speak(msg, expectReply = true)
+                    true
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("VoiceResolve", "tryVoiceResolveSuspend error: ${e.message}")
+            false
+        }
+    }
+
+    /** Execute an already-resolved low-risk action from the voice resolver. */
+    private fun executeVoiceResolvedAction(result: VoiceResolveResult) {
+        val action = result.actionCode ?: result.controlCode ?: return
+        when {
+            action.startsWith("navigate_to_") || action.startsWith("open_") -> {
+                val target = action
+                    .removePrefix("navigate_to_")
+                    .removePrefix("open_")
+                    .replace("_screen", "")
+                    .replace("_", "")
+                _uiState.value = _uiState.value.copy(pendingAppNavigation = target)
+                voiceManager?.speak("Otevírám.", expectReply = false)
+            }
+            action.startsWith("create_") || action.startsWith("add_") -> {
+                val entity = action.removePrefix("create_").removePrefix("add_")
+                _uiState.value = _uiState.value.copy(pendingAppAction = "add_$entity")
+                voiceManager?.speak("V pořádku.", expectReply = false)
+            }
+            else -> {
+                // Unknown action — announce and store for screen to handle
+                _uiState.value = _uiState.value.copy(pendingAppAction = action)
+                voiceManager?.speak("Provádím.", expectReply = false)
+            }
+        }
+    }
+
+    /** Called by UI to confirm a medium/high-risk resolved action. */
+    fun confirmVoiceResolvedAction() {
+        val result = _uiState.value.pendingVoiceResolve ?: return
+        _uiState.value = _uiState.value.copy(pendingVoiceResolve = null)
+        if (result.resolved) executeVoiceResolvedAction(result)
+    }
+
+    /** Called by UI to select a disambiguation candidate and proceed. */
+    fun selectVoiceDisambiguationCandidate(candidate: VoiceDisambiguationCandidate) {
+        val result = _uiState.value.pendingVoiceResolve ?: return
+        _uiState.value = _uiState.value.copy(pendingVoiceResolve = null)
+        // Re-resolve is not needed: map the selected contact to the original action
+        val action = result.actionCode ?: result.controlCode
+        when {
+            action?.contains("call") == true -> {
+                val phone = candidate.disambiguationHint.takeIf { it.isNotBlank() }
+                if (phone != null) startVoiceCallTarget(phone, result.originalText)
+                else voiceManager?.speak("Nemám číslo pro ${candidate.displayName}.")
+            }
+            action?.contains("whatsapp") == true -> {
+                val phone = candidate.disambiguationHint.takeIf { it.isNotBlank() }
+                if (phone != null) startVoiceWhatsApp(WhatsAppVoiceCommand(target = phone, message = result.originalText), result.originalText)
+                else voiceManager?.speak("Nemám WhatsApp číslo pro ${candidate.displayName}.")
+            }
+            else -> {
+                // Generic: navigate to contact's client detail if source_client_id known
+                voiceManager?.speak("Vybráno: ${candidate.displayName}.", expectReply = false)
+            }
+        }
+    }
+
+    /** Dismiss the pending voice resolve result without taking action. */
+    fun dismissVoiceResolve() {
+        _uiState.value = _uiState.value.copy(
+            pendingVoiceResolve = null,
+            status = Strings.waitingForCommand
+        )
+    }
+
+    // ================================================================
+
     fun onVoiceInput(text: String) {
-        // Client-side commands — handle before sending to GPT
         val lower = text.lowercase().trim()
         val normalized = normalizeVoiceCommand(text)
+        Log.d("VoiceInput", "Processing: '$text' (norm: '$normalized')")
 
-        // Dialog mode: check for end phrase first
-        if (_uiState.value.isDialogMode && isDialogEndPhrase(lower)) {
-            // Add to session history before exiting
-            val userMsg = ChatMessage("user", text)
-            _uiState.value = _uiState.value.copy(
-                dialogSessionHistory = _uiState.value.dialogSessionHistory + userMsg
-            )
+        // 1. QUICK EXIT / DIALOG END
+        if (isDialogEndPhrase(lower)) {
+            if (_uiState.value.isDialogMode) {
+                _uiState.value = _uiState.value.copy(
+                    dialogSessionHistory = _uiState.value.dialogSessionHistory + ChatMessage("user", text)
+                )
+            }
             exitDialogMode(text)
             return
         }
 
-        // Contact sorting session — intercept ALL voice input during session
+        // 2. TOOL TRIGGERS (PLANTS/MUSHROOMS)
+        if (Strings.matchesPlantHealthCommand(text)) {
+            requestPlantCaptureFromVoice("health")
+            return
+        }
+        if (Strings.matchesMushroomRecognitionCommand(text)) {
+            requestPlantCaptureFromVoice("mushroom")
+            return
+        }
+        if (Strings.matchesPlantRecognitionCommand(text)) {
+            requestPlantCaptureFromVoice("identify")
+            return
+        }
+
+        // 3. SPECIAL MODES (CONTACT SORTING, WORK REPORT SESSION)
         if (_uiState.value.contactSortingSession != null) {
             handleContactSortingVoiceInput(text)
             return
         }
+        if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
+            processVoiceSessionInput(applyVoiceAliasesToFreeText(text))
+            return
+        }
 
-        // Handle "how to sort" question response
-        if (_uiState.value.isDialogMode && _uiState.value.contactSortingSession == null
-            && _uiState.value.lastAiReply == Strings.contactSortingAskMethod) {
-            val n = normalizeVoiceCommand(text)
-            when {
-                n.contains("abeced") || n.contains("jmeno") || n.contains("name") || n.contains("alpha") ->
-                    startContactSortingSession("name")
-                n.contains("predvolb") || n.contains("cislo") || n.contains("phone") || n.contains("prefix") || n.contains("nula") -> {
-                    val prefix = when {
-                        n.contains("44") || n.contains("britani") || n.contains("uk") -> "+44"
-                        n.contains("420") || n.contains("cesk") -> "+420"
-                        n.contains("48") || n.contains("polsk") -> "+48"
-                        else -> "+44"
-                    }
-                    startContactSortingSession("phone_prefix", prefix)
+        // 4. NAVIGATION COMMANDS (LOCALLY HANDLED)
+        Strings.matchesNavigationCommand(text)?.let { target ->
+            val route = when (target) {
+                "home" -> Screen.Home.route
+                "crm", "clients", "jobs", "leads", "quotes", "invoices", "reports", "contacts" -> Screen.Crm.route
+                "tasks" -> Screen.Tasks.route
+                "calendar" -> Screen.Calendar.route
+                "tools" -> Screen.Tools.route
+                "settings" -> Screen.Settings.route
+                else -> null
+            }
+            if (route != null) {
+                _uiState.value = _uiState.value.copy(
+                    pendingAppNavigation = target,
+                    status = Strings.waitingForCommand,
+                    lastAiReply = "Otevírám $target.",
+                    history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", "Otevírám $target.")).takeLast(30)
+                )
+                voiceManager?.speak("Otevírám.", expectReply = false)
+                return
+            }
+        }
+
+        // 5. ACTION COMMANDS (LOCALLY HANDLED)
+        val action = when {
+            normalized.contains("nov") && (normalized.contains("klient") || normalized.contains("client") || normalized.contains("klien")) -> "add_client"
+            normalized.contains("nov") && (normalized.contains("ukol") || normalized.contains("task") || normalized.contains("zadan")) -> "add_task"
+            normalized.contains("nov") && (normalized.contains("zakazk") || normalized.contains("job") || normalized.contains("zleceni")) -> "add_job"
+            normalized.contains("nov") && (normalized.contains("vykaz") || normalized.contains("report") || normalized.contains("raport")) -> "add_work_report"
+            normalized.contains("nov") && (normalized.contains("lead") || normalized.contains("poptav") || normalized.contains("potencjal")) -> "add_lead"
+            normalized.contains("nov") && (normalized.contains("nabid") || normalized.contains("quote") || normalized.contains("ofert")) -> "add_quote"
+            normalized.contains("nov") && (normalized.contains("faktur") || normalized.contains("invoice")) -> "add_invoice"
+            normalized.contains("nov") && (normalized.contains("kontakt") || normalized.contains("contact")) -> "add_contact"
+            normalized.contains("histor") && (normalized.contains("ukaz") || normalized.contains("zobraz") || normalized.contains("show") || normalized.contains("pokaz")) -> "show_admin_logs"
+            normalized.contains("histor") && (normalized.contains("smaz") || normalized.contains("vymaz") || normalized.contains("clear") || normalized.contains("wyczysc")) -> "clear_history"
+            normalized.contains("mluv") && (normalized.contains("cesky") || normalized.contains("czech")) || normalized.contains("jezyk czeski") -> "lang_cs"
+            normalized.contains("mow") && (normalized.contains("polsku") || normalized.contains("polish")) || normalized.contains("jezyk polski") -> "lang_pl"
+            normalized.contains("mluv") && (normalized.contains("anglicky") || normalized.contains("english")) || normalized.contains("jezyk angielski") -> "lang_en"
+            normalized.contains("pomoc") || normalized.contains("umis") || normalized.contains("help") || normalized.contains("what can you") -> "help"
+            else -> null
+        }
+        if (action != null) {
+            when (action) {
+                "help" -> {
+                    val helpMsg = "Umím otevírat okna, vytvářet záznamy nebo navigovat. Ptejte se na cokoliv."
+                    _uiState.value = _uiState.value.copy(lastAiReply = helpMsg)
+                    voiceManager?.speak(helpMsg, expectReply = true)
+                }
+                "lang_cs" -> { changeLanguage("cs"); voiceManager?.speak("Rozumím, mluvím česky.") }
+                "lang_pl" -> { changeLanguage("pl"); voiceManager?.speak("Rozumiem, mówię po polsku.") }
+                "lang_en" -> { changeLanguage("en"); voiceManager?.speak("Understood, I'm speaking English.") }
+                "clear_history" -> {
+                    clearHistory()
+                    val msg = "Historie smazána."
+                    _uiState.value = _uiState.value.copy(lastAiReply = msg)
+                    voiceManager?.speak(msg)
+                }
+                "show_admin_logs" -> {
+                    _uiState.value = _uiState.value.copy(pendingAppNavigation = "settings")
+                    voiceManager?.speak("Otevírám historii.")
                 }
                 else -> {
-                    voiceManager?.speak(Strings.contactSortingAskMethod, expectReply = true)
+                    _uiState.value = _uiState.value.copy(
+                        pendingAppAction = action,
+                        status = Strings.waitingForCommand,
+                        lastAiReply = "Otevírám formulář.",
+                        history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", "Otevírám formulář.")).takeLast(30)
+                    )
+                    voiceManager?.speak("V pořádku.", expectReply = false)
                 }
             }
             return
         }
 
-        // Dialog mode: accumulate session history
-        if (_uiState.value.isDialogMode) {
-            val userMsg = ChatMessage("user", text)
-            _uiState.value = _uiState.value.copy(
-                dialogSessionHistory = _uiState.value.dialogSessionHistory + userMsg
-            )
-        }
-
-        if (Strings.matchesLogoutCommand(lower)) {
-            val logoutMessage = Strings.loggingOutMessage()
-            val msg = ChatMessage("assistant", logoutMessage)
-            _uiState.value = _uiState.value.copy(
-                history = (_uiState.value.history + ChatMessage("user", text) + msg).takeLast(30),
-                lastAiReply = msg.content
-            )
-            voiceManager?.speak(logoutMessage)
-            viewModelScope.launch {
-                kotlinx.coroutines.delay(2500) // wait for TTS
-                logout()
+        // 6. ONGOING FLOWS (NAVIGATION ADDRESS, TRAINING, SORTING QUESTIONS)
+        if (_uiState.value.awaitingNavigationAddress) {
+            if (isVoiceCancelCommand(normalized)) {
+                _uiState.value = _uiState.value.copy(awaitingNavigationAddress = false, status = Strings.waitingForCommand)
+                voiceManager?.speak(Strings.navigationCancelled)
+            } else {
+                startVoiceNavigationTarget(text, text)
             }
-            return
-        }
-        parseAsteriskPreference(normalized)?.let { avoidAsterisks ->
-            settingsManager?.avoidAsterisksInReplies = avoidAsterisks
-            if (avoidAsterisks) {
-                rememberAssistantMemory("Nepoužívej hvězdičky v názvech kontaktů.")
-            }
-            val message = sanitizeAssistantText(
-                if (avoidAsterisks) Strings.noAsteriskStyleRemembered else Strings.noAsteriskStyleDisabled
-            )
-            _uiState.value = _uiState.value.copy(
-                status = Strings.waitingForCommand,
-                lastAiReply = message,
-                history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
-            )
-            voiceManager?.speak(message, expectReply = false)
             return
         }
         if (_uiState.value.voiceAliasTraining != null) {
             processVoiceAliasTrainingInput(text, normalized)
             return
         }
-        if (_uiState.value.awaitingNavigationAddress) {
-            if (isVoiceCancelCommand(normalized)) {
-                val message = Strings.navigationCancelled
-                _uiState.value = _uiState.value.copy(
-                    awaitingNavigationAddress = false,
-                    status = Strings.waitingForCommand,
-                    lastAiReply = message,
-                    history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", message)).takeLast(30)
-                )
-                voiceManager?.speak(message, expectReply = false)
-                return
-            }
-            startVoiceNavigationTarget(text, text)
+        if (_uiState.value.isDialogMode && _uiState.value.contactSortingSession == null && _uiState.value.lastAiReply == Strings.contactSortingAskMethod) {
+            // Sorting question handle...
+            val n = normalizeVoiceCommand(text)
+            if (n.contains("abeced") || n.contains("jmeno")) startContactSortingSession("name")
+            else if (n.contains("cislo") || n.contains("predvolb")) startContactSortingSession("phone_prefix", "+44")
+            else voiceManager?.speak(Strings.contactSortingAskMethod, expectReply = true)
             return
         }
-        parseVoiceAliasLearning(text)?.let { command ->
-            learnVoiceAlias(command.alias, command.target, text)
-            return
-        }
-        parseVoiceAliasForget(text)?.let { alias ->
-            forgetVoiceAlias(alias, text)
-            return
-        }
-        // Merge/duplicate voice trigger
+
+        // 7. ALIAS LEARNING / FORGETTING
+        parseVoiceAliasLearning(text)?.let { learnVoiceAlias(it.alias, it.target, text); return }
+        parseVoiceAliasForget(text)?.let { forgetVoiceAlias(it, text); return }
+
+        // 8. BUILT-IN HARD ACTION TRIGGERS (CALL, WHATSAPP, NAV)
         if (handleMergeVoiceCommand(text)) return
+        parseVoiceAddressReadTarget(text)?.let { readVoiceAddressTarget(it, text); return }
+        parseVoiceNavigationAddress(text)?.let { addr ->
+            if (addr.isBlank()) {
+                currentRecentVoiceContact()?.address?.let { a -> startVoiceNavigation(a, currentRecentVoiceContact()!!.name, text) }
+                    ?: askForNavigationAddress(text)
+            } else { startVoiceNavigationTarget(addr, text) }
+            return
+        }
+        parseVoiceCallTarget(text)?.let { startVoiceCallTarget(it, text); return }
+        parseVoiceWhatsAppCommand(text)?.let { startVoiceWhatsApp(it, text); return }
+        if (matchesStartWorkReportCommand(normalized)) { startWorkReportSession(); return }
 
-        // Contact sorting trigger
-        val normForSort = normalizeVoiceCommand(text)
-        if (normForSort.contains("trid") && normForSort.contains("kontakt") ||
-            normForSort.contains("sort") && normForSort.contains("contact") ||
-            normForSort == "tridit kontakty" || normForSort == "trid kontakty" ||
-            normForSort.startsWith("zacni tridit") || normForSort.startsWith("start sorting")) {
-            startContactSortingSession("ask")
+        // 9. LOGOUT
+        if (Strings.matchesLogoutCommand(lower)) {
+            voiceManager?.speak(Strings.loggingOutMessage())
+            viewModelScope.launch { kotlinx.coroutines.delay(2000); logout() }
             return
         }
 
-        parseVoiceAddressReadTarget(text)?.let { target ->
-            readVoiceAddressTarget(target, text)
-            return
-        }
-        android.util.Log.d("VoiceNav", "checking nav: [$normalized]")
-        parseVoiceNavigationAddress(text)?.let { address ->
-            android.util.Log.d("VoiceNav", "nav matched addr=[$address]")
-            if (address.isBlank()) {
-                val recent = currentRecentVoiceContact()
-                val recentAddress = recent?.address
-                if (!recentAddress.isNullOrBlank()) {
-                    startVoiceNavigation(recentAddress, recent.name, text)
-                } else {
-                    askForNavigationAddress(text)
-                }
-            } else {
-                startVoiceNavigationTarget(address, text)
-            }
-            return
-        }
-        parseVoiceCallTarget(text)?.let { target ->
-            startVoiceCallTarget(target, text)
-            return
-        }
-        parseVoiceWhatsAppCommand(text)?.let { command ->
-            startVoiceWhatsApp(command, text)
-            return
-        }
-        // If voice work report session is active, redirect to session
-        if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
-            processVoiceSessionInput(applyVoiceAliasesToFreeText(text))
-            return
-        }
-        if (matchesStartWorkReportCommand(normalized)) {
-            startWorkReportSession()
-            return
-        }
-        if (Strings.matchesPlantHealthCommand(lower)) {
-            requestPlantCaptureFromVoice("health")
-            return
-        }
-        if (Strings.matchesMushroomRecognitionCommand(lower)) {
-            requestPlantCaptureFromVoice("mushroom")
-            return
-        }
-        if (Strings.matchesPlantRecognitionCommand(lower)) {
-            requestPlantCaptureFromVoice("identify")
-            return
-        }
+        // 10+11. VOICE RESOLVE + AI SERVER FALLBACK (both run in the same coroutine)
         val currentState = _uiState.value
         val correctedText = applyVoiceAliasesToFreeText(text)
         val newUserMessage = ChatMessage("user", correctedText)
         val updatedHistory = (currentState.history + newUserMessage).takeLast(30)
         
+        if (currentState.isDialogMode) {
+            _uiState.value = currentState.copy(dialogSessionHistory = currentState.dialogSessionHistory + newUserMessage)
+        }
+        
         _uiState.value = currentState.copy(isListening = false, status = Strings.processing, history = updatedHistory)
         viewModelScope.launch {
             try {
+                // 10. VOICE RESOLVE — try AI control bridge first (screen-aware resolver)
+                val screenCode = _uiState.value.currentScreenCode
+                if (screenCode != null) {
+                    val handled = tryVoiceResolveSuspend(text, screenCode)
+                    if (handled) return@launch
+                }
+
+                // 11. AI SERVER FALLBACK
                 val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                val nowStr = sdf.format(Date())
                 val res = api.processMessage(MessageRequest(
-                    text = correctedText,
-                    history = updatedHistory,
-                    context_entity_id = currentState.contextEntityId,
-                    context_type = currentState.contextType,
+                    text = correctedText, history = updatedHistory,
+                    context_entity_id = currentState.contextEntityId, context_type = currentState.contextType,
                     internal_language = currentState.appLanguage,
                     external_language = currentState.tenantConfig?.get("default_customer_lang")?.toString()?.takeIf { it.isNotBlank() } ?: "en",
                     calendar_context = calendarManager?.getCalendarContext(),
-                    current_datetime = nowStr
+                    current_datetime = sdf.format(Date())
                 ))
                 if (res.isSuccessful) {
                     res.body()?.let { response ->
                         val assistantReply = sanitizeAssistantText(response.reply_cs)
                         val newAssistantMessage = ChatMessage("assistant", assistantReply)
-                        // Accumulate in dialog session history if active
-                        val newSessionHistory = if (_uiState.value.isDialogMode) {
-                            (_uiState.value.dialogSessionHistory + newAssistantMessage).takeLast(100)
-                        } else _uiState.value.dialogSessionHistory
                         _uiState.value = _uiState.value.copy(
                             lastAiReply = assistantReply,
                             status = if (response.is_question) "${Strings.listening}..." else Strings.waitingForCommand,
                             history = _uiState.value.history + newAssistantMessage,
-                            dialogSessionHistory = newSessionHistory
+                            dialogSessionHistory = if (_uiState.value.isDialogMode) (_uiState.value.dialogSessionHistory + newAssistantMessage).takeLast(100) else _uiState.value.dialogSessionHistory
                         )
                         handleAction(response)
-                        val isDialogActive = _uiState.value.isDialogMode
                         if (response.action_type !in setOf("LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP", "START_NAVIGATION", "OPEN_NAVIGATION", "NAVIGATE")) {
-                            voiceManager?.speak(assistantReply, expectReply = response.is_question || isDialogActive)
+                            voiceManager?.speak(assistantReply, expectReply = response.is_question || _uiState.value.isDialogMode)
                         }
-                        // Refresh CRM data ale NEZNICIT lokalni tasky
                         refreshCrmDataKeepTasks()
                     }
                 } else {
-                    Log.e("ViewModel", "API Error: ${res.code()}")
                     _uiState.value = _uiState.value.copy(status = Strings.serverError(res.code()))
                 }
-            } catch (e: Exception) { 
-                Log.e("ViewModel", "Network Error", e)
+            } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(status = Strings.connectionError)
                 voiceManager?.speak(Strings.cantReachServer)
             }
         }
+    }
+
+    fun onAppNavigationHandled() {
+        _uiState.value = _uiState.value.copy(pendingAppNavigation = null)
+    }
+
+    fun onAppActionHandled() {
+        _uiState.value = _uiState.value.copy(pendingAppAction = null)
     }
 
     private fun askForNavigationAddress(originalText: String) {
@@ -8655,6 +9229,33 @@ data class VoiceAliasTrainingState(
     val samples: List<String> = emptyList()
 )
 
+/** One candidate returned by /voice/resolve when requires_clarification = true. */
+data class VoiceDisambiguationCandidate(
+    val contactId: String,
+    val displayName: String,
+    val companyName: String?,
+    val matchedAlias: String,
+    val matchConfidence: Float,
+    val disambiguationHint: String,
+    val aliasType: String
+)
+
+/** Full result of a /voice/resolve call that the UI needs to act on. */
+data class VoiceResolveResult(
+    val originalText: String,
+    val resolved: Boolean,
+    val controlCode: String?,
+    val actionCode: String?,
+    val confidence: Float,
+    val resolutionMethod: String?,
+    val requiresClarification: Boolean,
+    val clarificationQuestion: String?,
+    val candidates: List<VoiceDisambiguationCandidate>,
+    val args: Map<String, Any?>,
+    val riskLevel: String,
+    val error: String?
+)
+
 data class UiState(
     val isListening: Boolean = false, 
     val appLanguage: String = Strings.getLangCode(),
@@ -8741,5 +9342,12 @@ data class UiState(
     val dialogSessionStartMs: Long = 0L,
     val contactSortingSession: ContactSortingSession? = null,
     val contactDuplicates: List<ContactDuplicate> = emptyList(),
-    val pendingMergeDialog: ContactDuplicate? = null
+    val pendingMergeDialog: ContactDuplicate? = null,
+    val pendingAppNavigation: String? = null,
+    val pendingAppAction: String? = null,
+    val toolHubTiles: List<ToolHubTile> = emptyList(),
+    val toolHubTilesLoading: Boolean = false,
+    // Voice resolve / AI control bridge
+    val currentScreenCode: String? = null,
+    val pendingVoiceResolve: VoiceResolveResult? = null
 )

@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     val canManageHierarchy = state.currentUserPermissions["manage_users"] == true ||
         state.currentUserRole == "admin" ||
         state.currentUserRole == "manager"
+    LaunchedEffect(Unit) { viewModel.loadTenantConfig() }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
         item { Text(Strings.settings, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
         item { CompanyProfileSection(viewModel, sm) }
@@ -1217,7 +1219,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 
 @Composable private fun VersionHistorySection() {
     var exp by remember { mutableStateOf(false) }
-    SCard(Strings.versionHistory, Icons.Default.List, exp, { exp = !exp }) {
+    SCard(Strings.versionHistory, Icons.AutoMirrored.Filled.List, exp, { exp = !exp }) {
         // Pravidla verzovani
         Text(Strings.versioningRules, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         VersionInfo.VERSIONING_RULES.forEach { rule ->

@@ -31,9 +31,9 @@ package com.example.secretary
 object VersionInfo {
 
     // === AKTUALNI VERZE ===
-    const val VERSION_NAME = "1.2a"
-    const val VERSION_CODE = 3
-    const val BUILD_DATE = "2026-04-01"
+    const val VERSION_NAME = "1.3a"
+    const val VERSION_CODE = 4
+    const val BUILD_DATE = "2026-05-04"
 
     // === METADATA PROJEKTU ===
     const val APP_NAME = "Secretary DesignLeaf"
@@ -101,6 +101,82 @@ object VersionInfo {
     val CHANGELOG: List<ChangelogEntry> = listOf(
 
         // --- AKTUALNI VERZE ---
+
+        ChangelogEntry(
+            version = "1.3a",
+            versionCode = 4,
+            date = "2026-05-04",
+            author = "Marek Sima",
+            coder = "Claude AI (Anthropic) pod vedenim Marka Simy",
+            type = ChangeType.MINOR,
+            summary = "Kontakty CRM, hlas. rozlisovani, unifikovana akcni architektura, server audit",
+            changes = listOf(
+                "MainActivity: hlas. rozlisovani (disambiguation UI), potvrzovaci dialog pro vice shod",
+                "MainActivity: nova obrazovka ToolsHubScreen, dynamicke balicky nastroju",
+                "MainActivity: odstraneni mrtveho kodu (callVoiceResolve, _voiceResolveFallback)",
+                "MainActivity: oprava typu WhatsAppVoiceCommand v startVoiceWhatsApp",
+                "MainActivity: ikony AutoMirrored (ExitToApp, Send) - oprava deprecated API",
+                "VoiceManager: prepracovani hlasoveho resolveru, integrace /voice/resolve endpointu",
+                "VoiceManager: cache effectiveVoiceAliases + knownVoiceNameSet (oprava GC storm)",
+                "WakeWordEngine: konfigurovatelne aktivacni slovo (hej designleaf), per-user scope",
+                "BargeInDetector.kt: novy soubor - detekce prerušeni hlasoveho vstupu",
+                "ImportScreen.kt: novy soubor - UI pro CSV/JSON import kontaktu a dat",
+                "ToolPackagesScreen.kt: novy soubor - UI pro instalaci a spravu tool balicku",
+                "SecretaryApi.kt: nova API volani (voice/resolve, voice/context, actions/execute, import, tool-packages)",
+                "SettingsScreen: LaunchedEffect pro nacteni tenant configu pri otevreni obrazovky",
+                "SettingsScreen: ikona AutoMirrored.List v sekci verzi",
+                "SettingsManager: rozsireni pro per-user scoped nastaveni",
+                "Strings.kt: rozsireni prekladu (CS/EN/PL) pro vsechny nove funkce",
+                "ContactsDirectoryTab: razeni kontaktu z crm.contacts, admin-only razeni",
+                "Server: cache bypass pro GET /tenant/config (vzdy cerstva data)",
+                "Server: opravy audit traceback a by_role dict pristupu",
+                "Server: bezpecna migrace tenant konfigurace (017c)",
+                "Server: explicitni runtime dependencies",
+                "DB: 001_full_repair.sql aktualizovan pro migrace 011-017c"
+            ),
+            knownIssues = listOf(
+                "PATH pro tool balicky neni nastaven systemove",
+                "Offline fronta prikazu neni implementovana",
+                "PDF export neni implementovan"
+            )
+        ),
+
+        ChangelogEntry(
+            version = "1.2a",
+            versionCode = 3,
+            date = "2026-04-15",
+            author = "Marek Sima",
+            coder = "Claude AI (Anthropic) pod vedenim Marka Simy",
+            type = ChangeType.MINOR,
+            summary = "Hlas. aliasy, WhatsApp Meta API, DB migrace 011-013, tool a import system",
+            changes = listOf(
+                "VoiceManager: hlas. aliasy jsou globalni (sdilene mezi uzivateli)",
+                "VoiceManager: normalizace hlas. prikazu - oprava memory leaku a GC storm",
+                "WhatsApp: odesilani zprav pres Meta Cloud API (server-side)",
+                "WakeWordEngine: aktivacni slovo cte globalni hodnotu pokud je scoped = default",
+                "SettingsManager: aktivacni slovo jako per-user scoped nastaveni",
+                "Migration 011: tabulky tool package systemu (tool_registry, tool_packages)",
+                "Migration 012: tool_registry - centralni registr nastroju",
+                "Migration 013: language_catalog - katalog prekladu a jazyk. nastaveni",
+                "Android barge-in: detekce prerušeni behem TTS prehravani",
+                "Migration 014: import system (import_jobs, import_mappings)",
+                "data_importer.py: import CSV/JSON kontaktu, skript pro server",
+                "Endpointy /import/* na FastAPI serveru",
+                "Migration 015: tenant_settings - univerzalizace (odstraneni hardcoded DesignLeaf)",
+                "main.py: odstraneni vsech hardcoded landscaping/DesignLeaf referenci",
+                "Migration 016: Unified Action Architecture (action_registry, action_log)",
+                "action_executor.py: unifikovany handler pro hlas/UI/API akce",
+                "Migration 017: UI Control Registry + Voice Bridge (ui_control_registry, voice_bridge_log)",
+                "ai_control_bridge.py: voice resolver + AI synonym generator",
+                "Migration 017c: contact_voice_aliases tabulka + entity resolver",
+                "POST /actions/execute + /voice/resolve endpointy"
+            ),
+            knownIssues = listOf(
+                "Inbox obrazovka je placeholder",
+                "Tasks jen v lokalni pameti",
+                "PDF export neni implementovan"
+            )
+        ),
 
         ChangelogEntry(
             version = "1.1a",
@@ -274,6 +350,8 @@ object VersionInfo {
     }
 
     fun localizeChangelogSummary(summary: String): String = when (summary) {
+        "Kontakty CRM, hlas. rozlisovani, unifikovana akcni architektura, server audit" -> Strings.t("CRM contacts, voice disambiguation, unified action architecture, server audit", "Kontakty CRM, hlasové rozlišování, unifikovaná akční architektura, server audit", "Kontakty CRM, rozróżnianie głosowe, zunifikowana architektura akcji, audyt serwera")
+        "Hlas. aliasy, WhatsApp Meta API, DB migrace 011-013, tool a import system" -> Strings.t("Voice aliases, WhatsApp Meta API, DB migrations 011-013, tool and import system", "Hlasové aliasy, WhatsApp Meta API, DB migrace 011-013, tool a import systém", "Aliasy głosowe, WhatsApp Meta API, migracje DB 011-013, system narzędzi i importu")
         "Theme system, opravy Railway deploy, vylepšení UI" -> Strings.t("Theme system, Railway deploy fixes, UI improvements", "Theme systém, opravy Railway deploye, vylepšení UI", "System motywów, poprawki wdrożenia Railway, ulepszenia UI")
         "Prvni verzovane vydani Secretary DesignLeaf" -> Strings.t("First versioned release of Secretary DesignLeaf", "První verzované vydání Secretary DesignLeaf", "Pierwsze wersjonowane wydanie Secretary DesignLeaf")
         else -> summary

@@ -107,18 +107,29 @@ class SettingsManager(context: Context) {
     }
 
     // 1. Hlasove ovladani
+    var useOfflineHotword: Boolean
+        get() = prefs.getBoolean("use_offline_hotword", false)
+        set(v) { prefs.edit().putBoolean("use_offline_hotword", v).apply() }
+
     var hotwordEnabled: Boolean
         get() = getScopedBoolean("hotword_enabled", true)
         set(v) = setScopedBoolean("hotword_enabled", v)
     var activationWord: String
-        get() = getScopedString("activation_word", "hej designleaf")
+        get() {
+            val defaultWord = when (normalizeAppLanguage(appLanguage)) {
+                "en" -> "hey designleaf"
+                "pl" -> "hej designleaf"
+                else -> "hej designleaf"
+            }
+            return getScopedString("activation_word", defaultWord)
+        }
         set(v) = setScopedString("activation_word", v)
 
     var avoidAsterisksInReplies: Boolean
         get() = getScopedBoolean("avoid_asterisks_in_replies", true)
         set(v) = setScopedBoolean("avoid_asterisks_in_replies", v)
     var recognitionLanguage: String
-        get() = getScopedString("recognition_lang", "cs-CZ")
+        get() = getScopedString("recognition_lang", "")
         set(v) = setScopedString("recognition_lang", v)
     var ttsRate: Float
         get() = getScopedFloat("tts_rate", 1.0f)
@@ -293,10 +304,13 @@ class SettingsManager(context: Context) {
     }
     fun getCurrentAppLanguage(): String {
         val userId = currentBackendUserId
-        if (userId > 0L) {
-            return normalizeAppLanguage(prefs.getString("app_language_user_$userId", appLanguage) ?: appLanguage)
+        val lang = if (userId > 0L) {
+            normalizeAppLanguage(prefs.getString("app_language_user_$userId", appLanguage) ?: appLanguage)
+        } else {
+            appLanguage
         }
-        return appLanguage
+        android.util.Log.d("SettingsManager", "getCurrentAppLanguage: userId=$userId -> $lang")
+        return lang
     }
     fun setCurrentAppLanguage(lang: String) {
         val normalized = normalizeAppLanguage(lang)

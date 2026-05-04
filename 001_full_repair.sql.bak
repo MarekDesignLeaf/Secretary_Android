@@ -11,15 +11,10 @@ SET search_path TO crm, public;
 -- PHASE 1: ADD MISSING COLUMNS TO EXISTING TABLES
 -- ============================================================
 
--- CLIENTS: missing tenant_id, company_registration_no, vat_no, language fields
+-- CLIENTS: missing tenant_id, company_registration_no, vat_no
 ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS tenant_id INT NOT NULL DEFAULT 1;
 ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS company_registration_no TEXT;
 ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS vat_no TEXT;
-ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS preferred_language_code TEXT;
-ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS preferred_language_name TEXT;
-ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS language_source TEXT;
-ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS language_confidence NUMERIC(3,2);
-ALTER TABLE crm.clients ADD COLUMN IF NOT EXISTS language_updated_at TIMESTAMPTZ;
 
 -- LEADS: missing 7 columns (ALTER never applied due to schema path bug)
 ALTER TABLE crm.leads ADD COLUMN IF NOT EXISTS contact_name TEXT;
@@ -111,11 +106,6 @@ CREATE TABLE IF NOT EXISTS crm.users (
     password_hash TEXT NOT NULL DEFAULT '',
     last_login_at TIMESTAMPTZ,
     timezone TEXT NOT NULL DEFAULT 'Europe/London',
-    assistant_output_language_code TEXT,
-    assistant_output_language_name TEXT,
-    assistant_language_locked BOOLEAN DEFAULT true,
-    assistant_tone TEXT DEFAULT 'professional',
-    assistant_style TEXT DEFAULT 'concise',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ

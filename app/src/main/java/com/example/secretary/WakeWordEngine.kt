@@ -241,7 +241,14 @@ class WakeWordEngine(
         if (!modelBaseDir.exists()) {
             modelBaseDir.mkdirs()
         }
-        postStatus("Stahuji offline wake-word model (${spec.name})...")
+        val statusMsg = if (spec.name.contains("-cs")) {
+            "Stahuji offline wake-word model (${spec.name})..."
+        } else if (spec.name.contains("-pl")) {
+            "Pobieranie modelu budzenia offline (${spec.name})..."
+        } else {
+            "Downloading offline wake-word model (${spec.name})..."
+        }
+        postStatus(statusMsg)
         val zipFile = File(modelBaseDir, "${spec.name}.zip")
         downloadFile(spec.url, zipFile)
         unzip(zipFile, modelBaseDir)
@@ -249,7 +256,14 @@ class WakeWordEngine(
         if (!File(modelDir, "am/final.mdl").exists()) {
             error("Downloaded model is incomplete")
         }
-        postStatus("Offline wake-word model ${spec.name} je připraven.")
+        val readyMsg = if (spec.name.contains("-cs")) {
+            "Offline wake-word model ${spec.name} je připraven."
+        } else if (spec.name.contains("-pl")) {
+            "Model budzenia offline ${spec.name} jest gotowy."
+        } else {
+            "Offline wake-word model ${spec.name} is ready."
+        }
+        postStatus(readyMsg)
         return modelDir
     }
 
@@ -309,31 +323,13 @@ class WakeWordEngine(
 
     private fun buildHotwordVariants(hotwords: List<String>): Set<String> {
         val variants = linkedSetOf<String>()
-        // Phonetic aliases: Vosk CS model often mishears these words.
-        // Map what the model actually returns → the intended hotword phonetic equivalent.
-        val phoneticAliases = mapOf(
-            "katko" to listOf("katka", "katku", "kadko", "gatko"),
-            "kundo" to listOf("kunda", "kundu", "condo"),
-            "sanny" to listOf("sandy", "sani", "sane"),
-            "secretary" to listOf("sekretar", "sekretarka"),
-            "asistentka" to listOf("asistentko", "asistentku"),
-            "hej designleaf" to listOf("hej design leaf", "hej dizajnlif", "hej designlif", "hej design"),
-            "hey designleaf" to listOf("hey design leaf", "hey dizajnlif", "hey designlif")
-        )
         hotwords
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .forEach { hotword ->
                 val normalized = normalize(hotword)
-                if (normalized.isBlank()) return@forEach
-                variants += normalized
-                variants += "hej $normalized"
-                variants += "hey $normalized"
-                // Add phonetic aliases for this hotword if known
-                phoneticAliases[normalized]?.forEach { alias ->
-                    variants += alias
-                    variants += "hej $alias"
-                    variants += "hey $alias"
+                if (normalized.isNotBlank()) {
+                    variants += normalized
                 }
             }
         return variants

@@ -84,8 +84,10 @@ fun SecretaryTheme(
 
     val view = LocalView.current
     if (!view.isInEditMode) {
+        @Suppress("DEPRECATION")
         SideEffect {
             val window = (view.context as? Activity)?.window ?: return@SideEffect
+            @Suppress("DEPRECATION")
             window.statusBarColor = colorScheme.surface.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }

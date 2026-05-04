@@ -35,7 +35,8 @@ class VoiceService : Service() {
         Log.d(TAG, "Service created")
         settings = SettingsManager(this)
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification("Sekretářka je připravena"))
+        val notification = buildNotification("Sekretářka je připravena")
+        startForeground(NOTIFICATION_ID, notification)
     }
 
     fun initVoiceManager(

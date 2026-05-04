@@ -1,4 +1,4 @@
-package com.example.secretary
+﻿package com.example.secretary
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,11 +26,13 @@ object Strings {
             .replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "")
     fun fromCode(code: String): Lang {
         val normalized = normalizeLanguageCode(code)
-        return when {
-            normalized.startsWith("cs") || normalized.startsWith("cz") || normalized.contains("czech") || normalized.contains("cestina") -> Lang.CS
+        val resolved = when {
+            normalized.startsWith("cs") || normalized.startsWith("cz") || normalized.contains("czech") || normalized.contains("cestina") || normalized.contains("čeština") -> Lang.CS
             normalized.startsWith("pl") || normalized.contains("polish") || normalized.contains("polski") -> Lang.PL
             else -> Lang.EN
         }
+        android.util.Log.d("Strings", "fromCode('$code') normalized to '$normalized' -> resolved to $resolved")
+        return resolved
     }
 
     // === NAVIGATION ===
@@ -873,6 +875,7 @@ object Strings {
     )
     val waitingForYourCommand get() = t("Waiting for your command...", "Čekám na váš povel...", "Czekam na Twoje polecenie...")
     val speechRecognitionUnavailable get() = t("Speech recognition not available", "Rozpoznávání řeči není k dispozici", "Rozpoznawanie mowy nie jest dostępne")
+    val languageNotSupportedFallback get() = t("Voice language not supported. Switching to English.", "Hlasové rozpoznávání v tomto jazyce není dostupné. Přepínám na angličtinu.", "Rozpoznawanie głosu w tym języku jest niedostępne. Przełączam na angielski.")
     val connectionError get() = t("Connection error to server.", "Chyba spojení se serverem.", "Błąd połączenia z serwerem.")
     val cantReachServer get() = t("I can't connect to the server.", "Nemůžu se spojit se serverem.", "Nie mogę połączyć się z serwerem.")
     val settingsRestored get() = t("Settings restored", "Nastavení obnovena", "Ustawienia przywrócone")
@@ -1330,113 +1333,56 @@ object Strings {
         else -> fallback ?: ""
     }
     fun matchesLogoutCommand(text: String): Boolean {
-        val normalized = text.lowercase().trim()
-        return normalized == "logout" ||
-            normalized == "log out" ||
-            normalized.contains("odhlasit") ||
-            normalized.contains("odhlásit") ||
+        val normalized = normalizeCommandText(text)
+        return normalized == "logout" || normalized == "log out" ||
+            normalized.contains("odhlasit") || normalized.contains("odhlásit") ||
             normalized.contains("wyloguj")
     }
+
+    fun matchesNavigationCommand(text: String): String? {
+        val n = normalizeCommandText(text)
+        val maps = mapOf(
+            "home" to listOf("domu", "hlavni", "home", "start", "ekran glowny"),
+            "crm" to listOf("crm", "zakazky", "hub", "panel"),
+            "clients" to listOf("klient", "zakaznik", "client", "customer", "klien"),
+            "jobs" to listOf("prace", "seznam praci", "job", "zlecenia"),
+            "tasks" to listOf("ukol", "moje ukoly", "task", "zadan"),
+            "leads" to listOf("lead", "poptav", "potencjal"),
+            "quotes" to listOf("nabid", "kalkul", "quote", "ofert"),
+            "invoices" to listOf("faktur", "ucetn", "invoice"),
+            "reports" to listOf("vykaz", "raport"),
+            "calendar" to listOf("kalendar", "planovan", "calendar", "kalendarz"),
+            "tools" to listOf("nastroj", "funkce", "tool", "narzedzia"),
+            "settings" to listOf("nastaven", "konfigur", "setting", "ustawien"),
+            "contacts" to listOf("kontakt", "adresar", "directory")
+        )
+        for ((target, phrases) in maps) {
+            // Check for prefix match (e.g. "otevri klienty" matches "klient")
+            if (phrases.any { phrase -> 
+                n == phrase || n.contains(" " + phrase) || n.startsWith(phrase)
+            }) {
+                return target
+            }
+        }
+        return null
+    }
+
     fun matchesPlantRecognitionCommand(text: String): Boolean {
-        val normalized = normalizeCommandText(text)
-        val phrases = listOf(
-            "co je to za rostlinu",
-            "co to je za rostlinu",
-            "co to za rostlinu",
-            "rozpoznej rostlinu",
-            "poznej rostlinu",
-            "identifikuj rostlinu",
-            "what plant is this",
-            "what is this plant",
-            "what kind of plant is this",
-            "identify this plant",
-            "identify plant",
-            "co to jest za roslina",
-            "co to jest za rosline",
-            "jaka to roslina",
-            "jaka to jest roslina",
-            "rozpoznaj roślinę",
-            "rozpoznaj rosline",
-            "zidentyfikuj roślinę",
-            "zidentyfikuj rosline"
-        )
-        return phrases.any { normalized.contains(it) }
+        val n = normalizeCommandText(text)
+        val phrases = listOf("rostlin", "plant", "roslin")
+        return phrases.any { n.contains(it) } && (n.contains("co") || n.contains("what") || n.contains("jaka") || n.contains("rozpozn"))
     }
+
     fun matchesPlantHealthCommand(text: String): Boolean {
-        val normalized = normalizeCommandText(text)
-        val phrases = listOf(
-            "co je to za chorobu",
-            "co to je za chorobu",
-            "co to za choroba",
-            "co je rostline",
-            "co je rostlině",
-            "co ji je",
-            "co jí je",
-            "jaka je to choroba",
-            "jaká je to choroba",
-            "nemoc rostliny",
-            "choroba rostliny",
-            "jak lecit tuto rostlinu",
-            "jak léčit tuto rostlinu",
-            "jak lecit tuhle rostlinu",
-            "jak léčit tuhle rostlinu",
-            "jak vylecit tuto rostlinu",
-            "jak vyléčit tuto rostlinu",
-            "jak zachranit tuto rostlinu",
-            "jak zachránit tuto rostlinu",
-            "jak osetrit tuto rostlinu",
-            "jak ošetřit tuto rostlinu",
-            "plant disease",
-            "what disease is this",
-            "what is this disease",
-            "what is wrong with this plant",
-            "what is happening to this plant",
-            "how do i treat this plant",
-            "how to treat this plant",
-            "how to save this plant",
-            "check plant disease",
-            "co to za choroba rosliny",
-            "co to za choroba rośliny",
-            "jaka to choroba",
-            "co dolega roslinie",
-            "co dolega roślinie",
-            "choroba rosliny",
-            "choroba rośliny",
-            "jak leczyc te rosline",
-            "jak leczyć tę roślinę",
-            "jak uratowac te rosline",
-            "jak uratować tę roślinę"
-        )
-        return phrases.any { normalized.contains(it) }
+        val n = normalizeCommandText(text)
+        val phrases = listOf("nemoc", "chorob", "disease", "wrong")
+        return phrases.any { n.contains(it) } && (n.contains("rostlin") || n.contains("plant") || n.contains("roslin"))
     }
+
     fun matchesMushroomRecognitionCommand(text: String): Boolean {
-        val normalized = normalizeCommandText(text)
-        val phrases = listOf(
-            "co je to za houbu",
-            "co to je za houbu",
-            "co je to za houba",
-            "co to je za houba",
-            "co to za houbu",
-            "co to za houba",
-            "rozpoznej houbu",
-            "identifikuj houbu",
-            "urci houbu",
-            "urči houbu",
-            "what mushroom is this",
-            "what is this mushroom",
-            "what kind of mushroom is this",
-            "identify this mushroom",
-            "identify mushroom",
-            "what fungus is this",
-            "co to za grzyb",
-            "co to jest za grzyb",
-            "jaki to grzyb",
-            "jaki to jest grzyb",
-            "rozpoznaj grzyba",
-            "rozpoznaj grzyb",
-            "zidentyfikuj grzyba"
-        )
-        return phrases.any { normalized.contains(it) }
+        val n = normalizeCommandText(text)
+        val phrases = listOf("houb", "grzyb", "mushroom", "fungus")
+        return phrases.any { n.contains(it) } && (n.contains("co") || n.contains("what") || n.contains("jaka") || n.contains("rozpozn"))
     }
     fun localizeHierarchyIssue(raw: String): String = when (raw.lowercase()) {
         "missing_owner", "owner_inactive", "missing_or_inactive_owner" -> t(

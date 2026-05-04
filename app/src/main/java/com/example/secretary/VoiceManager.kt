@@ -17,6 +17,12 @@ import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import java.text.Normalizer
 import java.util.Locale
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 class VoiceManager(
     private val context: Context,
@@ -44,6 +50,21 @@ class VoiceManager(
     private val TAG = "VoiceManager"
     private var wakeWordEngine: WakeWordEngine? = null
 
+    // ── Barge-in / interrupt ──────────────────────────────────────────────────
+    /** Active voice session ID — set by the caller when a voice session is opened on the backend. */
+    var voiceSessionId: String? = null
+    /** Tenant ID for backend calls. */
+    var tenantId: Int = 1
+    /** Cached interrupt command phrases loaded from backend. */
+    private var interruptPhrases: List<String> = emptyList()
+    /** HTTP client for backend interrupt calls. */
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
+        .build()
+    /** Barge-in detector — runs AudioRecord with AEC/NS/AGC during TTS. */
+    private var bargeInDetector: BargeInDetector? = null
+
     enum class ListenMode { IDLE, HOTWORD, COMMAND, DIALOG }
     private var mode = ListenMode.IDLE
     private var isRecognizerActive = false
@@ -53,6 +74,9 @@ class VoiceManager(
     private val MAX_CONSECUTIVE_ERRORS = 5
     private var commandNoMatchRetries = 0
     private val MAX_COMMAND_NO_MATCH_RETRIES = 0
+    // Set when recognizer returns ERROR_LANGUAGE_NOT_SUPPORTED (12) or ERROR_LANGUAGE_UNAVAILABLE (13)
+    // Forces resolvePreferredRecognitionService() to skip AiAi on the next attempt.
+    private var languageNotSupportedFallback = false
 
     init {
         setupTts()
@@ -87,19 +111,24 @@ class VoiceManager(
     }
 
     private fun applyTtsLanguage(): Boolean {
-        val activeRecognitionLanguage = currentRecognitionLanguage()
-        val locale = Locale.forLanguageTag(activeRecognitionLanguage)
+        // Use the app UI language for TTS output — independent of recognition language setting.
+        val ttsLang = when (Strings.fromCode(settings.getCurrentAppLanguage())) {
+            Strings.Lang.CS -> "cs-CZ"
+            Strings.Lang.PL -> "pl-PL"
+            Strings.Lang.EN -> "en-GB"
+        }
+        val locale = Locale.forLanguageTag(ttsLang)
         val result = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-        Log.d(TAG, "TTS setLanguage($activeRecognitionLanguage) result=$result")
+        Log.d(TAG, "TTS setLanguage($ttsLang) result=$result")
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.w(TAG, "TTS language $activeRecognitionLanguage not available, falling back to en-GB")
+            Log.w(TAG, "TTS language $ttsLang not available, falling back to en-GB")
             val fallbackResult = tts?.setLanguage(Locale.forLanguageTag("en-GB"))
             if (fallbackResult == TextToSpeech.LANG_MISSING_DATA || fallbackResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.e(TAG, "TTS fallback en-GB also unavailable")
                 return false
             }
         } else {
-            Log.d(TAG, "TTS language set to $activeRecognitionLanguage OK")
+            Log.d(TAG, "TTS language set to $ttsLang OK")
         }
         return true
     }
@@ -251,6 +280,7 @@ class VoiceManager(
 
     fun stop() {
         mode = ListenMode.IDLE
+        stopBargeInDetector()
         wakeWordEngine?.stop()
         cancelRecognizer()
         handler.removeCallbacksAndMessages(null)
@@ -314,6 +344,8 @@ class VoiceManager(
         // FIX A7: set flag first so any pending handler posts abort immediately
         isDestroyed = true
         stop()
+        bargeInDetector?.stop()
+        bargeInDetector = null
         wakeWordEngine?.shutdown()
         wakeWordEngine = null
         recognizer?.destroy()
@@ -464,15 +496,26 @@ class VoiceManager(
                 ComponentName(si.packageName, si.name)
             }
             if (available.isEmpty()) return null
+            Log.d(TAG, "Available recognition services: ${available.joinToString { it.packageName }}")
 
+            // If language was not supported by AiAi, filter it out for this attempt.
+            val aiAiPackage = "com.google.android.as"
+            val filtered = if (languageNotSupportedFallback)
+                available.filter { it.packageName != aiAiPackage }.also {
+                    Log.d(TAG, "languageNotSupportedFallback=true; skipping AiAi")
+                }
+            else available
+
+            // Prefer Google Search (supports all languages) over AiAi (EN-only on some devices).
             val preferredPackages = listOf(
-                "com.google.android.tts",
+                "com.google.android.googlequicksearchbox",
                 "com.google.android.as"
             )
             preferredPackages.forEach { pkg ->
-                available.firstOrNull { it.packageName == pkg }?.let { return it }
+                filtered.firstOrNull { it.packageName == pkg }?.let { return it }
             }
-            available.firstOrNull()
+            // Fall back to any available service (but never leave language-unsupported AiAi as only option)
+            filtered.firstOrNull() ?: available.firstOrNull()
         } catch (e: Exception) {
             Log.w(TAG, "Unable to resolve recognition service", e)
             null
@@ -505,6 +548,8 @@ class VoiceManager(
         override fun onReadyForSpeech(params: Bundle?) {
             isRecognizerActive = true
             consecutiveErrors = 0
+            // Recognition started successfully — the current service supports this language.
+            languageNotSupportedFallback = false
             if (mode == ListenMode.COMMAND) {
                 onReady()
             }
@@ -517,6 +562,22 @@ class VoiceManager(
             isRecognizerActive = false
             consecutiveErrors++
             Log.w(TAG, "Recognizer onError code=$error mode=$mode consecutive=$consecutiveErrors")
+
+            // ERROR_LANGUAGE_NOT_SUPPORTED (12) or ERROR_LANGUAGE_UNAVAILABLE (13):
+            // Current service (likely AiAi) doesn't support the requested language.
+            // Set fallback flag so resolvePreferredRecognitionService() skips AiAi next time.
+            if (error == 12 || error == 13) {
+                Log.w(TAG, "Language not supported/unavailable (error $error); switching recognition service")
+                languageNotSupportedFallback = true
+                try { recognizer?.cancel() } catch (_: Exception) { }
+                try { recognizer?.destroy() } catch (_: Exception) { }
+                recognizer = null
+                if (mode != ListenMode.IDLE) {
+                    scheduleRestart(800L)
+                }
+                return
+            }
+
             if (mode == ListenMode.HOTWORD) {
                 if (shouldUseOfflineWakeWord()) {
                     cancelRecognizer()
@@ -615,6 +676,101 @@ class VoiceManager(
         speak(Strings.listening, expectReply = true)
     }
 
+    // ── Barge-in implementation ──────────────────────────────────────────────
+
+    private fun startBargeInDetector() {
+        if (bargeInDetector != null) return  // already running
+        bargeInDetector = BargeInDetector(
+            onBargeIn = { interruptTts() }
+        )
+        bargeInDetector?.start()
+        Log.d(TAG, "BargeInDetector started for session=${'$'}voiceSessionId")
+    }
+
+    private fun stopBargeInDetector() {
+        bargeInDetector?.stop()
+        bargeInDetector = null
+    }
+
+    /**
+     * Called by BargeInDetector when voice activity is detected during TTS.
+     * Stops TTS immediately, notifies backend, transitions to listening.
+     */
+    fun interruptTts(reason: String = "barge_in") {
+        if (!isSpeaking) return
+        Log.i(TAG, "interruptTts: stopping TTS, reason=${'$'}reason, session=${'$'}voiceSessionId")
+        stopBargeInDetector()
+        tts?.stop()
+        isSpeaking = false
+        // Notify backend (fire-and-forget on background thread)
+        val sessionId = voiceSessionId
+        if (sessionId != null) {
+            Thread {
+                try {
+                    val apiUrl = settings.apiUrl.trimEnd('/')
+                    val body = JSONObject().apply {
+                        put("session_id", sessionId)
+                        put("tenant_id", tenantId)
+                        put("interruption_type", reason)
+                    }.toString().toRequestBody("application/json".toMediaType())
+                    val req = Request.Builder()
+                        .url("${'$'}apiUrl/voice/session/interrupt")
+                        .post(body)
+                        .build()
+                    http.newCall(req).execute().use { resp ->
+                        Log.d(TAG, "interrupt endpoint: ${'$'}{resp.code}")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "interrupt backend call failed: ${'$'}{e.message}")
+                }
+            }.also { it.isDaemon = true }.start()
+        }
+        // Transition to listening state
+        handler.post {
+            if (!isDestroyed) startListening()
+        }
+    }
+
+    /**
+     * Load interrupt phrases from backend and cache them.
+     * Call once when voice mode is activated.
+     */
+    fun loadInterruptCommands(languageCode: String = "cs") {
+        Thread {
+            try {
+                val apiUrl = settings.apiUrl.trimEnd('/')
+                val req = Request.Builder()
+                    .url("${'$'}apiUrl/voice/interrupt-commands?tenant_id=${'$'}tenantId&language_code=${'$'}languageCode")
+                    .get()
+                    .build()
+                http.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val json = JSONObject(resp.body?.string() ?: return@use)
+                        val arr  = json.optJSONArray("commands") ?: return@use
+                        val phrases = mutableListOf<String>()
+                        for (i in 0 until arr.length()) {
+                            val phrase = arr.optJSONObject(i)?.optString("phrase")
+                            if (!phrase.isNullOrBlank()) phrases.add(phrase.lowercase())
+                        }
+                        interruptPhrases = phrases
+                        Log.d(TAG, "Loaded ${'$'}{phrases.size} interrupt phrases for ${'$'}languageCode")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "loadInterruptCommands failed: ${'$'}{e.message}")
+            }
+        }.also { it.isDaemon = true }.start()
+    }
+
+    /**
+     * Check if a recognized text matches a cached interrupt command phrase.
+     * Call from onResults to handle phrase-based interrupts mid-dialog.
+     */
+    fun isInterruptPhrase(text: String): Boolean {
+        val norm = normalize(text)
+        return interruptPhrases.any { phrase -> norm.contains(normalize(phrase)) }
+    }
+
     private fun setupTts() {
         tts = TextToSpeech(context.applicationContext, { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -625,8 +781,13 @@ class VoiceManager(
                     return@TextToSpeech
                 }
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(id: String?) { isSpeaking = true; Log.d(TAG, "TTS onStart: $id") }
+                    override fun onStart(id: String?) {
+                        isSpeaking = true
+                        Log.d(TAG, "TTS onStart: $id")
+                        startBargeInDetector()
+                    }
                     override fun onDone(id: String?) {
+                        stopBargeInDetector()
                         isSpeaking = false
                         Log.d(TAG, "TTS onDone: $id")
                         handler.post {
@@ -640,6 +801,7 @@ class VoiceManager(
                         }
                     }
                     override fun onError(id: String?) {
+                        stopBargeInDetector()
                         isSpeaking = false
                         Log.e(TAG, "TTS onError: $id")
                         handler.post {
