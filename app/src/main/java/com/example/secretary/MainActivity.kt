@@ -2009,7 +2009,7 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
                     6 -> {
                         val ctx = LocalContext.current
                         InvoicesListTab(state.invoices, navController = navController, onClickInvoice = { showInvoiceStatus = it }, onSendInvoice = { inv, method ->
-                            val companyName = _uiState.value.tenantProfile?.get("company_name")?.toString()?.takeIf { it.isNotBlank() } ?: VersionInfo.COMPANY
+                            val companyName = state.tenantProfile?.get("company_name")?.toString()?.takeIf { it.isNotBlank() } ?: VersionInfo.COMPANY
                             val text = "Faktura ${inv.invoice_number}\nČástka: £${inv.grand_total}\nSplatnost: ${inv.due_date ?: "N/A"}\n\n$companyName"
                             val intent = when(method) {
                                 "sms" -> android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("sms:")).apply { putExtra("sms_body", text) }
