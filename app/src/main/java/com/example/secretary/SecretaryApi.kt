@@ -341,6 +341,16 @@ interface SecretaryApi {
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    // === SETTINGS: dedicated clean endpoints ===
+    @GET("version")
+    suspend fun getServerVersion(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("tenant/profile")
+    suspend fun getTenantProfile(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("tenant/languages")
+    suspend fun getTenantLanguages(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === AUTH ===
     @POST("auth/login")
     suspend fun authLogin(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>

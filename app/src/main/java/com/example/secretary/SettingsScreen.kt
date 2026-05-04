@@ -32,9 +32,13 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     val canManageHierarchy = state.currentUserPermissions["manage_users"] == true ||
         state.currentUserRole == "admin" ||
         state.currentUserRole == "manager"
-    LaunchedEffect(Unit) { viewModel.loadTenantConfig() }
+    LaunchedEffect(Unit) {
+        viewModel.loadTenantConfig()
+        viewModel.loadSettings()
+    }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
         item { Text(Strings.settings, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+        item { RuntimeDataStatusSection(viewModel, sm) }
         item { CompanyProfileSection(viewModel, sm) }
         item { RatesSection(viewModel) }
         item { LanguageSection(sm, viewModel) }
@@ -68,31 +72,40 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 // RATES / SAZBY
 @Composable private fun RatesSection(viewModel: SecretaryViewModel) {
     var exp by remember { mutableStateOf(false) }
-    var gardenRate by remember { mutableStateOf("27") }
-    var hedgeRate by remember { mutableStateOf("31") }
-    var arboristRate by remember { mutableStateOf("34") }
-    var wasteBag by remember { mutableStateOf("55") }
-    var minCharge by remember { mutableStateOf("150") }
+    var gardenRate by remember { mutableStateOf("") }
+    var hedgeRate by remember { mutableStateOf("") }
+    var arboristRate by remember { mutableStateOf("") }
+    var wasteBag by remember { mutableStateOf("") }
+    var minCharge by remember { mutableStateOf("") }
     var loaded by remember { mutableStateOf(false) }
+    var loadError by remember { mutableStateOf<String?>(null) }
     fun fmt(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
     LaunchedEffect(Unit) {
         try {
-            val sm = viewModel.getSettingsManager() ?: return@LaunchedEffect
-            val token = sm.accessToken ?: return@LaunchedEffect
+            val sm = viewModel.getSettingsManager() ?: run { loadError = "Settings manager unavailable"; return@LaunchedEffect }
+            val token = sm.accessToken ?: run { loadError = "Not authenticated"; return@LaunchedEffect }
             val res = viewModel.api.getDefaultRates("Bearer $token", 1)
             if (res.isSuccessful) {
-                val body = res.body() ?: return@LaunchedEffect
-                fun r(key: String, def: Double) = fmt((body[key] as? Map<*,*>)?.get("rate")?.toString()?.toDoubleOrNull() ?: def)
-                gardenRate = r("garden_maintenance", 27.0)
-                hedgeRate = r("hedge_trimming", 31.0)
-                arboristRate = r("arborist_works", 34.0)
-                wasteBag = r("garden_waste_bulkbag", 55.0)
-                minCharge = r("minimum_charge", 150.0)
+                val body = res.body() ?: run { loadError = "Empty response"; return@LaunchedEffect }
+                fun r(key: String): String? = (body[key] as? Map<*,*>)?.get("rate")?.toString()?.toDoubleOrNull()?.let { fmt(it) }
+                gardenRate = r("garden_maintenance") ?: ""
+                hedgeRate = r("hedge_trimming") ?: ""
+                arboristRate = r("arborist_works") ?: ""
+                wasteBag = r("garden_waste_bulkbag") ?: ""
+                minCharge = r("minimum_charge") ?: ""
                 loaded = true
+            } else {
+                loadError = "HTTP ${res.code()}"
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) { loadError = e.message ?: "Error" }
     }
     SCard(Strings.serviceRates, Icons.Default.ShoppingCart, exp, { exp = !exp }) {
+        when {
+            loadError != null -> Text("❌ Sazby se nepodařilo načíst ze serveru: $loadError", color = Color.Red, fontSize = 12.sp)
+            !loaded -> Text("⏳ Načítání sazeb ze serveru...", color = Color.Gray, fontSize = 12.sp)
+            else -> Text("✅ Sazby načteny ze serveru", color = Color(0xFF4CAF50), fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(4.dp))
         Text(Strings.hourlyRatesByType, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(value = gardenRate, onValueChange = { gardenRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🌿 ${Strings.gardenMaintenanceRate}") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -109,15 +122,22 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         OutlinedTextField(value = minCharge, onValueChange = { minCharge = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(Strings.minimumJobPrice) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         Spacer(Modifier.height(8.dp))
         Button(onClick = {
-            viewModel.updateDefaultRates(mapOf(
-                "garden_maintenance" to (gardenRate.toDoubleOrNull() ?: 27.0),
-                "hedge_trimming" to (hedgeRate.toDoubleOrNull() ?: 31.0),
-                "arborist_works" to (arboristRate.toDoubleOrNull() ?: 34.0),
-                "hourly_rate" to (gardenRate.toDoubleOrNull() ?: 27.0),
-                "garden_waste_bulkbag" to (wasteBag.toDoubleOrNull() ?: 55.0),
-                "minimum_charge" to (minCharge.toDoubleOrNull() ?: 150.0)
-            ))
-        }, modifier = Modifier.fillMaxWidth()) { Text(Strings.save) }
+            val gR = gardenRate.toDoubleOrNull()
+            val hR = hedgeRate.toDoubleOrNull()
+            val aR = arboristRate.toDoubleOrNull()
+            val wB = wasteBag.toDoubleOrNull()
+            val mC = minCharge.toDoubleOrNull()
+            if (gR != null && hR != null && aR != null && wB != null && mC != null) {
+                viewModel.updateDefaultRates(mapOf(
+                    "garden_maintenance" to gR,
+                    "hedge_trimming" to hR,
+                    "arborist_works" to aR,
+                    "hourly_rate" to gR,
+                    "garden_waste_bulkbag" to wB,
+                    "minimum_charge" to mC
+                ))
+            }
+        }, modifier = Modifier.fillMaxWidth(), enabled = loaded || (gardenRate.isNotBlank() && hedgeRate.isNotBlank())) { Text(Strings.save) }
     }
 }
 
@@ -130,61 +150,96 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     var customerLanguageFeedback by remember { mutableStateOf<String?>(null) }
     val currentLang = state.appLanguage.ifBlank { sm.getCurrentAppLanguage() }
     val langName = Strings.languageDisplayName(currentLang)
-    val currentCustomerLang = state.tenantConfig?.get("default_customer_lang")?.toString()?.takeIf { it.isNotBlank() } ?: "en"
     val canEditCustomerLanguage = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
+
+    // Use ONLY the dedicated /tenant/languages endpoint — no fallback
+    val langsData = state.tenantLanguages
+    val langsError = state.settingsLoadErrors["languages"]
+    @Suppress("UNCHECKED_CAST")
+    val langsList = (langsData?.get("languages") as? List<*>)?.filterIsInstance<Map<String, Any?>>()
+    val langsFound = langsData?.get("found") as? Boolean
+    val internalCodes = langsList?.filter { it["scope"] == "internal" }
+        ?.mapNotNull { it["code"]?.toString() }?.filter { it.isNotBlank() }?.distinct()
+    val customerCodes = langsList?.filter { it["scope"] == "customer" }
+        ?.mapNotNull { it["code"]?.toString() }?.filter { it.isNotBlank() }?.distinct()
+    val currentCustomerLang = state.tenantProfile?.get("default_customer_lang")?.toString()
+        ?: langsData?.let {
+            (it["internal_langs"] as? List<*>)?.firstOrNull()?.toString()
+        } ?: ""
+
     SCard(Strings.language + ": $langName", Icons.Default.Star, exp, { exp = !exp }) {
-        val langs = listOf("en" to "🇬🇧 English", "cs" to "🇨🇿 Čeština", "pl" to "🇵🇱 Polski")
+        // Internal language
         Text(Strings.systemLanguage, fontWeight = FontWeight.SemiBold)
         Text(Strings.systemLanguageHint, fontSize = 12.sp, color = Color.Gray)
-        langs.forEach { (code, label) ->
-            val selected = currentLang == code
-            Row(Modifier.fillMaxWidth().clickable { if (!selected) showConfirm = code }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = selected, onClick = { if (!selected) showConfirm = code })
-                Spacer(Modifier.width(8.dp))
-                Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp)
+        when {
+            langsData == null && langsError == null -> {
+                Text("Načítám jazyky ze serveru…", fontSize = 12.sp, color = Color.Gray)
+            }
+            langsError != null -> {
+                Text("❌ Chyba načítání jazyků: $langsError", fontSize = 12.sp, color = Color.Red)
+            }
+            langsFound == false -> {
+                Text("⚠️ Jazyky nejsou nastaveny (tenant languages not set up)", fontSize = 12.sp, color = Color(0xFFFF9800))
+            }
+            internalCodes.isNullOrEmpty() -> {
+                Text("⚠️ Žádné interní jazyky nenalezeny", fontSize = 12.sp, color = Color(0xFFFF9800))
+            }
+            else -> {
+                Text("✅ ${internalCodes.size} interní jazyk(y) načteno ze serveru", fontSize = 11.sp, color = Color(0xFF4CAF50))
+                internalCodes.forEach { code ->
+                    val label = langDisplayName(code)
+                    val selected = currentLang.lowercase().startsWith(code.take(2).lowercase()) || currentLang == code
+                    Row(Modifier.fillMaxWidth().clickable { if (!selected) showConfirm = code }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selected, onClick = { if (!selected) showConfirm = code })
+                        Spacer(Modifier.width(8.dp))
+                        Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp)
+                    }
+                }
             }
         }
+
         Spacer(Modifier.height(8.dp))
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
+
+        // Customer language
         Text(Strings.customerLanguage, fontWeight = FontWeight.SemiBold)
         Text(
             if (canEditCustomerLanguage) Strings.customerLanguageHint else Strings.adminOnlyLanguageHint,
             fontSize = 12.sp,
             color = Color.Gray
         )
-        langs.forEach { (code, label) ->
-            val selected = currentCustomerLang == code
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = canEditCustomerLanguage) {
-                        if (!selected) {
-                            customerLanguageFeedback = null
-                            showCustomerConfirm = code
-                        }
-                    }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(
-                    selected = selected,
-                    onClick = {
-                        if (canEditCustomerLanguage && !selected) {
-                            customerLanguageFeedback = null
-                            showCustomerConfirm = code
-                        }
-                    },
-                    enabled = canEditCustomerLanguage
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    label,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                    fontSize = 16.sp,
-                    color = if (canEditCustomerLanguage) Color.Unspecified else Color.Gray
-                )
+        when {
+            langsData == null && langsError == null -> {
+                Text("Načítám zákaznické jazyky…", fontSize = 12.sp, color = Color.Gray)
             }
+            customerCodes.isNullOrEmpty() && langsFound != false -> {
+                Text("⚠️ Žádné zákaznické jazyky nenalezeny", fontSize = 12.sp, color = Color(0xFFFF9800))
+            }
+            !customerCodes.isNullOrEmpty() -> {
+                customerCodes.forEach { code ->
+                    val label = langDisplayName(code)
+                    val selected = currentCustomerLang.lowercase().startsWith(code.take(2).lowercase()) || currentCustomerLang == code
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .clickable(enabled = canEditCustomerLanguage) {
+                                if (!selected) { customerLanguageFeedback = null; showCustomerConfirm = code }
+                            }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = { if (canEditCustomerLanguage && !selected) { customerLanguageFeedback = null; showCustomerConfirm = code } },
+                            enabled = canEditCustomerLanguage
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp,
+                            color = if (canEditCustomerLanguage) Color.Unspecified else Color.Gray)
+                    }
+                }
+            }
+            else -> {}
         }
         customerLanguageFeedback?.let { Text(it, fontSize = 12.sp, color = Color.Red) }
     }
@@ -1129,38 +1184,71 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 }
 
 // ============================================================
-// 8a. PROFIL FIRMY (z tenant config)
+// 8a. PROFIL FIRMY (z /tenant/profile)
 // ============================================================
 
 @Composable private fun CompanyProfileSection(viewModel: SecretaryViewModel, sm: SettingsManager) {
     val state by viewModel.uiState.collectAsState()
-    val config = state.tenantConfig ?: return
+    val profile = state.tenantProfile
+    val err = state.settingsLoadErrors["profile"]
     var exp by remember { mutableStateOf(false) }
     SCard(Strings.companyProfile, Icons.Default.AccountCircle, exp, { exp = !exp }) {
-        val wsMode = config["workspace_mode"]?.toString() ?: "-"
-        val wsLabel = Strings.localizeWorkspaceMode(wsMode)
-        val currentInternalLanguage = Strings.languageDisplayName(state.appLanguage.ifBlank { sm.getCurrentAppLanguage() })
-        val currentCustomerLanguage = Strings.languageDisplayName(config["default_customer_lang"]?.toString() ?: state.appLanguage.ifBlank { sm.getCurrentAppLanguage() })
-        ARow(Strings.workspaceMode, wsLabel)
-        ARow(Strings.internalLanguage, currentInternalLanguage)
-        ARow(Strings.customerLanguage, currentCustomerLanguage)
-        ARow(Strings.internalLanguageMode, Strings.localizeLanguageMode(config["internal_language_mode"]?.toString() ?: "-"))
-        ARow(Strings.customerLanguageMode, Strings.localizeLanguageMode(config["customer_language_mode"]?.toString() ?: "-"))
-        @Suppress("UNCHECKED_CAST")
-        val limits = config["limits"] as? Map<String, Any?>
-        if (limits != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(Strings.limits, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            ARow(Strings.maxUsers, limits["max_users"]?.toString() ?: "-")
-            ARow(Strings.maxClients, limits["max_clients"]?.toString() ?: "-")
-            ARow(Strings.maxJobsPerMonth, limits["max_jobs_per_month"]?.toString() ?: "-")
-            ARow(Strings.voiceMinutes, limits["max_voice_minutes"]?.toString() ?: "-")
-        }
-        @Suppress("UNCHECKED_CAST")
-        val warnings = config["warnings"] as? List<String>
-        if (!warnings.isNullOrEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            warnings.forEach { Text(it, color = Color.Red, fontSize = 12.sp) }
+        when {
+            profile == null && err == null -> {
+                Text("⏳ Načítání profilu firmy ze serveru...", color = Color.Gray, fontSize = 13.sp)
+            }
+            err != null && profile == null -> {
+                Text("❌ Profil firmy se nepodařilo načíst: $err", color = Color.Red, fontSize = 13.sp)
+            }
+            profile != null -> {
+                val found = profile["found"] as? Boolean ?: false
+                if (!found) {
+                    Text("⚠️ Profil firmy nebyl nalezen.", color = Color(0xFFFF9800), fontSize = 13.sp)
+                    Text("   Onboarding ještě nebyl dokončen.", color = Color.Gray, fontSize = 12.sp)
+                } else {
+                    // From tenants table
+                    profile["tenant_name"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Tenant", it) }
+                    // From crm.tenant_settings
+                    profile["company_name"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Firma", it) }
+                    profile["contact_name"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Kontakt", it) }
+                    profile["phone"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Telefon", it) }
+                    profile["currency"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Měna", it) }
+                    profile["location"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Lokace", it) }
+                    profile["industry"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Obor", it) }
+                    Spacer(Modifier.height(4.dp))
+                    // From tenant_operating_profile
+                    profile["workspace_mode"]?.toString()?.let {
+                        ARow(Strings.workspaceMode, Strings.localizeWorkspaceMode(it))
+                    }
+                    profile["internal_language_mode"]?.toString()?.let {
+                        ARow(Strings.internalLanguageMode, Strings.localizeLanguageMode(it))
+                    }
+                    profile["customer_language_mode"]?.toString()?.let {
+                        ARow(Strings.customerLanguageMode, Strings.localizeLanguageMode(it))
+                    }
+                    profile["default_internal_lang"]?.toString()?.takeIf { it.isNotBlank() }?.let {
+                        ARow(Strings.internalLanguage, Strings.languageDisplayName(it))
+                    }
+                    profile["default_customer_lang"]?.toString()?.takeIf { it.isNotBlank() }?.let {
+                        ARow(Strings.customerLanguage, Strings.languageDisplayName(it))
+                    }
+                    // Limits from subscription_limits
+                    @Suppress("UNCHECKED_CAST")
+                    val limits = profile["limits"] as? Map<String, Any?>
+                    if (limits != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(Strings.limits, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        limits["max_users"]?.toString()?.let { ARow(Strings.maxUsers, it) }
+                        limits["max_clients"]?.toString()?.let { ARow(Strings.maxClients, it) }
+                        limits["max_jobs_per_month"]?.toString()?.let { ARow(Strings.maxJobsPerMonth, it) }
+                        limits["max_voice_minutes"]?.toString()?.let { ARow(Strings.voiceMinutes, it) }
+                    }
+                }
+                profile["error"]?.toString()?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text("⚠️ $it", color = Color(0xFFFF9800), fontSize = 11.sp)
+                }
+            }
         }
     }
 }
@@ -1271,6 +1359,87 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 }
             }
             Spacer(Modifier.height(4.dp))
+        }
+    }
+}
+
+// ============================================================
+// RUNTIME DATA STATUS
+// ============================================================
+
+private fun langDisplayName(code: String): String {
+    val lc = code.lowercase()
+    return when {
+        lc.startsWith("en") -> "🇬🇧 English ($code)"
+        lc.startsWith("cs") || lc.startsWith("cz") -> "🇨🇿 Čeština ($code)"
+        lc.startsWith("pl") -> "🇵🇱 Polski ($code)"
+        lc.startsWith("de") -> "🇩🇪 Deutsch ($code)"
+        lc.startsWith("fr") -> "🇫🇷 Français ($code)"
+        lc.startsWith("es") -> "🇪🇸 Español ($code)"
+        lc.startsWith("it") -> "🇮🇹 Italiano ($code)"
+        lc.startsWith("nl") -> "🇳🇱 Nederlands ($code)"
+        lc.startsWith("pt") -> "🇵🇹 Português ($code)"
+        lc.startsWith("ru") -> "🇷🇺 Русский ($code)"
+        lc.startsWith("sk") -> "🇸🇰 Slovenčina ($code)"
+        lc.startsWith("uk") -> "🇺🇦 Українська ($code)"
+        else -> code.uppercase()
+    }
+}
+
+@Composable private fun RuntimeDataStatusSection(viewModel: SecretaryViewModel, sm: SettingsManager) {
+    val state by viewModel.uiState.collectAsState()
+    val versionInfo = state.serverVersionInfo
+    val versionErr = state.settingsLoadErrors["version"]
+    val refreshMs = state.settingsLastRefreshMs
+    var exp by remember { mutableStateOf(true) }
+    val serverVersion = versionInfo?.get("server_version")?.toString()
+    val latestMigration = versionInfo?.get("latest_migration")?.toString()
+    val appliedAt = versionInfo?.get("applied_at")?.toString()
+    val statusColor = when {
+        versionInfo != null && versionErr == null -> Color(0xFF4CAF50)
+        versionErr != null -> Color(0xFFF44336)
+        else -> Color(0xFFFF9800)
+    }
+    SCard("🔧 Runtime Data Status", Icons.Default.Info, exp, { exp = !exp }) {
+        ARow("APK", "${VersionInfo.VERSION_NAME} (build ${VersionInfo.VERSION_CODE})")
+        ARow("Backend URL", sm.apiUrl.let { if (it.isBlank()) BuildConfig.BASE_URL else it })
+        ARow("Tenant ID", "1")
+        Spacer(Modifier.height(4.dp))
+        // Server version from /version endpoint
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(10.dp).background(statusColor, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            val statusText = when {
+                versionInfo != null && versionErr == null -> "✅ Server připojen"
+                versionErr != null -> "❌ $versionErr"
+                else -> "⏳ Načítám verzi serveru…"
+            }
+            Text(statusText, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        }
+        if (serverVersion != null) ARow("Server verze", serverVersion)
+        if (!latestMigration.isNullOrBlank()) ARow("Poslední migrace", latestMigration)
+        if (!appliedAt.isNullOrBlank()) ARow("Aplikováno", appliedAt.take(19).replace("T", " "))
+        if (refreshMs > 0L) {
+            val sec = (System.currentTimeMillis() - refreshMs) / 1000
+            Text("Poslední refresh: ${sec}s zpět", fontSize = 11.sp, color = Color.Gray)
+        }
+        // Quick status of other sections
+        Spacer(Modifier.height(4.dp))
+        ARow("Profil firmy", when {
+            state.tenantProfile?.get("found") == true -> "✅ načteno"
+            state.settingsLoadErrors.containsKey("profile") -> "❌ chyba"
+            state.tenantProfile != null -> "⚠️ not found"
+            else -> "⏳"
+        })
+        ARow("Jazyky", when {
+            state.tenantLanguages?.get("found") == true -> "✅ načteno"
+            state.settingsLoadErrors.containsKey("languages") -> "❌ chyba"
+            state.tenantLanguages != null -> "⚠️ not set up"
+            else -> "⏳"
+        })
+        Spacer(Modifier.height(4.dp))
+        Button(onClick = { viewModel.loadSettings() }, modifier = Modifier.fillMaxWidth()) {
+            Text("🔄 Refresh settings ze serveru")
         }
     }
 }

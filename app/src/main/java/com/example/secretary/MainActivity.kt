@@ -5461,13 +5461,76 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val res = api.getTenantConfig(1)
+                val now = System.currentTimeMillis()
                 if (res.isSuccessful) {
                     val config = res.body()
-                    _uiState.value = _uiState.value.copy(tenantConfig = config)
+                    val err = config?.get("error")?.toString()
+                    _uiState.value = _uiState.value.copy(
+                        tenantConfig = config,
+                        tenantConfigError = err,
+                        tenantConfigRefreshMs = now
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        tenantConfigError = "HTTP ${res.code()}: ${res.message()}",
+                        tenantConfigRefreshMs = System.currentTimeMillis()
+                    )
+                    Log.e("ViewModel", "Tenant config HTTP error: ${res.code()}")
                 }
             } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    tenantConfigError = e.message ?: "Network error",
+                    tenantConfigRefreshMs = System.currentTimeMillis()
+                )
                 Log.e("ViewModel", "Tenant config load error", e)
             }
+        }
+    }
+
+    fun loadSettings() {
+        viewModelScope.launch {
+            val errors = mutableMapOf<String, String>()
+            var versionInfo: Map<String, Any?>? = null
+            var profile: Map<String, Any?>? = null
+            var languages: Map<String, Any?>? = null
+
+            // /version
+            try {
+                val res = api.getServerVersion()
+                if (res.isSuccessful) versionInfo = res.body()
+                else errors["version"] = "HTTP ${res.code()}"
+            } catch (e: Exception) {
+                errors["version"] = e.message ?: "error"
+                Log.e("ViewModel", "loadSettings /version error", e)
+            }
+
+            // /tenant/profile
+            try {
+                val res = api.getTenantProfile()
+                if (res.isSuccessful) profile = res.body()
+                else errors["profile"] = "HTTP ${res.code()}"
+            } catch (e: Exception) {
+                errors["profile"] = e.message ?: "error"
+                Log.e("ViewModel", "loadSettings /tenant/profile error", e)
+            }
+
+            // /tenant/languages
+            try {
+                val res = api.getTenantLanguages()
+                if (res.isSuccessful) languages = res.body()
+                else errors["languages"] = "HTTP ${res.code()}"
+            } catch (e: Exception) {
+                errors["languages"] = e.message ?: "error"
+                Log.e("ViewModel", "loadSettings /tenant/languages error", e)
+            }
+
+            _uiState.value = _uiState.value.copy(
+                serverVersionInfo = versionInfo,
+                tenantProfile = profile,
+                tenantLanguages = languages,
+                settingsLoadErrors = errors,
+                settingsLastRefreshMs = System.currentTimeMillis()
+            )
         }
     }
 
@@ -6381,7 +6444,7 @@ class SecretaryViewModel : ViewModel() {
         } catch (e: Exception) { Log.e("ViewModel", "Tasks load error", e) }
     }
 
-    fun loadSettings() {
+    fun loadSystemSettings() {
         viewModelScope.launch {
             try {
                 val res = api.getSettings()
@@ -9327,6 +9390,14 @@ data class UiState(
     val isVoiceSessionActive: Boolean = false,
     val onboardingComplete: Boolean? = null,
     val tenantConfig: Map<String, Any?>? = null,
+    val tenantConfigError: String? = null,
+    val tenantConfigRefreshMs: Long = 0L,
+    // Settings screen — dedicated clean endpoints
+    val serverVersionInfo: Map<String, Any?>? = null,
+    val tenantProfile: Map<String, Any?>? = null,
+    val tenantLanguages: Map<String, Any?>? = null,
+    val settingsLoadErrors: Map<String, String> = emptyMap(),
+    val settingsLastRefreshMs: Long = 0L,
     val currentUserId: Long? = null,
     val currentUserDisplayName: String? = null,
     val currentUserEmail: String? = null,
