@@ -1,5 +1,6 @@
 package com.example.secretary
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +17,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** One selected industry combo — (group, optional subtype). */
+data class IndustryEntry(
+    val groupId: Long,
+    val groupName: String,
+    val subtypeId: Long? = null,
+    val subtypeName: String? = null
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
@@ -26,10 +35,7 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
     // Form state
     var companyName by remember { mutableStateOf("") }
     var legalType by remember { mutableStateOf("sole_trader") }
-    var industryGroupId by remember { mutableStateOf<Long?>(null) }
-    var industryGroupName by remember { mutableStateOf("") }
-    var industrySubtypeId by remember { mutableStateOf<Long?>(null) }
-    var industrySubtypeName by remember { mutableStateOf("") }
+    var selectedIndustries by remember { mutableStateOf<List<IndustryEntry>>(emptyList()) }
     var internalLangMode by remember { mutableStateOf("single") }
     var customerLangMode by remember { mutableStateOf("single") }
     var defaultInternalLang by remember { mutableStateOf("en") }
@@ -38,22 +44,12 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
 
     // Data from server
     var industryGroups by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var industrySubtypes by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         try {
             val res = viewModel.api.getIndustryGroups()
             if (res.isSuccessful) industryGroups = res.body() ?: emptyList()
         } catch (_: Exception) {}
-    }
-
-    LaunchedEffect(industryGroupId) {
-        if (industryGroupId != null) {
-            try {
-                val res = viewModel.api.getIndustrySubtypes(industryGroupId!!)
-                if (res.isSuccessful) industrySubtypes = res.body() ?: emptyList()
-            } catch (_: Exception) {}
-        }
     }
 
     val totalSteps = 5
@@ -76,14 +72,30 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
                     0 -> StepCompany(companyName, legalType,
                         onNameChange = { companyName = it },
                         onLegalChange = { legalType = it })
-                    1 -> StepIndustry(industryGroups, industrySubtypes,
-                        industryGroupId, industrySubtypeId,
-                        onGroupSelect = { id, name -> industryGroupId = id; industryGroupName = name; industrySubtypeId = null },
-                        onSubtypeSelect = { id, name -> industrySubtypeId = id; industrySubtypeName = name })
+                    1 -> StepIndustry(
+                        groups = industryGroups,
+                        selectedIndustries = selectedIndustries,
+                        onToggleEntry = { entry ->
+                            selectedIndustries = if (selectedIndustries.any {
+                                    it.groupId == entry.groupId && it.subtypeId == entry.subtypeId
+                                }) {
+                                selectedIndustries.filter {
+                                    !(it.groupId == entry.groupId && it.subtypeId == entry.subtypeId)
+                                }
+                            } else {
+                                selectedIndustries + entry
+                            }
+                        },
+                        fetchSubtypes = { groupId ->
+                            try {
+                                val res = viewModel.api.getIndustrySubtypes(groupId)
+                                if (res.isSuccessful) res.body() ?: emptyList() else emptyList()
+                            } catch (_: Exception) { emptyList() }
+                        }
+                    )
                     2 -> StepLanguageMode(internalLangMode, customerLangMode,
                         onInternalChange = { internalLangMode = it },
                         onCustomerChange = { customerLangMode = it })
-
                     3 -> StepDefaultLanguages(defaultInternalLang, defaultCustomerLang,
                         onInternalChange = { defaultInternalLang = it },
                         onCustomerChange = { defaultCustomerLang = it })
@@ -104,18 +116,16 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
                 if (step < totalSteps - 1) {
                     Button(onClick = {
                         if (step == 0 && companyName.isBlank()) { error = Strings.enterCompanyNameError; return@Button }
-                        if (step == 1 && industryGroupId == null) { error = Strings.selectIndustryError; return@Button }
+                        if (step == 1 && selectedIndustries.isEmpty()) { error = Strings.selectIndustryError; return@Button }
                         error = null; step++
                     }) { Text(Strings.next) }
                 } else {
                     Button(onClick = {
                         loading = true; error = null
                         viewModel.submitOnboarding(
-
                             companyName = companyName,
                             legalType = legalType,
-                            industryGroupId = industryGroupId,
-                            industrySubtypeId = industrySubtypeId,
+                            industries = selectedIndustries,
                             internalLangMode = internalLangMode,
                             customerLangMode = customerLangMode,
                             defaultInternalLang = defaultInternalLang,
@@ -128,6 +138,143 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
                         if (loading) CircularProgressIndicator(Modifier.size(20.dp))
                         else Text(Strings.finish)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepIndustry(
+    groups: List<Map<String, Any?>>,
+    selectedIndustries: List<IndustryEntry>,
+    onToggleEntry: (IndustryEntry) -> Unit,
+    fetchSubtypes: suspend (Long) -> List<Map<String, Any?>>
+) {
+    // Track which groups are expanded
+    var expandedGroups by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    // Lazy-loaded subtypes per group
+    var subtypesByGroup by remember { mutableStateOf<Map<Long, List<Map<String, Any?>>>>(emptyMap()) }
+    // Track which groups are currently loading subtypes
+    var loadingGroups by remember { mutableStateOf<Set<Long>>(emptySet()) }
+
+    Column {
+        Text(Strings.chooseIndustry, fontWeight = FontWeight.SemiBold)
+        if (selectedIndustries.isNotEmpty()) {
+            Text(
+                "${selectedIndustries.size} ${Strings.selectedCount(selectedIndustries.size)}",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
+            )
+        } else {
+            Spacer(Modifier.height(8.dp))
+        }
+
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(groups) { g ->
+                val gid = (g["id"] as? Number)?.toLong() ?: return@items
+                val gname = g["name"]?.toString() ?: ""
+                val isExpanded = gid in expandedGroups
+                val subtypes = subtypesByGroup[gid] ?: emptyList()
+                val isLoading = gid in loadingGroups
+
+                // Any selection for this group?
+                val groupEntries = selectedIndustries.filter { it.groupId == gid }
+                val groupOnlyChecked = groupEntries.any { it.subtypeId == null }
+                val anyChecked = groupEntries.isNotEmpty()
+
+                // GROUP ROW
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (anyChecked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    tonalElevation = if (anyChecked) 2.dp else 0.dp
+                ) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                // Toggle expand; load subtypes on first expand
+                                expandedGroups = if (isExpanded) expandedGroups - gid else expandedGroups + gid
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Checkbox for group-level selection (null subtype)
+                        Checkbox(
+                            checked = groupOnlyChecked,
+                            onCheckedChange = {
+                                onToggleEntry(IndustryEntry(gid, gname, null, null))
+                            }
+                        )
+                        Text(
+                            gname,
+                            Modifier.weight(1f).padding(start = 4.dp),
+                            fontWeight = if (anyChecked) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(
+                                if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Load subtypes when group is expanded for first time
+                if (isExpanded && subtypes.isEmpty() && gid !in loadingGroups) {
+                    LaunchedEffect(gid) {
+                        loadingGroups = loadingGroups + gid
+                        val loaded = fetchSubtypes(gid)
+                        subtypesByGroup = subtypesByGroup + (gid to loaded)
+                        loadingGroups = loadingGroups - gid
+                    }
+                }
+
+                // SUBTYPE ROWS (shown when expanded and subtypes loaded)
+                if (isExpanded && subtypes.isNotEmpty()) {
+                    subtypes.forEach { s ->
+                        val sid = (s["id"] as? Number)?.toLong() ?: return@forEach
+                        val sname = s["name"]?.toString() ?: ""
+                        val subtypeChecked = selectedIndustries.any { it.groupId == gid && it.subtypeId == sid }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 24.dp, end = 0.dp, top = 1.dp, bottom = 1.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (subtypeChecked) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                    else MaterialTheme.colorScheme.surface,
+                            tonalElevation = if (subtypeChecked) 1.dp else 0.dp
+                        ) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onToggleEntry(IndustryEntry(gid, gname, sid, sname)) }
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = subtypeChecked,
+                                    onCheckedChange = { onToggleEntry(IndustryEntry(gid, gname, sid, sname)) }
+                                )
+                                Text(
+                                    sname,
+                                    Modifier.padding(start = 4.dp),
+                                    fontSize = 14.sp,
+                                    fontWeight = if (subtypeChecked) FontWeight.Medium else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
             }
         }
@@ -150,47 +297,6 @@ private fun StepCompany(name: String, legalType: String, onNameChange: (String) 
             Row(Modifier.fillMaxWidth().selectable(selected = legalType == value, onClick = { onLegalChange(value) }).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = legalType == value, onClick = { onLegalChange(value) })
                 Text(label, modifier = Modifier.padding(start = 8.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun StepIndustry(
-    groups: List<Map<String, Any?>>, subtypes: List<Map<String, Any?>>,
-    selectedGroup: Long?, selectedSubtype: Long?,
-    onGroupSelect: (Long, String) -> Unit, onSubtypeSelect: (Long, String) -> Unit
-) {
-    Column {
-        Text(Strings.chooseIndustry, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-
-        LazyColumn(Modifier.weight(1f)) {
-            items(groups) { g ->
-                val gid = (g["id"] as? Number)?.toLong() ?: return@items
-                val gname = g["name"]?.toString() ?: ""
-                val isSelected = selectedGroup == gid
-                Card(
-                    onClick = { onGroupSelect(gid, gname) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                    colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
-                ) { Text(gname, Modifier.padding(12.dp), fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) }
-            }
-        }
-        if (selectedGroup != null && subtypes.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Text(Strings.specialization, fontWeight = FontWeight.SemiBold)
-            LazyColumn(Modifier.weight(1f)) {
-                items(subtypes) { s ->
-                    val sid = (s["id"] as? Number)?.toLong() ?: return@items
-                    val sname = s["name"]?.toString() ?: ""
-                    val isSelected = selectedSubtype == sid
-                    Card(
-                        onClick = { onSubtypeSelect(sid, sname) },
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        colors = CardDefaults.cardColors(containerColor = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
-                    ) { Text(sname, Modifier.padding(12.dp), fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) }
-                }
             }
         }
     }
@@ -223,7 +329,6 @@ private fun StepDefaultLanguages(internalLang: String, customerLang: String, onI
     Column {
         Text(Strings.primaryInternalLanguage, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-
         langs.forEach { (code, name) ->
             Row(Modifier.fillMaxWidth().selectable(selected = internalLang == code, onClick = { onInternalChange(code) }).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = internalLang == code, onClick = { onInternalChange(code) })
@@ -252,7 +357,6 @@ private fun StepWorkspace(mode: String, onSelect: (String) -> Unit) {
     Column {
         Text(Strings.companySize, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
-
         modes.forEach { (value, title, desc) ->
             val isSelected = mode == value
             Card(

@@ -5561,7 +5561,7 @@ class SecretaryViewModel : ViewModel() {
 
     fun submitOnboarding(
         companyName: String, legalType: String,
-        industryGroupId: Long?, industrySubtypeId: Long?,
+        industries: List<IndustryEntry>,
         internalLangMode: String, customerLangMode: String,
         defaultInternalLang: String, defaultCustomerLang: String,
         workspaceMode: String,
@@ -5584,9 +5584,12 @@ class SecretaryViewModel : ViewModel() {
                         if (code != defaultCustomerLang) languages.add(mapOf("code" to code, "scope" to "customer", "is_default" to false))
                     }
                 }
+                val industriesPayload = industries.map { entry ->
+                    mapOf("industry_group_id" to entry.groupId, "industry_subtype_id" to entry.subtypeId)
+                }
                 val data = mapOf<String, Any?>(
                     "tenant_id" to 1, "company_name" to companyName, "legal_type" to legalType,
-                    "industry_group_id" to industryGroupId, "industry_subtype_id" to industrySubtypeId,
+                    "industries" to industriesPayload,
                     "internal_language_mode" to internalLangMode, "customer_language_mode" to customerLangMode,
                     "default_internal_language_code" to defaultInternalLang,
                     "default_customer_language_code" to defaultCustomerLang,

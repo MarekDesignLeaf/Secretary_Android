@@ -1015,6 +1015,7 @@ object Strings {
     val workspaceBusinessDesc get() = t("6-30 users, larger company", "6-30 uživatelů, větší firma", "6-30 użytkowników, większa firma")
     val enterCompanyNameError get() = t("Enter the company name", "Zadejte název firmy", "Wpisz nazwę firmy")
     val selectIndustryError get() = t("Select an industry", "Vyberte obor", "Wybierz branżę")
+    fun selectedCount(count: Int): String = t("selected", "vybráno", "wybrano")
 
     // === VOICE ===
     val listening get() = t("Listening", "Poslouchám", "Słucham")
