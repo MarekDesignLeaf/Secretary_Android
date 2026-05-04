@@ -31,13 +31,13 @@ package com.example.secretary
 object VersionInfo {
 
     // === AKTUALNI VERZE ===
-    const val VERSION_NAME = "1.3a"
-    const val VERSION_CODE = 4
+    const val VERSION_NAME = "1.4a"
+    const val VERSION_CODE = 5
     const val BUILD_DATE = "2026-05-04"
 
     // === METADATA PROJEKTU ===
-    const val APP_NAME = "Secretary DesignLeaf"
-    const val APP_DESCRIPTION = "Hlasem ovladany CRM asistent pro zahradnicke sluzby"
+    const val APP_NAME = "Secretary"
+    const val APP_DESCRIPTION = "Hlasem ovladany CRM asistent pro terenni pracovniky"
     const val PACKAGE_NAME = "com.example.secretary"
 
     // === AUTOR ===
@@ -59,7 +59,6 @@ object VersionInfo {
     // === DATA SOURCES / ZDROJE DAT ===
     const val REPO_ANDROID = "https://github.com/MarekDesignLeaf/Secretary_Android"
     const val REPO_SERVER = "https://github.com/MarekDesignLeaf/Secretary_Server"
-    const val POSTGRES_URL = "postgresql://postgres:dvgmddHlRimErVhaYTFWSMtKKYeuJGMG@hopper.proxy.rlwy.net:33530/railway"
     const val WEB_PRODUCTION = "https://web-production-4b451.up.railway.app"
 
     // === LICENCE ===
@@ -101,6 +100,31 @@ object VersionInfo {
     val CHANGELOG: List<ChangelogEntry> = listOf(
 
         // --- AKTUALNI VERZE ---
+
+        ChangelogEntry(
+            version = "1.4a",
+            versionCode = 5,
+            date = "2026-05-04",
+            author = "Marek Sima",
+            coder = "Claude AI (Anthropic) pod vedenim Marka Simy",
+            type = ChangeType.MINOR,
+            summary = "Settings plne ze serveru, oprava nazvu firmy, bezpecnost, genericky popis",
+            changes = listOf(
+                "VersionInfo: odstraneni POSTGRES_URL z kodu (bezpecnostni oprava)",
+                "VersionInfo: APP_NAME zmenen z 'Secretary DesignLeaf' na 'Secretary'",
+                "VersionInfo: popis upraven na genericky (ne zahradnicke sluzby)",
+                "LoginScreen: dynamicky nazev v topbar a biometrickem dialogu z VersionInfo",
+                "SettingsScreen: kompletni dynamicky nacitani ze serveru (/version, /tenant/profile, /tenant/languages)",
+                "DB: company_name opraven na 'DesignLeaf' (bez Ltd)",
+                "Server: opraven startup crash (NameError get_db, NameError Body, chybejici uvicorn.run)",
+                "MainActivity: nazev firmy v sdilenich faktur cten z tenantProfile"
+            ),
+            knownIssues = listOf(
+                "PATH pro tool balicky neni nastaven systemove",
+                "Offline fronta prikazu neni implementovana",
+                "PDF export neni implementovan"
+            )
+        ),
 
         ChangelogEntry(
             version = "1.3a",
@@ -270,9 +294,9 @@ object VersionInfo {
     fun getLatestChanges(): ChangelogEntry? = CHANGELOG.firstOrNull()
 
     fun appDescription(): String = Strings.t(
-        "Voice-controlled CRM assistant for gardening services",
-        "Hlasem ovládaný CRM asistent pro zahradnické služby",
-        "Sterowany głosem asystent CRM dla usług ogrodniczych"
+        "Voice-controlled CRM assistant for field workers",
+        "Hlasem ovládaný CRM asistent pro terénní pracovníky",
+        "Sterowany głosem asystent CRM dla pracowników terenowych"
     )
 
     fun platformValue(): String = PLATFORM

@@ -162,7 +162,7 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Secretary DesignLeaf") }) }
+        topBar = { TopAppBar(title = { Text(VersionInfo.APP_NAME) }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -385,7 +385,7 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
             }
 
             Spacer(Modifier.height(16.dp))
-            Text("DesignLeaf CRM", fontSize = 12.sp, color = Color.Gray)
+            Text(VersionInfo.COMPANY + " CRM", fontSize = 12.sp, color = Color.Gray)
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -472,7 +472,7 @@ private fun tryBiometricLogin(
     })
 
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
-        .setTitle(profile.displayName.ifBlank { "Secretary DesignLeaf" })
+        .setTitle(profile.displayName.ifBlank { VersionInfo.APP_NAME })
         .setSubtitle(Strings.signInWithFingerprint)
         .setNegativeButtonText(Strings.loginWithPassword)
         .build()

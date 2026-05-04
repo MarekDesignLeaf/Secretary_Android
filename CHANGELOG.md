@@ -7,6 +7,24 @@
 # Nikdy nemazat ani nemenit historicke zaznamy.
 # ========================================
 
+## [1.4a] - 2026-05-04
+### Settings plne ze serveru, bezpecnostni opravy, genericky popis
+- **Typ**: MINOR (nova funkce + bugfix)
+- **Autor**: Marek Sima
+- **Kodovani**: Claude AI (Anthropic)
+- **Build**: 5
+
+### Zmeny
+- VersionInfo: odstraneni POSTGRES_URL z kodu (bezpecnostni oprava - hesla nesmi byt v APK)
+- VersionInfo: APP_NAME zmenen na "Secretary" (bez hardcoded nazvu firmy)
+- VersionInfo: popis aplikace zmenen na genericky (bez "zahradnicke sluzby")
+- LoginScreen: topbar, biometrie a subtitle pouzivaji VersionInfo.APP_NAME / COMPANY
+- SettingsScreen: kompletni dynamicke nacteni ze serveru (/version, /tenant/profile, /tenant/languages)
+- DB: company_name opraven na "DesignLeaf" (bez Ltd)
+- Server: opraven startup crash - NameError get_db, NameError Body, chybejici uvicorn.run
+- Server: 9+ failed deployments -> stabilni deployment na Railway
+- MainActivity: nazev firmy v sdilenich faktur nacten z tenantProfile
+
 ## [1.1a] - 2026-03-31
 ### Theme system, opravy Railway deploy, vylepseni UI
 - **Typ**: MINOR (nova funkce)
