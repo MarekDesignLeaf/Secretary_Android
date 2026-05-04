@@ -2009,11 +2009,12 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
                     6 -> {
                         val ctx = LocalContext.current
                         InvoicesListTab(state.invoices, navController = navController, onClickInvoice = { showInvoiceStatus = it }, onSendInvoice = { inv, method ->
-                            val text = "Faktura ${inv.invoice_number}\nČástka: £${inv.grand_total}\nSplatnost: ${inv.due_date ?: "N/A"}\n\nDesignLeaf Ltd"
+                            val companyName = _uiState.value.tenantProfile?.get("company_name")?.toString()?.takeIf { it.isNotBlank() } ?: VersionInfo.COMPANY
+                            val text = "Faktura ${inv.invoice_number}\nČástka: £${inv.grand_total}\nSplatnost: ${inv.due_date ?: "N/A"}\n\n$companyName"
                             val intent = when(method) {
                                 "sms" -> android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("sms:")).apply { putExtra("sms_body", text) }
                                 "whatsapp" -> android.content.Intent(android.content.Intent.ACTION_SEND).apply { type = "text/plain"; `package` = "com.whatsapp"; putExtra(android.content.Intent.EXTRA_TEXT, text) }
-                                else -> android.content.Intent(android.content.Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(android.content.Intent.EXTRA_SUBJECT, "Faktura ${inv.invoice_number} — DesignLeaf"); putExtra(android.content.Intent.EXTRA_TEXT, text) }
+                                else -> android.content.Intent(android.content.Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(android.content.Intent.EXTRA_SUBJECT, "Faktura ${inv.invoice_number} — $companyName"); putExtra(android.content.Intent.EXTRA_TEXT, text) }
                             }
                             try { ctx.startActivity(intent) } catch (_: Exception) { try { ctx.startActivity(android.content.Intent.createChooser(intent, "Odeslat fakturu")) } catch (_: Exception) {} }
                         })
