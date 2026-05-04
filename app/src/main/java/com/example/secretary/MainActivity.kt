@@ -9121,7 +9121,7 @@ class SecretaryViewModel : ViewModel() {
                     planningNote = data["planning_note"]?.toString(),
                     clientName = data["client_name"]?.toString(),
                     clientId = (data["client_id"] as? Number)?.toLong(),
-                    createdBy = data["created_by"]?.toString() ?: "Marek",
+                    createdBy = data["created_by"]?.toString() ?: "system",
                     calendarSyncEnabled = data["calendar_sync_enabled"] as? Boolean ?: true
                 )
                 _uiState.value = _uiState.value.copy(tasks = _uiState.value.tasks + newTask)
