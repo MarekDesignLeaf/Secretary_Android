@@ -483,7 +483,6 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                 TaskDetailScreen(taskId, viewModel, navController)
             }
             composable(Screen.ActivityPricing.route) {
-                LaunchedEffect(Unit) { viewModel.loadActivityTemplates() }
                 ActivityPricingScreen(viewModel, navController)
             }
         }
