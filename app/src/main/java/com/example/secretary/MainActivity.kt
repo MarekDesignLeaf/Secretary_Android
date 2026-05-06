@@ -368,6 +368,7 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                 "calendar" -> Screen.Calendar.route
                 "tools" -> Screen.Tools.route
                 "settings" -> Screen.Settings.route
+                "activitypricing", "activitypricingscreen" -> Screen.ActivityPricing.route
                 else -> null
             }
             if (route != null) {
@@ -7536,6 +7537,7 @@ class SecretaryViewModel : ViewModel() {
                 "calendar" -> Screen.Calendar.route
                 "tools" -> Screen.Tools.route
                 "settings" -> Screen.Settings.route
+                "activitypricing", "activitypricingscreen" -> Screen.ActivityPricing.route
                 else -> null
             }
             if (route != null) {

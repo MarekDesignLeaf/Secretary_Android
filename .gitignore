@@ -13,3 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Railway deployment directories (root-level only, not Java package)
+/secretary/

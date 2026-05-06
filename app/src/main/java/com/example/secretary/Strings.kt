@@ -1366,7 +1366,8 @@ object Strings {
             "calendar" to listOf("kalendar", "planovan", "calendar", "kalendarz"),
             "tools" to listOf("nastroj", "funkce", "tool", "narzedzia"),
             "settings" to listOf("nastaven", "konfigur", "setting", "ustawien"),
-            "contacts" to listOf("kontakt", "adresar", "directory")
+            "contacts" to listOf("kontakt", "adresar", "directory"),
+            "activitypricing" to listOf("cenik aktivit", "activity pricing", "cennik aktivit", "aktivit cenik", "pricing aktivit")
         )
         for ((target, phrases) in maps) {
             // Check for prefix match (e.g. "otevri klienty" matches "klient")
