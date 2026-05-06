@@ -364,8 +364,8 @@ fun AddQuoteItemDialog(
         ActivityPickerDialog(
             viewModel = viewModel,
             onDismiss = { showCatalog = false },
-            onSelected = { name, price ->
-                description = name
+            onSelected = { name, price, _, unit ->
+                description = if (unit.isNotBlank()) "$name ($unit)" else name
                 unitPrice = if (price > 0) "%.2f".format(price) else ""
                 showCatalog = false
             }
@@ -437,7 +437,7 @@ fun AddQuoteItemDialog(
 fun ActivityPickerDialog(
     viewModel: SecretaryViewModel,
     onDismiss: () -> Unit,
-    onSelected: (name: String, price: Double) -> Unit
+    onSelected: (name: String, price: Double, method: String, unit: String) -> Unit
 ) {
     var groups by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var subtypes by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
@@ -528,9 +528,10 @@ fun ActivityPickerDialog(
                                     val price = (override?.get("rate") as? Number)?.toDouble() ?: 0.0
                                     val method = override?.get("pricing_method")?.toString()
                                         ?: tmpl["default_pricing_method"]?.toString() ?: ""
+                                    val unit = tmpl["default_unit"]?.toString() ?: ""
                                     Row(
                                         Modifier.fillMaxWidth()
-                                            .clickable { onSelected(tmpl["name"]?.toString() ?: "", price) }
+                                            .clickable { onSelected(tmpl["name"]?.toString() ?: "", price, method, unit) }
                                             .padding(vertical = 8.dp, horizontal = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
