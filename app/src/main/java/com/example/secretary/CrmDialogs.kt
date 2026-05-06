@@ -524,8 +524,7 @@ fun ActivityPickerDialog(
                                     else activities.filter { it["name"]?.toString()?.contains(search, ignoreCase = true) == true }
                                 items(filtered) { tmpl ->
                                     val override = overrides.firstOrNull { (it["template_id"] as? Number)?.toLong() == (tmpl["id"] as? Number)?.toLong() }
-                                    val price = override?.let { (it["rate"] as? Number)?.toDouble() }
-                                        ?: (tmpl["default_rate"] as? Number)?.toDouble() ?: 0.0
+                                    val price = (override?.get("rate") as? Number)?.toDouble() ?: 0.0
                                     val method = override?.get("pricing_method")?.toString()
                                         ?: tmpl["default_pricing_method"]?.toString() ?: ""
                                     Row(
@@ -554,7 +553,7 @@ fun ActivityPickerDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(sub["name"]?.toString() ?: "", Modifier.weight(1f), fontSize = 13.sp)
-                                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
                                     }
                                     HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray)
                                 }
@@ -568,7 +567,7 @@ fun ActivityPickerDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(grp["name"]?.toString() ?: "", Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
                                     }
                                     HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray)
                                 }

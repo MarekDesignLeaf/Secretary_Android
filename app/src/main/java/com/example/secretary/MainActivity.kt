@@ -6470,7 +6470,11 @@ class SecretaryViewModel : ViewModel() {
 
     fun loadActivityTemplates(subtypeCode: String? = null, groupCode: String? = null) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(activityTemplatesLoading = true)
+            _uiState.value = _uiState.value.copy(
+                activityTemplatesLoading = true,
+                activityTemplates = emptyList(),
+                tenantActivityPricing = emptyList()
+            )
             try {
                 val tRes = api.getActivityTemplates(subtypeCode = subtypeCode, groupCode = groupCode)
                 val pRes = api.getTenantActivityPricing(1, subtypeCode = subtypeCode)
@@ -6484,6 +6488,13 @@ class SecretaryViewModel : ViewModel() {
                 _uiState.value = _uiState.value.copy(activityTemplatesLoading = false)
             }
         }
+    }
+
+    fun clearActivityTemplates() {
+        _uiState.value = _uiState.value.copy(
+            activityTemplates = emptyList(),
+            tenantActivityPricing = emptyList()
+        )
     }
 
     fun upsertActivityPricing(templateId: Long, data: Map<String, Any?>, onDone: () -> Unit = {}) {
