@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -14,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -303,7 +306,7 @@ fun QuotesListTab(quotes: List<Quote>, viewModel: SecretaryViewModel) {
         }
     }
     if (showAddItem != null) {
-        AddQuoteItemDialog(onDismiss = { showAddItem = null },
+        AddQuoteItemDialog(viewModel = viewModel, onDismiss = { showAddItem = null },
             onSave = { desc, qty, price -> viewModel.addQuoteItem(showAddItem!!.id, desc, qty, price); showAddItem = null })
     }
     if (showApprove != null) {
@@ -346,25 +349,236 @@ fun CreateQuoteDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (
 
 // ========== ADD QUOTE ITEM DIALOG ==========
 @Composable
-fun AddQuoteItemDialog(onDismiss: () -> Unit, onSave: (String, Double, Double) -> Unit) {
+fun AddQuoteItemDialog(
+    viewModel: SecretaryViewModel? = null,
+    onDismiss: () -> Unit,
+    onSave: (String, Double, Double) -> Unit
+) {
     var description by remember { mutableStateOf("") }
     var quantity by remember { mutableStateOf("1") }
     var unitPrice by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.addItem) },
-        text = {
-            Column {
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("${Strings.description} *") }, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = quantity, onValueChange = { quantity = it }, label = { Text(Strings.quantity) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = unitPrice, onValueChange = { unitPrice = it }, label = { Text("${Strings.unitPrice} (£)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+    var showCatalog by remember { mutableStateOf(false) }
+
+    if (showCatalog && viewModel != null) {
+        ActivityPickerDialog(
+            viewModel = viewModel,
+            onDismiss = { showCatalog = false },
+            onSelected = { name, price ->
+                description = name
+                unitPrice = if (price > 0) "%.2f".format(price) else ""
+                showCatalog = false
+            }
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(Strings.addItem) },
+            text = {
+                Column {
+                    if (viewModel != null) {
+                        OutlinedButton(
+                            onClick = { showCatalog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Browse activity catalog", fontSize = 13.sp)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("${Strings.description} *") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = quantity,
+                        onValueChange = { quantity = it.filter { c -> c.isDigit() || c == '.' } },
+                        label = { Text(Strings.quantity) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = unitPrice,
+                        onValueChange = { unitPrice = it.filter { c -> c.isDigit() || c == '.' } },
+                        label = { Text("${Strings.unitPrice} (£)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        prefix = { Text("£") }
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val qty = quantity.replace(",", ".").toDoubleOrNull() ?: 1.0
+                        val price = unitPrice.replace(",", ".").toDoubleOrNull() ?: 0.0
+                        onSave(description, qty, price)
+                    },
+                    enabled = description.isNotBlank()
+                ) { Text(Strings.save) }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
+        )
+    }
+}
+
+// ========== ACTIVITY PICKER DIALOG (for quote item catalog) ==========
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ActivityPickerDialog(
+    viewModel: SecretaryViewModel,
+    onDismiss: () -> Unit,
+    onSelected: (name: String, price: Double) -> Unit
+) {
+    var groups by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var subtypes by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var activities by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var overrides by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var selectedGroup by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var selectedSubtype by remember { mutableStateOf<Map<String, Any?>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var search by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        try {
+            val res = viewModel.getApi().getIndustryGroups()
+            if (res.isSuccessful) groups = res.body() ?: emptyList()
+        } catch (_: Exception) {}
+        loading = false
+    }
+
+    LaunchedEffect(selectedGroup) {
+        val gId = selectedGroup?.let { (it["id"] as? Number)?.toLong() } ?: return@LaunchedEffect
+        loading = true; subtypes = emptyList()
+        try {
+            val res = viewModel.getApi().getIndustrySubtypes(gId)
+            if (res.isSuccessful) subtypes = res.body() ?: emptyList()
+        } catch (_: Exception) {}
+        loading = false
+    }
+
+    LaunchedEffect(selectedSubtype) {
+        val code = selectedSubtype?.get("code")?.toString() ?: return@LaunchedEffect
+        loading = true; activities = emptyList(); overrides = emptyList()
+        try {
+            val tRes = viewModel.getApi().getActivityTemplates(subtypeCode = code)
+            val pRes = viewModel.getApi().getTenantActivityPricing(1, subtypeCode = code)
+            if (tRes.isSuccessful) activities = tRes.body() ?: emptyList()
+            if (pRes.isSuccessful) overrides = pRes.body() ?: emptyList()
+        } catch (_: Exception) {}
+        loading = false
+    }
+
+    val title = when {
+        selectedSubtype != null -> selectedSubtype!!["name"]?.toString() ?: "Activities"
+        selectedGroup != null -> selectedGroup!!["name"]?.toString() ?: "Subtypes"
+        else -> "Browse Activity Catalog"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selectedGroup != null) {
+                    IconButton(onClick = {
+                        if (selectedSubtype != null) selectedSubtype = null
+                        else selectedGroup = null
+                    }, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         },
-        confirmButton = { Button(onClick = {
-            val qty = quantity.replace(",",".").toDoubleOrNull() ?: 1.0
-            val price = unitPrice.replace(",",".").toDoubleOrNull() ?: 0.0
-            onSave(description, qty, price)
-        }, enabled = description.isNotBlank()) { Text(Strings.save) } },
+        text = {
+            Column(Modifier.heightIn(min = 200.dp, max = 420.dp)) {
+                if (selectedSubtype != null) {
+                    OutlinedTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        label = { Text("Search") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+                if (loading) {
+                    Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    LazyColumn(Modifier.weight(1f)) {
+                        when {
+                            selectedSubtype != null -> {
+                                val filtered = if (search.isBlank()) activities
+                                    else activities.filter { it["name"]?.toString()?.contains(search, ignoreCase = true) == true }
+                                items(filtered) { tmpl ->
+                                    val override = overrides.firstOrNull { (it["template_id"] as? Number)?.toLong() == (tmpl["id"] as? Number)?.toLong() }
+                                    val price = override?.let { (it["rate"] as? Number)?.toDouble() }
+                                        ?: (tmpl["default_rate"] as? Number)?.toDouble() ?: 0.0
+                                    val method = override?.get("pricing_method")?.toString()
+                                        ?: tmpl["default_pricing_method"]?.toString() ?: ""
+                                    Row(
+                                        Modifier.fillMaxWidth()
+                                            .clickable { onSelected(tmpl["name"]?.toString() ?: "", price) }
+                                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(tmpl["name"]?.toString() ?: "", fontSize = 13.sp)
+                                            Text(method.replace("_", "/"), fontSize = 10.sp, color = Color.Gray)
+                                        }
+                                        if (price > 0) {
+                                            Text("£${"%.2f".format(price)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                    HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray)
+                                }
+                            }
+                            selectedGroup != null -> {
+                                items(subtypes) { sub ->
+                                    Row(
+                                        Modifier.fillMaxWidth()
+                                            .clickable { selectedSubtype = sub }
+                                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(sub["name"]?.toString() ?: "", Modifier.weight(1f), fontSize = 13.sp)
+                                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                    HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray)
+                                }
+                            }
+                            else -> {
+                                items(groups) { grp ->
+                                    Row(
+                                        Modifier.fillMaxWidth()
+                                            .clickable { selectedGroup = grp }
+                                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(grp["name"]?.toString() ?: "", Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                    }
+                                    HorizontalDivider(thickness = 0.5.dp, color = Color.LightGray)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
