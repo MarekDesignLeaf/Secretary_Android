@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.secretary"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4  // Viz VersionInfo.VERSION_CODE
-        versionName = "1.3a"  // Viz VersionInfo.VERSION_NAME
+        versionCode = 5  // Viz VersionInfo.VERSION_CODE
+        versionName = "1.4a"  // Viz VersionInfo.VERSION_NAME
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
