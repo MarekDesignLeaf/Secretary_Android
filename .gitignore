@@ -13,6 +13,3 @@
 .externalNativeBuild
 .cxx
 local.properties
- 
-# Claude session temp dirs 
-secretary/ 
