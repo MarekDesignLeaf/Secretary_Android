@@ -236,8 +236,6 @@ interface SecretaryApi {
     suspend fun updateInvoice(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === COMMUNICATIONS ===
-
-    // === COMMUNICATIONS ===
     @GET("crm/communications")
     suspend fun getCommunications(@Query("client_id") clientId: Long? = null, @Query("job_id") jobId: Long? = null): Response<List<Communication>>
 
@@ -351,6 +349,37 @@ interface SecretaryApi {
     @GET("tenant/languages")
     suspend fun getTenantLanguages(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    // === SERVICE RATE TYPES ===
+    @GET("tenant/default-rates/{tenantId}")
+    suspend fun getDefaultRates(@Path("tenantId") tenantId: Int): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
+    @PUT("tenant/default-rates/{tenantId}")
+    suspend fun updateDefaultRates(
+        @Path("tenantId") tenantId: Int,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
+    @POST("tenant/service-rate-types/{tenantId}")
+    suspend fun addServiceRateType(
+        @Path("tenantId") tenantId: Int,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @DELETE("tenant/service-rate-types/{tenantId}/{rateType}")
+    suspend fun deleteServiceRateType(
+        @Path("tenantId") tenantId: Int,
+        @Path("rateType") rateType: String
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("crm/clients/{clientId}/service-rates")
+    suspend fun getClientServiceRates(@Path("clientId") clientId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @PUT("crm/clients/{clientId}/service-rates")
+    suspend fun updateClientServiceRates(
+        @Path("clientId") clientId: Long,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === AUTH ===
     @POST("auth/login")
     suspend fun authLogin(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -409,13 +438,6 @@ interface SecretaryApi {
     @PUT("crm/notifications/{notificationId}/read")
     suspend fun markNotificationRead(@Path("notificationId") notificationId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    // === DEFAULT RATES ===
-    @GET("tenant/default-rates/{tenantId}")
-    suspend fun getDefaultRates(@Header("Authorization") auth: String, @Path("tenantId") tenantId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @PUT("tenant/default-rates/{tenantId}")
-    suspend fun updateDefaultRates(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
     // === USER RATES ===
     @GET("crm/users/{userId}/rates")
     suspend fun getUserRates(@Path("userId") userId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -426,12 +448,6 @@ interface SecretaryApi {
     // === CLIENT RATE ===
     @PUT("crm/clients/{clientId}/rate")
     suspend fun updateClientRate(@Path("clientId") clientId: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @GET("crm/clients/{clientId}/service-rates")
-    suspend fun getClientServiceRates(@Path("clientId") clientId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @PUT("crm/clients/{clientId}/service-rates")
-    suspend fun updateClientServiceRates(@Path("clientId") clientId: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === INVOICE FROM WORK REPORT ===
     @POST("crm/invoices/from-work-report")

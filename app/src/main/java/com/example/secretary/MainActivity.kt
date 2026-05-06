@@ -3059,6 +3059,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
             client = c,
             detail = detail,
             viewModel = viewModel,
+            rateTypes = state.tenantRateTypes,
             onDismiss = { showServiceRatesDialog = false }
         )
     }
@@ -3153,7 +3154,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                         color = Color.Gray
                     )
                     Text(Strings.individualServiceRatesHint, fontSize = 12.sp, color = Color.Gray)
-                    ClientServiceRatesSummary(detail)
+                    ClientServiceRatesSummary(detail, rateTypes = state.tenantRateTypes)
                 }
             }
         }
@@ -6337,6 +6338,7 @@ class SecretaryViewModel : ViewModel() {
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
                 loadHierarchyIntegrity()
+                loadTenantRateTypes()
             } catch (e: Exception) { Log.e("ViewModel", "Refresh Error", e) }
         }
     }
@@ -6446,6 +6448,19 @@ class SecretaryViewModel : ViewModel() {
                 _uiState.value = _uiState.value.copy(tasks = serverTasks + localOnly)
             }
         } catch (e: Exception) { Log.e("ViewModel", "Tasks load error", e) }
+    }
+
+    fun loadTenantRateTypes() {
+        viewModelScope.launch {
+            try {
+                val res = api.getDefaultRates(1)
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(tenantRateTypes = res.body() ?: emptyList())
+                }
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Load rate types error", e)
+            }
+        }
     }
 
     fun loadSystemSettings() {
@@ -9219,9 +9234,64 @@ class SecretaryViewModel : ViewModel() {
 
     fun clearHistory() { _uiState.value = _uiState.value.copy(history = emptyList(), lastAiReply = Strings.waitingForCommand, contactResults = emptyList()) }
 
-    fun updateDefaultRates(rates: Map<String, Any?>) {
+    fun updateDefaultRates(rates: Map<String, Any?>, onDone: ((Boolean, String?) -> Unit)? = null) {
         viewModelScope.launch {
-            try { api.updateDefaultRates(rates) } catch (_: Exception) {}
+            try {
+                val res = api.updateDefaultRates(1, rates)
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(tenantRateTypes = res.body() ?: _uiState.value.tenantRateTypes)
+                    onDone?.invoke(true, null)
+                } else {
+                    val msg = res.errorBody()?.string()?.let {
+                        try { org.json.JSONObject(it).optString("detail").ifBlank { it } } catch (_: Exception) { it }
+                    }
+                    onDone?.invoke(false, msg ?: Strings.backendActionFailed(Strings.serviceRates, res.code()))
+                }
+            } catch (e: Exception) {
+                onDone?.invoke(false, e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun addServiceRateType(rateType: String, description: String, defaultRate: Double, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.addServiceRateType(1, mapOf(
+                    "rate_type" to rateType,
+                    "description" to description,
+                    "rate" to defaultRate
+                ))
+                if (res.isSuccessful) {
+                    loadTenantRateTypes()
+                    onDone(true, null)
+                } else {
+                    val msg = res.errorBody()?.string()?.let {
+                        try { org.json.JSONObject(it).optString("detail").ifBlank { it } } catch (_: Exception) { it }
+                    }
+                    onDone(false, msg ?: Strings.backendActionFailed(Strings.addCustomRateType, res.code()))
+                }
+            } catch (e: Exception) {
+                onDone(false, e.message ?: Strings.connectionError)
+            }
+        }
+    }
+
+    fun deleteServiceRateType(rateType: String, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.deleteServiceRateType(1, rateType)
+                if (res.isSuccessful) {
+                    loadTenantRateTypes()
+                    onDone(true, null)
+                } else {
+                    val msg = res.errorBody()?.string()?.let {
+                        try { org.json.JSONObject(it).optString("detail").ifBlank { it } } catch (_: Exception) { it }
+                    }
+                    onDone(false, msg ?: Strings.backendActionFailed(Strings.deleteRateType, res.code()))
+                }
+            } catch (e: Exception) {
+                onDone(false, e.message ?: Strings.connectionError)
+            }
         }
     }
 
@@ -9424,5 +9494,7 @@ data class UiState(
     val toolHubTilesLoading: Boolean = false,
     // Voice resolve / AI control bridge
     val currentScreenCode: String? = null,
-    val pendingVoiceResolve: VoiceResolveResult? = null
+    val pendingVoiceResolve: VoiceResolveResult? = null,
+    // Dynamic service rate types loaded from server
+    val tenantRateTypes: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList()
 )

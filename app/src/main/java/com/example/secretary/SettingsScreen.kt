@@ -71,75 +71,144 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 
 // RATES / SAZBY
 @Composable private fun RatesSection(viewModel: SecretaryViewModel) {
+    val state by viewModel.uiState.collectAsState()
     var exp by remember { mutableStateOf(false) }
-    var gardenRate by remember { mutableStateOf("") }
-    var hedgeRate by remember { mutableStateOf("") }
-    var arboristRate by remember { mutableStateOf("") }
-    var wasteBag by remember { mutableStateOf("") }
-    var minCharge by remember { mutableStateOf("") }
-    var loaded by remember { mutableStateOf(false) }
-    var loadError by remember { mutableStateOf<String?>(null) }
+    var values by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var initialised by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var saveError by remember { mutableStateOf<String?>(null) }
+    var saveOk by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newKey by remember { mutableStateOf("") }
+    var newLabel by remember { mutableStateOf("") }
+    var newRate by remember { mutableStateOf("") }
+    var addError by remember { mutableStateOf<String?>(null) }
+    var addWorking by remember { mutableStateOf(false) }
+    var pendingDeleteKey by remember { mutableStateOf<String?>(null) }
+    var deleteWorking by remember { mutableStateOf(false) }
     fun fmt(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
-    LaunchedEffect(Unit) {
-        try {
-            val sm = viewModel.getSettingsManager() ?: run { loadError = "Settings manager unavailable"; return@LaunchedEffect }
-            val token = sm.accessToken ?: run { loadError = "Not authenticated"; return@LaunchedEffect }
-            val res = viewModel.api.getDefaultRates("Bearer $token", 1)
-            if (res.isSuccessful) {
-                val body = res.body() ?: run { loadError = "Empty response"; return@LaunchedEffect }
-                fun r(key: String): String? = (body[key] as? Map<*,*>)?.get("rate")?.toString()?.toDoubleOrNull()?.let { fmt(it) }
-                gardenRate = r("garden_maintenance") ?: ""
-                hedgeRate = r("hedge_trimming") ?: ""
-                arboristRate = r("arborist_works") ?: ""
-                wasteBag = r("garden_waste_bulkbag") ?: ""
-                minCharge = r("minimum_charge") ?: ""
-                loaded = true
-            } else {
-                loadError = "HTTP ${res.code()}"
+    val rateTypes = state.tenantRateTypes
+    LaunchedEffect(rateTypes) {
+        if (rateTypes.isNotEmpty() && !initialised) {
+            values = rateTypes.associate { rt ->
+                val key = rt["rate_type"]?.toString() ?: ""
+                val rate = (rt["rate"] as? Number)?.toDouble() ?: 0.0
+                key to fmt(rate)
             }
-        } catch (e: Exception) { loadError = e.message ?: "Error" }
+            initialised = true
+        }
+    }
+    LaunchedEffect(Unit) { viewModel.loadTenantRateTypes() }
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!addWorking) showAddDialog = false },
+            title = { Text(Strings.addCustomRateType) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newLabel,
+                        onValueChange = { newLabel = it; newKey = it.trim().lowercase().replace(Regex("[^a-z0-9]+"), "_").trimStart('_').trimEnd('_').take(50) },
+                        label = { Text(Strings.rateTypeName) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !addWorking
+                    )
+                    OutlinedTextField(
+                        value = newRate,
+                        onValueChange = { newRate = it.filter { c -> c.isDigit() || c == '.' || c == ',' } },
+                        label = { Text(Strings.defaultRate) }, modifier = Modifier.fillMaxWidth(), singleLine = true, enabled = !addWorking,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    if (addError != null) Text(addError!!, color = Color.Red, fontSize = 12.sp)
+                    Text("${Strings.rateTypeKeyHint}: ${newKey.ifBlank { "\u2014" }}", fontSize = 11.sp, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val k = newKey.trim(); val l = newLabel.trim()
+                    val r = newRate.replace(",", ".").toDoubleOrNull() ?: 0.0
+                    if (k.isBlank()) { addError = Strings.enterRateTypeNameError; return@Button }
+                    addWorking = true; addError = null
+                    viewModel.addServiceRateType(k, l, r) { ok, msg ->
+                        addWorking = false
+                        if (ok) { showAddDialog = false; newKey = ""; newLabel = ""; newRate = ""; addError = null; viewModel.loadTenantRateTypes() }
+                        else addError = msg ?: Strings.backendActionFailed(Strings.addCustomRateType, 0)
+                    }
+                }, enabled = !addWorking && newLabel.isNotBlank()) { Text(if (addWorking) Strings.processing else Strings.add) }
+            },
+            dismissButton = { TextButton(onClick = { showAddDialog = false }, enabled = !addWorking) { Text(Strings.cancel) } }
+        )
+    }
+    val pendingKey = pendingDeleteKey
+    if (pendingKey != null) {
+        val pendingLabel = rateTypes.firstOrNull { it["rate_type"] == pendingKey }?.get("description")?.toString() ?: pendingKey
+        AlertDialog(
+            onDismissRequest = { if (!deleteWorking) pendingDeleteKey = null },
+            title = { Text(Strings.deleteRateType) },
+            text = { Text("${Strings.confirmDeleteRateType}: \"$pendingLabel\"?") },
+            confirmButton = {
+                Button(onClick = {
+                    deleteWorking = true
+                    viewModel.deleteServiceRateType(pendingKey) { ok, _ ->
+                        deleteWorking = false; pendingDeleteKey = null
+                        if (ok) { initialised = false; viewModel.loadTenantRateTypes() }
+                    }
+                }, enabled = !deleteWorking, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text(Strings.delete) }
+            },
+            dismissButton = { TextButton(onClick = { pendingDeleteKey = null }, enabled = !deleteWorking) { Text(Strings.cancel) } }
+        )
     }
     SCard(Strings.serviceRates, Icons.Default.ShoppingCart, exp, { exp = !exp }) {
         when {
-            loadError != null -> Text("❌ Sazby se nepodařilo načíst ze serveru: $loadError", color = Color.Red, fontSize = 12.sp)
-            !loaded -> Text("⏳ Načítání sazeb ze serveru...", color = Color.Gray, fontSize = 12.sp)
-            else -> Text("✅ Sazby načteny ze serveru", color = Color(0xFF4CAF50), fontSize = 12.sp)
+            !initialised && rateTypes.isEmpty() -> Text("\u23f3 ${Strings.loading}...", color = Color.Gray, fontSize = 12.sp)
+            saveOk -> Text("\u2705 ${Strings.saved}", color = Color(0xFF4CAF50), fontSize = 12.sp)
+            saveError != null -> Text("\u274c $saveError", color = Color.Red, fontSize = 12.sp)
+            else -> Text("\u2705 ${Strings.ratesLoadedFromServer} (${rateTypes.size})", color = Color(0xFF4CAF50), fontSize = 12.sp)
         }
-        Spacer(Modifier.height(4.dp))
-        Text(Strings.hourlyRatesByType, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = gardenRate, onValueChange = { gardenRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🌿 ${Strings.gardenMaintenanceRate}") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Text(Strings.gardenMaintenanceHint, fontSize = 11.sp, color = Color.Gray)
-        Spacer(Modifier.height(4.dp))
-        OutlinedTextField(value = hedgeRate, onValueChange = { hedgeRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🌳 ${Strings.hedgeTrimmingRate}") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Spacer(Modifier.height(4.dp))
-        OutlinedTextField(value = arboristRate, onValueChange = { arboristRate = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text("🪓 ${Strings.arboristWorksRate}") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
-        Text(Strings.otherRates, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        Spacer(Modifier.height(4.dp))
-        OutlinedTextField(value = wasteBag, onValueChange = { wasteBag = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(Strings.wasteRemovalRate) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Spacer(Modifier.height(4.dp))
-        OutlinedTextField(value = minCharge, onValueChange = { minCharge = it.filter { c -> c.isDigit() || c == '.' } }, label = { Text(Strings.minimumJobPrice) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = {
-            val gR = gardenRate.toDoubleOrNull()
-            val hR = hedgeRate.toDoubleOrNull()
-            val aR = arboristRate.toDoubleOrNull()
-            val wB = wasteBag.toDoubleOrNull()
-            val mC = minCharge.toDoubleOrNull()
-            if (gR != null && hR != null && aR != null && wB != null && mC != null) {
-                viewModel.updateDefaultRates(mapOf(
-                    "garden_maintenance" to gR,
-                    "hedge_trimming" to hR,
-                    "arborist_works" to aR,
-                    "hourly_rate" to gR,
-                    "garden_waste_bulkbag" to wB,
-                    "minimum_charge" to mC
-                ))
+        rateTypes.forEach { rt ->
+            val key = rt["rate_type"]?.toString() ?: return@forEach
+            val label = rt["description"]?.toString()?.ifBlank { null }
+                ?: key.replace("_", " ").replaceFirstChar { it.uppercaseChar() }
+            val isBuiltin = rt["is_builtin"] as? Boolean ?: true
+            Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = values[key].orEmpty(),
+                    onValueChange = { next ->
+                        values = values.toMutableMap().apply { put(key, next.filter { c -> c.isDigit() || c == '.' || c == ',' }) }
+                        saveOk = false; saveError = null
+                    },
+                    label = { Text(label) }, modifier = Modifier.weight(1f), singleLine = true, enabled = !saving,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                if (!isBuiltin) {
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = { pendingDeleteKey = key }, enabled = !saving && !deleteWorking) {
+                        Icon(Icons.Default.Delete, contentDescription = Strings.delete, tint = Color.Red)
+                    }
+                }
             }
-        }, modifier = Modifier.fillMaxWidth(), enabled = loaded || (gardenRate.isNotBlank() && hedgeRate.isNotBlank())) { Text(Strings.save) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { showAddDialog = true; newKey = ""; newLabel = ""; newRate = ""; addError = null }, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(Strings.addCustomRateType, fontSize = 13.sp)
+            }
+            Button(
+                onClick = {
+                    saving = true; saveOk = false; saveError = null
+                    val payload = values.mapValues { (_, v) -> mapOf("rate" to (v.replace(",", ".").toDoubleOrNull() ?: 0.0)) }
+                    viewModel.updateDefaultRates(payload) { ok, msg ->
+                        saving = false
+                        if (ok) { saveOk = true; viewModel.loadTenantRateTypes() }
+                        else saveError = msg ?: Strings.backendActionFailed(Strings.serviceRates, 0)
+                    }
+                },
+                modifier = Modifier.weight(1f), enabled = initialised && !saving
+            ) { Text(if (saving) Strings.processing else Strings.save) }
+        }
     }
 }
+
 
 // 0. JAZYK / LANGUAGE
 @Composable private fun LanguageSection(sm: SettingsManager, viewModel: SecretaryViewModel) {

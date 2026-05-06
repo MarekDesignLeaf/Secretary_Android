@@ -38,23 +38,48 @@ private fun formatServiceRate(value: Double?): String {
     return if (number % 1.0 == 0.0) number.toInt().toString() else number.toString()
 }
 
+/** Build ServiceRateField list from server rate-type rows. Falls back to keys in service_rates if empty. */
+private fun buildFields(
+    rateTypes: List<Map<String, Any?>>,
+    serviceRates: Map<String, Double>
+): List<ServiceRateField> {
+    if (rateTypes.isNotEmpty()) {
+        return rateTypes.mapNotNull { rt ->
+            val key = rt["rate_type"]?.toString()?.trim().takeIf { !it.isNullOrBlank() } ?: return@mapNotNull null
+            val label = rt["description"]?.toString()?.trim()
+                .takeIf { !it.isNullOrBlank() }
+                ?: key.replace("_", " ").replaceFirstChar { it.uppercaseChar() }
+            ServiceRateField(key = key, label = label)
+        }
+    }
+    // fallback: build from whatever the server returned in service_rates
+    return serviceRates.keys.map { key ->
+        ServiceRateField(key = key, label = key.replace("_", " ").replaceFirstChar { it.uppercaseChar() })
+    }
+}
+
 @Composable
-fun ClientServiceRatesSummary(detail: ClientDetail) {
-    val fields = listOf(
-        ServiceRateField("garden_maintenance", Strings.gardenMaintenanceRate),
-        ServiceRateField("hedge_trimming", Strings.hedgeTrimmingRate),
-        ServiceRateField("arborist_works", Strings.arboristWorksRate),
-        ServiceRateField("garden_waste_bulkbag", Strings.wasteRemovalRate),
-        ServiceRateField("minimum_charge", Strings.minimumJobPrice),
-    )
+fun ClientServiceRatesSummary(
+    detail: ClientDetail,
+    rateTypes: List<Map<String, Any?>> = emptyList()
+) {
+    val fields = buildFields(rateTypes, detail.service_rates)
+    val labelMap = fields.associate { it.key to it.label }
+
     val overrideCount = detail.service_rate_overrides.size
     if (overrideCount > 0) {
-        Text(Strings.clientServiceRatesSummary(overrideCount), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(
+            Strings.clientServiceRatesSummary(overrideCount),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
-    fields.forEach { field ->
-        val value = detail.service_rates[field.key]
-        if (value != null && value > 0) {
-            InfoRow(field.label, "£${formatServiceRate(value)}")
+    // Show all non-zero rates using dynamic labels
+    detail.service_rates.forEach { (key, value) ->
+        if (value > 0) {
+            val label = labelMap[key]
+                ?: key.replace("_", " ").replaceFirstChar { it.uppercaseChar() }
+            InfoRow(label, "£${formatServiceRate(value)}")
         }
     }
 }
@@ -64,16 +89,14 @@ fun ClientServiceRatesDialog(
     client: Client,
     detail: ClientDetail,
     viewModel: SecretaryViewModel,
+    rateTypes: List<Map<String, Any?>> = emptyList(),
     onDismiss: () -> Unit,
 ) {
-    val fields = listOf(
-        ServiceRateField("garden_maintenance", Strings.gardenMaintenanceRate, Strings.gardenMaintenanceHint),
-        ServiceRateField("hedge_trimming", Strings.hedgeTrimmingRate),
-        ServiceRateField("arborist_works", Strings.arboristWorksRate),
-        ServiceRateField("garden_waste_bulkbag", Strings.wasteRemovalRate),
-        ServiceRateField("minimum_charge", Strings.minimumJobPrice),
-    )
-    var values by remember(detail) {
+    val fields = remember(rateTypes, detail.service_rates) {
+        buildFields(rateTypes, detail.service_rates)
+    }
+
+    var values by remember(detail, fields) {
         mutableStateOf(
             fields.associate { field ->
                 field.key to formatServiceRate(detail.service_rates[field.key])
@@ -84,16 +107,12 @@ fun ClientServiceRatesDialog(
     var error by remember { mutableStateOf<String?>(null) }
 
     fun buildPayload(): Map<String, Any?> {
-        val gardenRate = values["garden_maintenance"]?.replace(",", ".")?.toDoubleOrNull()
         return buildMap {
             fields.forEach { field ->
                 val parsed = values[field.key]?.replace(",", ".")?.toDoubleOrNull()
                 if (parsed != null && parsed > 0) {
                     put(field.key, parsed)
                 }
-            }
-            if (gardenRate != null && gardenRate > 0) {
-                put("hourly_rate", gardenRate)
             }
         }
     }
@@ -102,12 +121,19 @@ fun ClientServiceRatesDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
         title = { Text("${Strings.individualServiceRates} · ${client.display_name}") },
         text = {
-            LazyColumn(modifier = Modifier.heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 460.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 item {
                     Text(Strings.individualServiceRatesHint, fontSize = 12.sp, color = Color.Gray)
                     if (detail.has_individual_service_rates) {
                         Spacer(Modifier.height(4.dp))
                         Text(Strings.individualServiceRatesActive, fontSize = 12.sp, color = Color.Gray)
+                    }
+                    if (fields.isEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(Strings.noRateTypesConfigured, fontSize = 13.sp, color = Color.Gray)
                     }
                 }
                 items(fields) { field ->
@@ -131,18 +157,21 @@ fun ClientServiceRatesDialog(
                 if (error != null) {
                     item { Text(error!!, color = Color.Red, fontSize = 12.sp) }
                 }
-                item {
-                    Spacer(Modifier.height(4.dp))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(4.dp))
-                    ClientServiceRatesSummary(
-                        detail.copy(
-                            service_rates = fields.associate { field ->
-                                field.key to (values[field.key]?.replace(",", ".")?.toDoubleOrNull() ?: 0.0)
-                            },
-                            service_rate_overrides = detail.service_rate_overrides
+                if (fields.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(4.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(4.dp))
+                        ClientServiceRatesSummary(
+                            detail = detail.copy(
+                                service_rates = fields.associate { field ->
+                                    field.key to (values[field.key]?.replace(",", ".")?.toDoubleOrNull() ?: 0.0)
+                                },
+                                service_rate_overrides = detail.service_rate_overrides
+                            ),
+                            rateTypes = rateTypes
                         )
-                    )
+                    }
                 }
             }
         },
@@ -153,7 +182,8 @@ fun ClientServiceRatesDialog(
                     error = null
                     viewModel.updateClientServiceRates(client.id, buildPayload()) { ok, message ->
                         submitting = false
-                        if (ok) onDismiss() else error = message ?: Strings.backendActionFailed(Strings.individualServiceRates, 0)
+                        if (ok) onDismiss()
+                        else error = message ?: Strings.backendActionFailed(Strings.individualServiceRates, 0)
                     }
                 },
                 enabled = !submitting
@@ -170,7 +200,8 @@ fun ClientServiceRatesDialog(
                             error = null
                             viewModel.updateClientServiceRates(client.id, emptyMap()) { ok, message ->
                                 submitting = false
-                                if (ok) onDismiss() else error = message ?: Strings.backendActionFailed(Strings.resetToCompanyRates, 0)
+                                if (ok) onDismiss()
+                                else error = message ?: Strings.backendActionFailed(Strings.resetToCompanyRates, 0)
                             }
                         },
                         enabled = !submitting
