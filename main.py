@@ -624,6 +624,30 @@ def seed_activity_templates(conn):
             print(f"Migration 020 FAILED: {e}")
 
 
+def seed_activity_pricing_ui_controls(conn):
+    """Run migration 021: insert ui_control_registry entries for ActivityPricing screen."""
+    import os
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM migration_log WHERE filename='2026_05_06_activity_pricing_ui_controls_021.sql'")
+        if cur.fetchone():
+            return  # already applied
+        migration_path = os.path.join(os.path.dirname(__file__), "migrations", "2026_05_06_activity_pricing_ui_controls_021.sql")
+        if not os.path.exists(migration_path):
+            print("Migration 021 SQL not found, skipping")
+            return
+        try:
+            cur.execute("SAVEPOINT before_021")
+            with open(migration_path, "r", encoding="utf-8") as f:
+                cur.execute(f.read())
+            cur.execute("INSERT INTO migration_log (filename) VALUES (%s)", ("2026_05_06_activity_pricing_ui_controls_021.sql",))
+            conn.commit()
+            print("Migration 021 applied: ActivityPricing ui_control_registry entries seeded")
+        except Exception as e:
+            cur.execute("ROLLBACK TO SAVEPOINT before_021")
+            conn.commit()
+            print(f"Migration 021 FAILED: {e}")
+
+
 def seed_builtin_rates_if_empty(conn, tid):
     """Seed built-in rate types for a tenant that has none yet (idempotent)."""
     with conn.cursor() as cur:
@@ -2303,6 +2327,14 @@ def init_pool():
             db_pool.putconn(conn_act)
             print("Activity templates seeded")
         except Exception as e: print(f"Activity templates seed: {e}")
+        try:
+            conn_ui = db_pool.getconn()
+            with conn_ui.cursor() as cur:
+                cur.execute("SET search_path TO crm, public")
+            seed_activity_pricing_ui_controls(conn_ui)
+            db_pool.putconn(conn_ui)
+            print("Activity pricing UI controls seeded")
+        except Exception as e: print(f"Activity pricing UI controls seed: {e}")
     except Exception as e: print(f"DB pool FAIL: {e}")
 
 def get_db_conn():
@@ -13714,8 +13746,8 @@ async def get_activity_templates(
                            ig.code AS group_code,
                            COALESCE(ist.code, '') AS subtype_code
                     FROM activity_templates at
-                    LEFT JOIN industry_subtypes ist ON at.industry_subtype_id = ist.id
-                    JOIN industry_groups ig ON at.industry_group_id = ig.id
+                    JOIN industry_subtypes ist ON at.industry_subtype_id = ist.id
+                    JOIN industry_groups ig ON ist.industry_group_id = ig.id
                     WHERE ig.code = %s AND at.is_active = true
                     ORDER BY COALESCE(ist.sort_order, 0), at.sort_order, at.name
                 """, (group_code,))
@@ -13727,9 +13759,9 @@ async def get_activity_templates(
                            ig.code AS group_code,
                            COALESCE(ist.code, '') AS subtype_code
                     FROM activity_templates at
-                    LEFT JOIN industry_subtypes ist ON at.industry_subtype_id = ist.id
-                    JOIN industry_groups ig ON at.industry_group_id = ig.id
-                    WHERE at.industry_group_id = %s AND at.is_active = true
+                    JOIN industry_subtypes ist ON at.industry_subtype_id = ist.id
+                    JOIN industry_groups ig ON ist.industry_group_id = ig.id
+                    WHERE ig.id = %s AND at.is_active = true
                     ORDER BY COALESCE(ist.sort_order, 0), at.sort_order, at.name
                 """, (group_id,))
             else:
@@ -13753,7 +13785,7 @@ async def get_tenant_activity_pricing(tenant_id: int, subtype_id: int | None = N
                 filter_clause = "AND ist.code = %s" if subtype_code else "AND at.industry_subtype_id = %s"
                 filter_val = subtype_code if subtype_code else subtype_id
                 cur.execute(f"""
-                    SELECT tap.id, tap.activity_template_id, tap.is_active,
+                    SELECT tap.id, tap.activity_template_id AS template_id, tap.is_active,
                            tap.pricing_method, tap.rate, tap.rate_secondary,
                            tap.custom_name, tap.supplementary, tap.voice_aliases, tap.notes,
                            at.code, at.name AS template_name, at.default_pricing_method,
@@ -13767,7 +13799,7 @@ async def get_tenant_activity_pricing(tenant_id: int, subtype_id: int | None = N
                 """, (tenant_id, filter_val))
             else:
                 cur.execute("""
-                    SELECT tap.id, tap.activity_template_id, tap.is_active,
+                    SELECT tap.id, tap.activity_template_id AS template_id, tap.is_active,
                            tap.pricing_method, tap.rate, tap.rate_secondary,
                            tap.custom_name, tap.supplementary, tap.voice_aliases, tap.notes,
                            at.code, at.name AS template_name, at.default_pricing_method,
