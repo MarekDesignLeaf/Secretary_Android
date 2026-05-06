@@ -20,6 +20,7 @@ sealed class Screen(val route: String, val titleKey: String, val icon: ImageVect
     object ClientDetail : Screen("client/{clientId}", Strings.editClient, Icons.Default.Person)
     object JobDetail : Screen("job/{jobId}", Strings.job, Icons.Default.Star)
     object TaskDetail : Screen("task/{taskId}", Strings.taskTitle, Icons.AutoMirrored.Filled.List)
+    object ActivityPricing : Screen("activity_pricing", "Activity Pricing", Icons.Default.Star)
 }
 
 val navItems = listOf(

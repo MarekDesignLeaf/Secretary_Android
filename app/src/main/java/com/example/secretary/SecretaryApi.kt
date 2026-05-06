@@ -380,6 +380,34 @@ interface SecretaryApi {
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    // === ACTIVITY TEMPLATES ===
+    @GET("activities/templates")
+    suspend fun getActivityTemplates(
+        @Query("subtype_code") subtypeCode: String? = null,
+        @Query("group_code") groupCode: String? = null,
+        @Query("subtype_id") subtypeId: Long? = null,
+        @Query("group_id") groupId: Long? = null
+    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
+    @GET("activities/tenant/{tenantId}")
+    suspend fun getTenantActivityPricing(
+        @Path("tenantId") tenantId: Int,
+        @Query("subtype_code") subtypeCode: String? = null
+    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
+    @PUT("activities/tenant/{tenantId}/{templateId}")
+    suspend fun upsertTenantActivityPricing(
+        @Path("tenantId") tenantId: Int,
+        @Path("templateId") templateId: Long,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @DELETE("activities/tenant/{tenantId}/{templateId}")
+    suspend fun resetTenantActivityPricing(
+        @Path("tenantId") tenantId: Int,
+        @Path("templateId") templateId: Long
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === AUTH ===
     @POST("auth/login")
     suspend fun authLogin(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>

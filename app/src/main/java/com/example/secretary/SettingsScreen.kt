@@ -24,9 +24,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.NavHostController
 
 @Composable
-fun SettingsScreen(viewModel: SecretaryViewModel) {
+fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostController? = null) {
     val state by viewModel.uiState.collectAsState()
     val sm = viewModel.getSettingsManager() ?: return
     val canManageHierarchy = state.currentUserPermissions["manage_users"] == true ||
@@ -40,7 +41,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
         item { Text(Strings.settings, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
         item { RuntimeDataStatusSection(viewModel, sm) }
         item { CompanyProfileSection(viewModel, sm) }
-        item { RatesSection(viewModel) }
+        item { RatesSection(viewModel, navController) }
         item { LanguageSection(sm, viewModel) }
         item { ThemeSection(sm) }
         item { VoiceSection(sm) }
@@ -70,7 +71,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
 }
 
 // RATES / SAZBY
-@Composable private fun RatesSection(viewModel: SecretaryViewModel) {
+@Composable private fun RatesSection(viewModel: SecretaryViewModel, navController: NavHostController? = null) {
     val state by viewModel.uiState.collectAsState()
     var exp by remember { mutableStateOf(false) }
     var values by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -157,7 +158,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
     }
     SCard(Strings.serviceRates, Icons.Default.ShoppingCart, exp, { exp = !exp }) {
         when {
-            !initialised && rateTypes.isEmpty() -> Text("\u23f3 ${Strings.loading}...", color = Color.Gray, fontSize = 12.sp)
+            !initialised && rateTypes.isEmpty() -> Text("\u23f3 Loading...", color = Color.Gray, fontSize = 12.sp)
             saveOk -> Text("\u2705 ${Strings.saved}", color = Color(0xFF4CAF50), fontSize = 12.sp)
             saveError != null -> Text("\u274c $saveError", color = Color.Red, fontSize = 12.sp)
             else -> Text("\u2705 ${Strings.ratesLoadedFromServer} (${rateTypes.size})", color = Color(0xFF4CAF50), fontSize = 12.sp)
@@ -205,6 +206,17 @@ fun SettingsScreen(viewModel: SecretaryViewModel) {
                 },
                 modifier = Modifier.weight(1f), enabled = initialised && !saving
             ) { Text(if (saving) Strings.processing else Strings.save) }
+        }
+        if (navController != null) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { navController.navigate(Screen.ActivityPricing.route) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Activity Pricing", fontSize = 13.sp)
+            }
         }
     }
 }

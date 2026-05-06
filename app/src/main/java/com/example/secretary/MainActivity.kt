@@ -452,7 +452,7 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                     viewModel.loadBackendUsers()
                     viewModel.loadAssistantMemory()
                 }
-                SettingsScreen(viewModel) 
+                SettingsScreen(viewModel, navController)
             }
             composable(
                 route = Screen.ClientDetail.route,
@@ -481,6 +481,10 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
             ) { backStackEntry ->
                 val taskId = backStackEntry.arguments?.getString("taskId") ?: ""
                 TaskDetailScreen(taskId, viewModel, navController)
+            }
+            composable(Screen.ActivityPricing.route) {
+                LaunchedEffect(Unit) { viewModel.loadActivityTemplates() }
+                ActivityPricingScreen(viewModel, navController)
             }
         }
     }
@@ -5439,6 +5443,7 @@ class SecretaryViewModel : ViewModel() {
     }
     
     fun getSettingsManager() = settingsManager
+    fun getApi() = api
     fun getCalendarText(days: Int = 7): String = calendarManager?.getCalendarContext(days) ?: "Kalendář není dostupný"
 
     fun checkOnboardingStatus() {
@@ -6459,6 +6464,46 @@ class SecretaryViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("ViewModel", "Load rate types error", e)
+            }
+        }
+    }
+
+    fun loadActivityTemplates(subtypeCode: String? = null, groupCode: String? = null) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(activityTemplatesLoading = true)
+            try {
+                val tRes = api.getActivityTemplates(subtypeCode = subtypeCode, groupCode = groupCode)
+                val pRes = api.getTenantActivityPricing(1, subtypeCode = subtypeCode)
+                _uiState.value = _uiState.value.copy(
+                    activityTemplates = if (tRes.isSuccessful) tRes.body() ?: emptyList() else emptyList(),
+                    tenantActivityPricing = if (pRes.isSuccessful) pRes.body() ?: emptyList() else emptyList(),
+                    activityTemplatesLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Load activity templates error", e)
+                _uiState.value = _uiState.value.copy(activityTemplatesLoading = false)
+            }
+        }
+    }
+
+    fun upsertActivityPricing(templateId: Long, data: Map<String, Any?>, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val res = api.upsertTenantActivityPricing(1, templateId, data)
+                if (res.isSuccessful) onDone()
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Upsert activity pricing error", e)
+            }
+        }
+    }
+
+    fun resetActivityPricing(templateId: Long, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val res = api.resetTenantActivityPricing(1, templateId)
+                if (res.isSuccessful) onDone()
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Reset activity pricing error", e)
             }
         }
     }
@@ -9496,5 +9541,9 @@ data class UiState(
     val currentScreenCode: String? = null,
     val pendingVoiceResolve: VoiceResolveResult? = null,
     // Dynamic service rate types loaded from server
-    val tenantRateTypes: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList()
+    val tenantRateTypes: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList(),
+    // Activity templates & tenant pricing
+    val activityTemplates: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList(),
+    val tenantActivityPricing: List<Map<String, @JvmSuppressWildcards Any?>> = emptyList(),
+    val activityTemplatesLoading: Boolean = false
 )
