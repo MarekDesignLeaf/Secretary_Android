@@ -444,6 +444,7 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
             composable(Screen.Settings.route) { 
                 LaunchedEffect(Unit) { 
                     viewModel.updateContext(null, null)
+                    viewModel.loadSystemSettings()
                     viewModel.loadSettings()
                     viewModel.loadBackendRoles()
                     viewModel.loadBackendUsers()
@@ -4777,6 +4778,11 @@ class SecretaryViewModel : ViewModel() {
             is String -> value.equals("true", ignoreCase = true) || value == "1"
             else -> false
         }
+        val tenantId = when (val value = source["tenant_id"]) {
+            is Number -> value.toInt()
+            is String -> value.toIntOrNull() ?: 1
+            else -> 1
+        }
         settingsManager?.setCurrentBackendUser(userId, role)
         val preferredLang = source["preferred_language_code"]?.toString()?.takeIf { it.isNotBlank() }
         val resolvedLang = settingsManager?.getAppLanguageForUser(userId, preferredLang ?: settingsManager?.appLanguage ?: "cs")
@@ -4789,6 +4795,7 @@ class SecretaryViewModel : ViewModel() {
             currentUserEmail = email,
             currentUserRole = role,
             currentUserPermissions = permissions,
+            currentTenantId = tenantId,
             mustChangePassword = mustChangePassword
         )
     }
@@ -5547,6 +5554,19 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun updateInternalLanguage(lang: String, onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
+                    _uiState.value.currentUserRole == "admin"
+                if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return@launch }
+                val res = api.updateTenantLanguages(1, mapOf("default_internal_language_code" to lang))
+                if (res.isSuccessful) { loadSettings(); loadTenantConfig(); onDone(true, null) }
+                else { onDone(false, parseBackendAdminError(res.code(), res.errorBody()?.string(), Strings.save)) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); onDone(false, e.message ?: Strings.connectionError) }
+        }
+    }
+
     fun updateCustomerLanguage(customerLang: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
@@ -5886,7 +5906,7 @@ class SecretaryViewModel : ViewModel() {
                     val req = SummarizeRequest(
                         history = sessionHistory,
                         user_id = state.currentUserId,
-                        tenant_id = 1,
+                        tenant_id = state.currentTenantId,
                         internal_language = langCode
                     )
                     val token = settingsManager?.accessToken?.let { "Bearer $it" }
@@ -9545,6 +9565,7 @@ data class UiState(
     val currentUserDisplayName: String? = null,
     val currentUserEmail: String? = null,
     val currentUserRole: String? = null,
+    val currentTenantId: Int = 1,
     val currentUserPermissions: Map<String, Boolean> = emptyMap(),
     val mustChangePassword: Boolean = false,
     val awaitingBiometricEnrollment: Boolean = false,

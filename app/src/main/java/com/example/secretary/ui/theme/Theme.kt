@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-// DesignLeaf brand: zelena zahrada + teplý kontrast
+// Secretary app theme colors
 private val Leaf = Color(0xFF2E7D32)       // tmave zelena
 private val LeafLight = Color(0xFF66BB6A)  // svetla zelena
 private val LeafDark = Color(0xFF1B5E20)   // velmi tmava zelena

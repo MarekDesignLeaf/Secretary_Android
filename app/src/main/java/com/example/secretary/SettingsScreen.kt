@@ -250,23 +250,28 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
 
     SCard(Strings.language + ": $langName", Icons.Default.Star, exp, { exp = !exp }) {
         // Internal language
-        Text(Strings.systemLanguage, fontWeight = FontWeight.SemiBold)
+        var showInternalLangPicker by remember { mutableStateOf(false) }
+        var internalLangFeedback by remember { mutableStateOf<String?>(null) }
+        val supportedLangs = listOf("cs-CZ","en-GB","en-US","pl-PL","de-DE","fr-FR","es-ES","sk-SK","hu-HU","ro-RO","uk-UA","ru-RU")
+        val canEditInternal = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(Strings.systemLanguage, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (canEditInternal) {
+                TextButton(onClick = { showInternalLangPicker = true }) {
+                    Text(if (internalCodes.isNullOrEmpty()) "Nastavit" else "Změnit")
+                }
+            }
+        }
         Text(Strings.systemLanguageHint, fontSize = 12.sp, color = Color.Gray)
         when {
-            langsData == null && langsError == null -> {
-                Text("Načítám jazyky ze serveru…", fontSize = 12.sp, color = Color.Gray)
-            }
-            langsError != null -> {
-                Text("❌ Chyba načítání jazyků: $langsError", fontSize = 12.sp, color = Color.Red)
-            }
-            langsFound == false -> {
-                Text("⚠️ Jazyky nejsou nastaveny (tenant languages not set up)", fontSize = 12.sp, color = Color(0xFFFF9800))
-            }
+            langsData == null && langsError == null -> Text("Načítám jazyky ze serveru…", fontSize = 12.sp, color = Color.Gray)
+            langsError != null -> Text("❌ ${langsError}", fontSize = 12.sp, color = Color.Red)
             internalCodes.isNullOrEmpty() -> {
-                Text("⚠️ Žádné interní jazyky nenalezeny", fontSize = 12.sp, color = Color(0xFFFF9800))
+                if (!canEditInternal)
+                    Text("⚠️ Interní jazyk není nastaven — kontaktujte admina", fontSize = 12.sp, color = Color(0xFFFF9800))
             }
             else -> {
-                Text("✅ ${internalCodes.size} interní jazyk(y) načteno ze serveru", fontSize = 11.sp, color = Color(0xFF4CAF50))
                 internalCodes.forEach { code ->
                     val label = langDisplayName(code)
                     val selected = currentLang.lowercase().startsWith(code.take(2).lowercase()) || currentLang == code
@@ -277,6 +282,33 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                     }
                 }
             }
+        }
+        internalLangFeedback?.let { Text(it, fontSize = 12.sp, color = if (it.startsWith("✅")) Color(0xFF4CAF50) else Color.Red) }
+        if (showInternalLangPicker) {
+            AlertDialog(
+                onDismissRequest = { showInternalLangPicker = false },
+                title = { Text("Interní jazyk systému") },
+                text = {
+                    Column {
+                        supportedLangs.forEach { code ->
+                            val label = langDisplayName(code)
+                            val selected = internalCodes?.contains(code) == true
+                            Row(Modifier.fillMaxWidth().clickable {
+                                showInternalLangPicker = false
+                                viewModel.updateInternalLanguage(code) { ok, err ->
+                                    internalLangFeedback = if (ok) "✅ Interní jazyk nastaven: $label" else "❌ ${err}"
+                                }
+                            }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = selected, onClick = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(label, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = { TextButton(onClick = { showInternalLangPicker = false }) { Text("Zrušit") } }
+            )
         }
 
         Spacer(Modifier.height(8.dp))

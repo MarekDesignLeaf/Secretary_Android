@@ -117,9 +117,9 @@ class SettingsManager(context: Context) {
     var activationWord: String
         get() {
             val defaultWord = when (normalizeAppLanguage(appLanguage)) {
-                "en" -> "hey designleaf"
-                "pl" -> "hej designleaf"
-                else -> "hej designleaf"
+                "en" -> "hey secretary"
+                "pl" -> "hej secretary"
+                else -> "hej secretary"
             }
             return getScopedString("activation_word", defaultWord)
         }
