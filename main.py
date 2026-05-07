@@ -242,7 +242,7 @@ def send_mail_reply(original: Dict[str, Any], body: str) -> Dict[str, Any]:
 
 # === AUTH MIDDLEWARE: Protect /crm/*, /process, /voice/*, /work-reports* ===
 PROTECTED_PREFIXES = ["/crm/", "/plants/", "/mushrooms/", "/nature/", "/admin/", "/assistant/", "/process", "/voice/", "/work-reports"]
-PUBLIC_PATHS = ["/health", "/auth/login", "/auth/refresh", "/docs", "/openapi.json", "/", "/onboarding/industry-groups", "/onboarding/industry-subtypes", "/onboarding/presets", "/admin/reset-pw-temp-x7k2"]
+PUBLIC_PATHS = ["/health", "/auth/login", "/auth/refresh", "/docs", "/openapi.json", "/", "/onboarding/industry-groups", "/onboarding/industry-subtypes", "/onboarding/presets", "/admin/reset-pw-temp-x7k2", "/admin/db-diag", "/version"]
 
 PERMISSION_DEFINITIONS = [
     {"permission_code": "crm_read", "module_name": "crm", "name": "View CRM", "description": "Read clients, jobs, leads and invoices."},
