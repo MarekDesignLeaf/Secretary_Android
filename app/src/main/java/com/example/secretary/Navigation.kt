@@ -26,7 +26,6 @@ sealed class Screen(val route: String, val titleKey: String, val icon: ImageVect
 val navItems = listOf(
     Screen.Home,
     Screen.Crm,
-    Screen.Tasks,
     Screen.Calendar,
     Screen.Tools,
     Screen.Settings

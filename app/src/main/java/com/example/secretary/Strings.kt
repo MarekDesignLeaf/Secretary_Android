@@ -403,6 +403,11 @@ object Strings {
         "U kontaktu $name není uložené telefonní číslo.",
         "Kontakt $name nie ma zapisanego numeru telefonu."
     )
+    fun voiceConfirmAction(action: String): String = t(
+        "Do you really want to: $action?",
+        "Opravdu chceš: $action?",
+        "Czy naprawdę chcesz: $action?"
+    )
     val sayWhatsAppContact get() = t(
         "Who should I message on WhatsApp?",
         "Komu mám napsat na WhatsApp?",

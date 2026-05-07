@@ -62,9 +62,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.secretary.ui.theme.SecretaryTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -125,8 +128,7 @@ private fun readSmsMessagesForImport(context: Context, limit: Int = 5000): List<
                 )
             }
         }
-    } catch (e: Exception) {
-        Log.e("SmsImport", "Unable to read SMS history", e)
+    } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("SmsImport", "Unable to read SMS history", e)
     }
     return messages
 }
@@ -350,7 +352,6 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
         val screenCode = when (currentRoute) {
             Screen.Home.route     -> "home"
             Screen.Crm.route      -> "crm"
-            Screen.Tasks.route    -> "tasks"
             Screen.Calendar.route -> "calendar"
             Screen.Tools.route    -> "tools"
             Screen.Settings.route -> "settings"
@@ -363,8 +364,7 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
         state.pendingAppNavigation?.let { target ->
             val route = when (target) {
                 "home" -> Screen.Home.route
-                "crm", "clients", "jobs", "leads", "quotes", "invoices", "reports", "contacts" -> Screen.Crm.route
-                "tasks" -> Screen.Tasks.route
+                "crm", "clients", "jobs", "tasks", "leads", "quotes", "invoices", "reports", "contacts", "communications" -> Screen.Crm.route
                 "calendar" -> Screen.Calendar.route
                 "tools" -> Screen.Tools.route
                 "settings" -> Screen.Settings.route
@@ -432,10 +432,6 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
             composable(Screen.Crm.route) { 
                 LaunchedEffect(Unit) { viewModel.updateContext(null, null) }
                 CrmHubScreen(viewModel, navController) 
-            }
-            composable(Screen.Tasks.route) { 
-                LaunchedEffect(Unit) { viewModel.updateContext(null, null) }
-                TasksScreen(viewModel) 
             }
             composable(Screen.Calendar.route) { 
                 LaunchedEffect(Unit) { viewModel.updateContext(null, null) }
@@ -2878,6 +2874,7 @@ private fun openDialer(context: Context, phone: String): Boolean {
             context.startActivity(intent)
             return true
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Log.w("Dialer", "Failed to open phone intent ${intent.action} for phone: $cleanPhone", e)
         }
     }
@@ -2975,6 +2972,7 @@ private fun openNavigation(context: Context, address: String): Boolean {
             context.startActivity(intent)
             return true
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Log.w("Navigation", "Failed to open navigation intent: ${intent.data}", e)
         }
     }
@@ -3303,6 +3301,7 @@ fun ClientCommsTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                 importStatus = communicationImportStatus(stats)
                 viewModel.loadClientDetail(detail.client.id)
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 importStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
             } finally {
                 importRunning = false
@@ -3348,6 +3347,7 @@ fun ClientCommsTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                             importStatus = communicationImportStatus(stats)
                             viewModel.loadClientDetail(detail.client.id)
                         } catch (e: Exception) {
+                            e.rethrowIfCancellation()
                             importStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
                         } finally {
                             importRunning = false
@@ -4533,6 +4533,7 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
                 syncStatus = communicationImportStatus(stats)
                 comms.value = viewModel.loadAllCommunications()
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 syncStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
             } finally {
                 syncRunning = false
@@ -4583,6 +4584,7 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
                                 syncStatus = Strings.whatsappAddressSyncDone(updated, scanned)
                                 comms.value = viewModel.loadAllCommunications()
                             } catch (e: Exception) {
+                                e.rethrowIfCancellation()
                                 syncStatus = Strings.whatsappAddressSyncFailed(e.message ?: "unknown error")
                             } finally {
                                 syncRunning = false
@@ -4617,6 +4619,7 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
                                 syncStatus = communicationImportStatus(stats)
                                 comms.value = viewModel.loadAllCommunications()
                             } catch (e: Exception) {
+                                e.rethrowIfCancellation()
                                 syncStatus = Strings.communicationImportFailed(e.message ?: "unknown error")
                             } finally {
                                 syncRunning = false
@@ -4657,6 +4660,14 @@ fun CommunicationTab(state: UiState, viewModel: SecretaryViewModel, navControlle
             }
         })
     }
+}
+
+// Helper: v catch (e: Exception) blocích v korutinách MUSÍ být CancellationException přehozena,
+// jinak korutina nelze zrušit a logcat se plní šumem.
+// Kontrolujeme java.util.concurrent.CancellationException (bázová třída) — pokryje
+// jak kotlinx.coroutines.CancellationException, tak java.util.concurrent.CancellationException.
+private fun Exception.rethrowIfCancellation() {
+    if (this is java.util.concurrent.CancellationException) throw this
 }
 
 class SecretaryViewModel : ViewModel() {
@@ -4917,6 +4928,7 @@ class SecretaryViewModel : ViewModel() {
                     onError(parseAuthError(res.code(), res.errorBody()?.string()))
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 onError(e.message?.let { Strings.connectionProblem(it) } ?: Strings.connectionError)
             }
         }
@@ -4955,6 +4967,7 @@ class SecretaryViewModel : ViewModel() {
                     onDone(false, parseBackendAdminError(res.code(), rawError, Strings.createUserFailed))
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 onDone(false, e.message ?: Strings.createUserFailed)
             }
         }
@@ -4967,8 +4980,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(backendRoles = res.body() ?: emptyList())
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Backend roles load error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend roles load error", e)
             }
         }
     }
@@ -4980,8 +4992,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(firstLoginUsers = res.body() ?: emptyList())
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "First login users load error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "First login users load error", e)
             }
         }
     }
@@ -5005,8 +5016,7 @@ class SecretaryViewModel : ViewModel() {
                         backendUsersError = parseBackendAdminError(res.code(), rawError, Strings.backendUsersLoadFailed)
                     )
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Backend users load error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend users load error", e)
                 _uiState.value = _uiState.value.copy(
                     backendUsers = emptyList(),
                     backendUsersLoading = false,
@@ -5044,8 +5054,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, parseBackendAdminError(res.code(), rawError, Strings.updateUserFailed))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Backend user update error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend user update error", e)
                 onDone(false, e.message ?: Strings.updateUserFailed)
             }
         }
@@ -5075,8 +5084,7 @@ class SecretaryViewModel : ViewModel() {
                         assistantMemoryError = Strings.assistantMemoryLoadFailed
                     )
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Assistant memory load error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Assistant memory load error", e)
                 _uiState.value = _uiState.value.copy(
                     assistantMemoryLoading = false,
                     assistantMemoryError = e.message ?: Strings.assistantMemoryLoadFailed
@@ -5097,8 +5105,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     _uiState.value = _uiState.value.copy(assistantMemoryError = Strings.assistantMemoryDeleteFailed)
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Assistant memory delete error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Assistant memory delete error", e)
                 _uiState.value = _uiState.value.copy(
                     assistantMemoryError = e.message ?: Strings.assistantMemoryDeleteFailed
                 )
@@ -5121,8 +5128,7 @@ class SecretaryViewModel : ViewModel() {
                         assistantMemoryError = Strings.assistantMemorySaveFailed
                     )
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Assistant memory save error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Assistant memory save error", e)
                 _uiState.value = _uiState.value.copy(
                     assistantMemoryLoading = false,
                     assistantMemoryError = e.message ?: Strings.assistantMemorySaveFailed
@@ -5163,8 +5169,7 @@ class SecretaryViewModel : ViewModel() {
                         hierarchyIntegrityError = Strings.hierarchyReportLoadFailed
                     )
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Hierarchy integrity load error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Hierarchy integrity load error", e)
                 _uiState.value = _uiState.value.copy(
                     hierarchyIntegrityLoading = false,
                     hierarchyIntegrityError = e.message ?: Strings.hierarchyReportLoadFailed
@@ -5212,8 +5217,7 @@ class SecretaryViewModel : ViewModel() {
                         adminActivityError = Strings.adminLogsLoadFailed
                     )
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Admin activity load error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Admin activity load error", e)
                 _uiState.value = _uiState.value.copy(
                     adminActivityLog = emptyList(),
                     adminActivityLoading = false,
@@ -5234,8 +5238,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, parseBackendAdminError(res.code(), rawError, Strings.passwordResetFailed))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Backend user password reset error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend user password reset error", e)
                 onDone(false, e.message ?: Strings.passwordResetFailed)
             }
         }
@@ -5252,8 +5255,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, parseBackendAdminError(res.code(), rawError, Strings.deleteUserFailed))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Backend user delete error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend user delete error", e)
                 onDone(false, e.message ?: Strings.deleteUserFailed)
             }
         }
@@ -5423,22 +5425,23 @@ class SecretaryViewModel : ViewModel() {
         loadFirstLoginUsers()
     }
 
-    fun tryRefreshToken(): Boolean {
+    suspend fun tryRefreshToken(): Boolean {
         val rt = settingsManager?.refreshToken ?: return false
-        return try {
-            val url = (settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL) + "auth/refresh"
-            val body = """{"refresh_token":"$rt"}""".toRequestBody("application/json; charset=utf-8".toMediaType())
-            val request = okhttp3.Request.Builder().url(url).post(body).build()
-            val response = okhttp3.OkHttpClient().newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = org.json.JSONObject(response.body?.string() ?: "{}")
-                settingsManager?.accessToken = json.optString("access_token").takeIf { it.isNotBlank() }
-                Log.d("ViewModel", "Token refreshed")
-                true
-            } else false
-        } catch (e: Exception) {
-            Log.e("ViewModel", "Token refresh error", e)
-            false
+        return withContext(Dispatchers.IO) {
+            try {
+                val url = (settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL) + "auth/refresh"
+                val body = """{"refresh_token":"$rt"}""".toRequestBody("application/json; charset=utf-8".toMediaType())
+                val request = okhttp3.Request.Builder().url(url).post(body).build()
+                val response = OkHttpClient().newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = org.json.JSONObject(response.body?.string() ?: "{}")
+                    settingsManager?.accessToken = json.optString("access_token").takeIf { it.isNotBlank() }
+                    Log.d("ViewModel", "Token refreshed OK")
+                    true
+                } else false
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Token refresh error", e)
+                false
+            }
         }
     }
     
@@ -5457,8 +5460,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     _uiState.value = _uiState.value.copy(onboardingComplete = false)
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Onboarding check error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Onboarding check error", e)
                 _uiState.value = _uiState.value.copy(onboardingComplete = true) // fallback: skip onboarding if server unreachable
             }
         }
@@ -5485,6 +5487,7 @@ class SecretaryViewModel : ViewModel() {
                     Log.e("ViewModel", "Tenant config HTTP error: ${res.code()}")
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _uiState.value = _uiState.value.copy(
                     tenantConfigError = e.message ?: "Network error",
                     tenantConfigRefreshMs = System.currentTimeMillis()
@@ -5507,6 +5510,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) versionInfo = res.body()
                 else errors["version"] = "HTTP ${res.code()}"
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 errors["version"] = e.message ?: "error"
                 Log.e("ViewModel", "loadSettings /version error", e)
             }
@@ -5517,6 +5521,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) profile = res.body()
                 else errors["profile"] = "HTTP ${res.code()}"
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 errors["profile"] = e.message ?: "error"
                 Log.e("ViewModel", "loadSettings /tenant/profile error", e)
             }
@@ -5527,6 +5532,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) languages = res.body()
                 else errors["languages"] = "HTTP ${res.code()}"
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 errors["languages"] = e.message ?: "error"
                 Log.e("ViewModel", "loadSettings /tenant/languages error", e)
             }
@@ -5558,8 +5564,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, parseBackendAdminError(res.code(), rawError, Strings.save))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Customer language update error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Customer language update error", e)
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -5606,7 +5611,7 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(onboardingComplete = true)
                     onSuccess()
                 } else { onError("Server: ${res.code()} ${res.message()}") }
-            } catch (e: Exception) { onError(e.message ?: "Chyba") }
+            } catch (e: Exception) { e.rethrowIfCancellation(); onError(e.message ?: "Chyba") }
         }
     }
 
@@ -5614,7 +5619,7 @@ class SecretaryViewModel : ViewModel() {
         return try {
             val res = api.getCommunications()
             if (res.isSuccessful) res.body() ?: emptyList() else emptyList()
-        } catch (e: Exception) { Log.e("ViewModel", "Load comms error", e); emptyList() }
+        } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Load comms error", e); emptyList() }
     }
 
     suspend fun syncWhatsappAddressesFromMessages(): Pair<Int, Int> {
@@ -5678,7 +5683,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 api.addPhoto(mapOf("entity_type" to "task", "entity_id" to taskId, "filename" to filename, "file_path" to filePath, "description" to "Fotodokumentace"))
-            } catch (e: Exception) { Log.e("ViewModel", "Save photo error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Save photo error", e) }
         }
     }
 
@@ -5695,7 +5700,7 @@ class SecretaryViewModel : ViewModel() {
             }
             calendarManager?.addEvent(task.title, startMs, endMs, description)
             setStatus(Strings.addedToCalendar(task.title))
-        } catch (e: Exception) { Log.e("ViewModel", "Calendar add error", e); setStatus(Strings.connectionError) }
+        } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Calendar add error", e); setStatus(Strings.connectionError) }
     }
 
     fun syncPlanningCalendar() {
@@ -5739,7 +5744,7 @@ class SecretaryViewModel : ViewModel() {
                         voiceManager?.speak(prompt, expectReply = true)
                     }
                 }
-            } catch (e: Exception) { Log.e("ViewModel", "Resume session error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Resume session error", e) }
         }
     }
 
@@ -5776,8 +5781,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     onDone?.invoke(false, parseWorkflowError(res.code(), res.errorBody()?.string(), Strings.completeTask))
                 }
-            } catch (e: Exception) {
-                Log.e("Task", "Complete sync error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("Task", "Complete sync error", e)
                 onDone?.invoke(false, e.message ?: Strings.hierarchyActionFailed)
             }
         }
@@ -5810,8 +5814,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     onDone(false, parseWorkflowError(res.code(), res.errorBody()?.string(), Strings.newTask))
                 }
-            } catch (e: Exception) {
-                Log.e("Task", "Create sync error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("Task", "Create sync error", e)
                 onDone(false, e.message ?: Strings.hierarchyActionFailed)
             }
         }
@@ -5891,6 +5894,7 @@ class SecretaryViewModel : ViewModel() {
                         api.summarizeSession(req)
                     }
                 } catch (e: Exception) {
+                    e.rethrowIfCancellation()
                     android.util.Log.w("Dialog", "Session summarize failed: ${e.message}")
                 }
             }
@@ -5905,6 +5909,7 @@ class SecretaryViewModel : ViewModel() {
             val json = history.joinToString("|||") { "${it.role}::${it.content.replace("|||", "")}" }
             sm.prefsPublic.edit().putString("dialog_history_v1", json).apply()
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             android.util.Log.w("Dialog", "Persist history failed: ${e.message}")
         }
     }
@@ -5920,6 +5925,7 @@ class SecretaryViewModel : ViewModel() {
                 else null
             }
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             emptyList()
         }
     }
@@ -5975,6 +5981,7 @@ class SecretaryViewModel : ViewModel() {
                 api.addJobAuditEntry(jobId, data)
                 loadJobDetail(jobId)
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 e.printStackTrace()
             }
         }
@@ -5996,6 +6003,7 @@ class SecretaryViewModel : ViewModel() {
                     addJobAuditEntry(jobId, "photo_upload", "Uploaded $photoType photo: ${file.name}")
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 e.printStackTrace()
             }
         }
@@ -6035,6 +6043,7 @@ class SecretaryViewModel : ViewModel() {
                     onDone(false, parseAuthError(response.code(), response.errorBody()?.string()))
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 onDone(false, e.message?.let { Strings.connectionProblem(it) } ?: Strings.connectionError)
             }
         }
@@ -6096,6 +6105,7 @@ class SecretaryViewModel : ViewModel() {
                     if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 val message = parseRecognitionThrowable(e, Strings.plantRecognitionFailed)
                 _uiState.value = _uiState.value.copy(
                     plantRecognitionLoading = false,
@@ -6161,6 +6171,7 @@ class SecretaryViewModel : ViewModel() {
                     if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 val message = parseRecognitionThrowable(e, Strings.plantHealthFailed)
                 _uiState.value = _uiState.value.copy(
                     plantDiseaseLoading = false,
@@ -6226,6 +6237,7 @@ class SecretaryViewModel : ViewModel() {
                     if (voiceTriggered) voiceManager?.speak(errorText, expectReply = false)
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 val message = parseRecognitionThrowable(e, Strings.mushroomRecognitionFailed)
                 _uiState.value = _uiState.value.copy(
                     mushroomRecognitionLoading = false,
@@ -6320,8 +6332,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(recognitionHistory = res.body() ?: emptyList())
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Nature history load error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Nature history load error", e)
             }
         }
     }
@@ -6344,7 +6355,7 @@ class SecretaryViewModel : ViewModel() {
                 loadCalendarFeedFromServer()
                 loadHierarchyIntegrity()
                 loadTenantRateTypes()
-            } catch (e: Exception) { Log.e("ViewModel", "Refresh Error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Refresh Error", e) }
         }
     }
 
@@ -6365,7 +6376,7 @@ class SecretaryViewModel : ViewModel() {
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
                 loadHierarchyIntegrity()
-            } catch (e: Exception) { Log.e("ViewModel", "Refresh Error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Refresh Error", e) }
         }
     }
 
@@ -6385,8 +6396,7 @@ class SecretaryViewModel : ViewModel() {
                     calendarManager?.syncPlanningEntries(entries)
                 }
             }
-        } catch (e: Exception) {
-            Log.e("ViewModel", "Calendar feed load error", e)
+        } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Calendar feed load error", e)
         }
     }
 
@@ -6416,7 +6426,7 @@ class SecretaryViewModel : ViewModel() {
                 }
                 _uiState.value = _uiState.value.copy(workReports = reports)
             }
-        } catch (e: Exception) { Log.e("ViewModel", "Work reports load error", e) }
+        } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Work reports load error", e) }
     }
     private suspend fun loadTasksFromServer() {
         try {
@@ -6452,7 +6462,7 @@ class SecretaryViewModel : ViewModel() {
                 val localOnly = _uiState.value.tasks.filter { it.id !in serverIds }
                 _uiState.value = _uiState.value.copy(tasks = serverTasks + localOnly)
             }
-        } catch (e: Exception) { Log.e("ViewModel", "Tasks load error", e) }
+        } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Tasks load error", e) }
     }
 
     fun loadTenantRateTypes() {
@@ -6462,8 +6472,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(tenantRateTypes = res.body() ?: emptyList())
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Load rate types error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Load rate types error", e)
             }
         }
     }
@@ -6483,8 +6492,7 @@ class SecretaryViewModel : ViewModel() {
                     tenantActivityPricing = if (pRes.isSuccessful) pRes.body() ?: emptyList() else emptyList(),
                     activityTemplatesLoading = false
                 )
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Load activity templates error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Load activity templates error", e)
                 _uiState.value = _uiState.value.copy(activityTemplatesLoading = false)
             }
         }
@@ -6502,8 +6510,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val res = api.upsertTenantActivityPricing(1, templateId, data)
                 if (res.isSuccessful) onDone()
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Upsert activity pricing error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Upsert activity pricing error", e)
             }
         }
     }
@@ -6513,8 +6520,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val res = api.resetTenantActivityPricing(1, templateId)
                 if (res.isSuccessful) onDone()
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Reset activity pricing error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Reset activity pricing error", e)
             }
         }
     }
@@ -6525,7 +6531,7 @@ class SecretaryViewModel : ViewModel() {
                 val res = api.getSettings()
                 if (res.isSuccessful) _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED, systemSettings = res.body() ?: emptyMap(), status = Strings.connected)
                 else _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = Strings.serverUnavailable)
-            } catch (e: Exception) { _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = Strings.disconnected) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = Strings.disconnected) }
         }
     }
 
@@ -6544,6 +6550,7 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(toolHubTilesLoading = false)
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _uiState.value = _uiState.value.copy(toolHubTilesLoading = false)
             }
         }
@@ -6567,6 +6574,7 @@ class SecretaryViewModel : ViewModel() {
                     )
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _uiState.value = _uiState.value.copy(
                     connectionStatus = ConnectionStatus.DISCONNECTED,
                     status = Strings.disconnected
@@ -6583,7 +6591,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(selectedClientDetail = res.body())
                 }
-            } catch (e: Exception) { Log.e("ViewModel", "Detail Error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Detail Error", e) }
         }
     }
 
@@ -6613,8 +6621,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     onDone(false, parseWorkflowError(res.code(), res.errorBody()?.string(), Strings.newClientTitle))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Create client error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create client error", e)
                 onDone(false, e.message ?: Strings.hierarchyActionFailed)
             }
         }
@@ -6625,7 +6632,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val res = api.updateClient(clientId, data)
                 if (res.isSuccessful) { loadClientDetail(clientId); refreshCrmData() }
-            } catch (e: Exception) { Log.e("ViewModel", "Update client error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update client error", e) }
         }
     }
 
@@ -6648,8 +6655,7 @@ class SecretaryViewModel : ViewModel() {
                     }?.trim()
                     onDone(false, detail ?: Strings.backendActionFailed(Strings.individualServiceRates, res.code()))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Update client service rates error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update client service rates error", e)
                 onDone(false, e.message ?: Strings.backendActionFailed(Strings.individualServiceRates, 0))
             }
         }
@@ -6660,7 +6666,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val res = api.addClientNote(clientId, mapOf("note" to note))
                 if (res.isSuccessful) loadClientDetail(clientId)
-            } catch (e: Exception) { Log.e("ViewModel", "Add note error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add note error", e) }
         }
     }
 
@@ -6772,8 +6778,7 @@ class SecretaryViewModel : ViewModel() {
                     }
                     onDone(emptyList(), detail ?: Strings.serverError(res.code()))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Load client selection contacts error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Load client selection contacts error", e)
                 onDone(emptyList(), e.message ?: Strings.connectionError)
             }
         }
@@ -6818,8 +6823,7 @@ class SecretaryViewModel : ViewModel() {
                     }
                     onDone(false, detail ?: Strings.serverError(res.code()))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Save client selection contacts error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Save client selection contacts error", e)
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -6850,8 +6854,7 @@ class SecretaryViewModel : ViewModel() {
                     )
                 }
                 onDone(contacts, null)
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Load importable shared contacts error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Load importable shared contacts error", e)
                 onDone(emptyList(), e.message ?: Strings.connectionError)
             }
         }
@@ -6868,8 +6871,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, rawError ?: Strings.serverError(res.code()))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Create contact section error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create contact section error", e)
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -6886,8 +6888,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, rawError ?: Strings.serverError(res.code()))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Save shared contact error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Save shared contact error", e)
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -6904,8 +6905,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, rawError ?: Strings.serverError(res.code()))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Delete shared contact error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Delete shared contact error", e)
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -6937,8 +6937,7 @@ class SecretaryViewModel : ViewModel() {
                     val rawError = res.errorBody()?.string()
                     onDone(false, rawError ?: Strings.serverError(res.code()))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Import shared contacts error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Import shared contacts error", e)
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -6959,7 +6958,7 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     refreshCrmData()
                 }
-            } catch (e: Exception) { Log.e("ViewModel", "Sync contacts error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Sync contacts error", e) }
         }
     }
 
@@ -6968,7 +6967,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 api.updateLead(leadId, data)
                 refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Update lead error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update lead error", e) }
         }
     }
 
@@ -6978,7 +6977,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf<String, Any?>("client_id" to clientId, "grand_total" to amount, "due_date" to dueDate)
                 api.createInvoice(data)
                 refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Create invoice error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create invoice error", e) }
         }
     }
 
@@ -6988,7 +6987,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf<String, Any?>("status" to status)
                 api.updateInvoice(invoiceId, data)
                 refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Update invoice error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update invoice error", e) }
         }
     }
 
@@ -6999,7 +6998,7 @@ class SecretaryViewModel : ViewModel() {
                     "total_hours" to totalHours, "total_price" to totalPrice, "notes" to notes, "input_type" to "manual", "status" to "draft")
                 api.createWorkReport(data)
                 refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Create work report error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create work report error", e) }
         }
     }
 
@@ -7016,7 +7015,7 @@ class SecretaryViewModel : ViewModel() {
                     addJobAuditEntry(jobId, "note_added", "Added $noteType note: $note")
                     loadJobDetail(jobId)
                 }
-            } catch (e: Exception) { Log.e("ViewModel", "Add job note error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add job note error", e) }
         }
     }
 
@@ -7026,7 +7025,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf<String, Any?>("client_id" to clientId, "quote_title" to title)
                 api.createQuote(data)
                 refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Create quote error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create quote error", e) }
         }
     }
 
@@ -7036,7 +7035,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf<String, Any?>("create_job" to createJob)
                 api.approveQuote(quoteId, data)
                 refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Approve quote error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Approve quote error", e) }
         }
     }
 
@@ -7046,7 +7045,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf<String, Any?>("description" to description, "quantity" to qty, "unit_price" to price)
                 api.addQuoteItem(quoteId, data)
                 refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Add quote item error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add quote item error", e) }
         }
     }
 
@@ -7079,8 +7078,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     onDone(false, parseWorkflowError(res.code(), res.errorBody()?.string(), Strings.newJob))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Create job error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create job error", e)
                 onDone(false, e.message ?: Strings.hierarchyActionFailed)
             }
         }
@@ -7092,7 +7090,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val res = api.getJobDetail(jobId)
                 if (res.isSuccessful) _uiState.value = _uiState.value.copy(selectedJobDetail = res.body())
-            } catch (e: Exception) { Log.e("ViewModel", "Job detail error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Job detail error", e) }
         }
     }
 
@@ -7101,7 +7099,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val res = api.updateJob(jobId, data)
                 if (res.isSuccessful) { loadJobDetail(jobId); refreshCrmData() }
-            } catch (e: Exception) { Log.e("ViewModel", "Update job error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update job error", e) }
         }
     }
 
@@ -7134,8 +7132,7 @@ class SecretaryViewModel : ViewModel() {
                 } else {
                     onDone?.invoke(false, parseWorkflowError(res.code(), res.errorBody()?.string(), Strings.edit))
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Update task error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update task error", e)
                 onDone?.invoke(false, e.message ?: Strings.hierarchyActionFailed)
             }
         }
@@ -7149,7 +7146,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf("name" to name, "source" to source, "email" to email, "phone" to phone, "description" to description)
                 val res = api.createLead(data)
                 if (res.isSuccessful) refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Create lead error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create lead error", e) }
         }
     }
 
@@ -7159,7 +7156,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf("name" to name, "email" to email, "phone" to phone)
                 val res = api.convertLeadToClient(leadId, data)
                 if (res.isSuccessful) refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Convert lead error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Convert lead error", e) }
         }
     }
 
@@ -7169,7 +7166,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf<String, Any?>("title" to title)
                 val res = api.convertLeadToJob(leadId, data)
                 if (res.isSuccessful) refreshCrmData()
-            } catch (e: Exception) { Log.e("ViewModel", "Convert lead to job error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Convert lead to job error", e) }
         }
     }
 
@@ -7179,7 +7176,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = mapOf<String, Any?>("client_id" to clientId, "job_id" to jobId, "comm_type" to commType, "subject" to subject, "message" to message, "direction" to direction)
                 api.logCommunication(data)
                 if (clientId != null) loadClientDetail(clientId)
-            } catch (e: Exception) { Log.e("ViewModel", "Log comm error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Log comm error", e) }
         }
     }
 
@@ -7188,7 +7185,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val data = mapOf<String, Any?>("entity_type" to entityType, "entity_id" to entityId, "filename" to filename, "description" to description, "file_path" to filePath)
                 api.addPhoto(data)
-            } catch (e: Exception) { Log.e("ViewModel", "Add photo error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add photo error", e) }
         }
     }
 
@@ -7212,7 +7209,7 @@ class SecretaryViewModel : ViewModel() {
                     )
                     voiceManager?.speak(prompt, expectReply = true)
                 }
-            } catch (e: Exception) { Log.e("ViewModel", "Start voice session error", e) }
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Start voice session error", e) }
         }
     }
 
@@ -7242,8 +7239,7 @@ class SecretaryViewModel : ViewModel() {
                         voiceManager?.speak(prompt, expectReply = true)
                     }
                 }
-            } catch (e: Exception) {
-                Log.e("ViewModel", "Voice session input error", e)
+            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Voice session input error", e)
                 voiceManager?.speak(Strings.connectionError, expectReply = true)
             }
         }
@@ -7266,6 +7262,7 @@ class SecretaryViewModel : ViewModel() {
             }
             context.startActivity(intent)
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(android.content.Intent.EXTRA_TEXT, message)
@@ -7366,6 +7363,7 @@ class SecretaryViewModel : ViewModel() {
                         matchedAlias       = c["matched_alias"]?.toString() ?: "",
                         matchConfidence    = (c["match_confidence"] as? Number)?.toFloat() ?: 0f,
                         disambiguationHint = c["disambiguation_hint"]?.toString() ?: "",
+                        phonePrimary       = c["phone_primary"]?.toString() ?: "",
                         aliasType          = c["alias_type"]?.toString() ?: ""
                     )
                 } ?: emptyList()
@@ -7410,12 +7408,15 @@ class SecretaryViewModel : ViewModel() {
                         status = Strings.waitingForCommand,
                         pendingVoiceResolve = result
                     )
-                    val msg = "Chceš opravdu: ${result.actionCode ?: result.controlCode}?"
+                    val msg = Strings.voiceConfirmAction(result.clarificationQuestion
+                        ?: result.actionCode?.replace("_", " ")?.trim()
+                        ?: result.controlCode ?: "tuto akci")
                     voiceManager?.speak(msg, expectReply = true)
                     true
                 }
             }
         } catch (e: Exception) {
+            e.rethrowIfCancellation()
             Log.w("VoiceResolve", "tryVoiceResolveSuspend error: ${e.message}")
             false
         }
@@ -7462,14 +7463,14 @@ class SecretaryViewModel : ViewModel() {
         val action = result.actionCode ?: result.controlCode
         when {
             action?.contains("call") == true -> {
-                val phone = candidate.disambiguationHint.takeIf { it.isNotBlank() }
+                val phone = candidate.phonePrimary.takeIf { it.isNotBlank() }
                 if (phone != null) startVoiceCallTarget(phone, result.originalText)
-                else voiceManager?.speak("Nemám číslo pro ${candidate.displayName}.")
+                else voiceManager?.speak(Strings.noPhoneAvailableFor(candidate.displayName))
             }
             action?.contains("whatsapp") == true -> {
-                val phone = candidate.disambiguationHint.takeIf { it.isNotBlank() }
+                val phone = candidate.phonePrimary.takeIf { it.isNotBlank() }
                 if (phone != null) startVoiceWhatsApp(WhatsAppVoiceCommand(target = phone, message = result.originalText), result.originalText)
-                else voiceManager?.speak("Nemám WhatsApp číslo pro ${candidate.displayName}.")
+                else voiceManager?.speak(Strings.noPhoneAvailableFor(candidate.displayName))
             }
             else -> {
                 // Generic: navigate to contact's client detail if source_client_id known
@@ -7532,8 +7533,7 @@ class SecretaryViewModel : ViewModel() {
         Strings.matchesNavigationCommand(text)?.let { target ->
             val route = when (target) {
                 "home" -> Screen.Home.route
-                "crm", "clients", "jobs", "leads", "quotes", "invoices", "reports", "contacts" -> Screen.Crm.route
-                "tasks" -> Screen.Tasks.route
+                "crm", "clients", "jobs", "tasks", "leads", "quotes", "invoices", "reports", "contacts", "communications" -> Screen.Crm.route
                 "calendar" -> Screen.Calendar.route
                 "tools" -> Screen.Tools.route
                 "settings" -> Screen.Settings.route
@@ -7665,11 +7665,10 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 // 10. VOICE RESOLVE — try AI control bridge first (screen-aware resolver)
-                val screenCode = _uiState.value.currentScreenCode
-                if (screenCode != null) {
-                    val handled = tryVoiceResolveSuspend(text, screenCode)
-                    if (handled) return@launch
-                }
+                // Use "global" as fallback screen code if context not yet set (cold start)
+                val screenCode = _uiState.value.currentScreenCode ?: "global"
+                val handled = tryVoiceResolveSuspend(text, screenCode)
+                if (handled) return@launch
 
                 // 11. AI SERVER FALLBACK
                 val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -7701,6 +7700,7 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(status = Strings.serverError(res.code()))
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 _uiState.value = _uiState.value.copy(status = Strings.connectionError)
                 voiceManager?.speak(Strings.cantReachServer)
             }
@@ -8082,6 +8082,7 @@ class SecretaryViewModel : ViewModel() {
                         }
                     } ?: emptyList()
                 } catch (e: Exception) {
+                    e.rethrowIfCancellation()
                     android.util.Log.w("ContactSort", "Parse error: ${e.message}")
                     emptyList()
                 }
@@ -8102,6 +8103,7 @@ class SecretaryViewModel : ViewModel() {
                 _uiState.value = _uiState.value.copy(contactSortingSession = session, isDialogMode = true)
                 announceCurrentSortingContact(session)
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 voiceManager?.speak(Strings.errorLoadingContacts, expectReply = false)
                 android.util.Log.e("ContactSort", "Error: ${e.message}")
             }
@@ -8224,6 +8226,7 @@ class SecretaryViewModel : ViewModel() {
                         "contact_id" to contact.existingId
                     ).filterValues { it != null })
                 } catch (e: Exception) {
+                    e.rethrowIfCancellation()
                     android.util.Log.w("ContactSort", "Assign failed: ${e.message}")
                 }
             }
@@ -8270,6 +8273,7 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(contactDuplicates = dupes)
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 android.util.Log.w("ContactMerge", "Duplicate check failed: ${e.message}")
             }
         }
@@ -8289,6 +8293,7 @@ class SecretaryViewModel : ViewModel() {
                     refreshSharedContacts()
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 android.util.Log.e("ContactMerge", "Merge failed: ${e.message}")
             }
         }
@@ -8528,6 +8533,7 @@ class SecretaryViewModel : ViewModel() {
                             res.body()?.get("translated")?.toString()?.takeIf { it.isNotBlank() } ?: cleanMessage
                         } else cleanMessage
                     } catch (e: Exception) {
+                        e.rethrowIfCancellation()
                         android.util.Log.w("WhatsApp", "Translation failed, using original: ${e.message}")
                         cleanMessage
                     }
@@ -8552,6 +8558,7 @@ class SecretaryViewModel : ViewModel() {
                         voiceManager?.speak(confirmMsg, expectReply = _uiState.value.isDialogMode)
                     }
                 } catch (e: Exception) {
+                    e.rethrowIfCancellation()
                     android.util.Log.w("WhatsApp", "Server send failed, falling back to intent: ${e.message}")
                 }
                 if (!sentViaServer) {
@@ -9118,7 +9125,7 @@ class SecretaryViewModel : ViewModel() {
                     val date = sdf.parse(startTimeStr) ?: return
                     val duration = (data["duration"] as? Double)?.toLong() ?: 60L
                     calendarManager?.addEvent(title, date.time, date.time + (duration * 60000))
-                } catch (e: Exception) { Log.e("Action", "Calendar error", e) }
+                } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("Action", "Calendar error", e) }
             }
             "DELETE_CALENDAR_EVENT" -> {
                 val data = response.action_data ?: return
@@ -9146,7 +9153,7 @@ class SecretaryViewModel : ViewModel() {
                         start = date?.time
                         val duration = (data["duration"] as? Double)?.toLong() ?: 60L
                         if (start != null) end = start + (duration * 60000)
-                    } catch (e: Exception) { }
+                    } catch (e: Exception) { e.rethrowIfCancellation() }
                 }
                 calendarManager?.updateEvent(eventId, title, start, end)
             }
@@ -9173,7 +9180,7 @@ class SecretaryViewModel : ViewModel() {
                         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
                         val time = if (newTime != null) sdf.parse(newTime)?.time ?: System.currentTimeMillis() else System.currentTimeMillis()
                         calendarManager?.addEvent(newTitle ?: eventTitle, time, time + 3600000)
-                    } catch (e: Exception) { Log.e("Action", "Modify calendar", e) }
+                    } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("Action", "Modify calendar", e) }
                 }
             }
             "CREATE_TASK" -> {
@@ -9247,6 +9254,7 @@ class SecretaryViewModel : ViewModel() {
                                 voiceManager?.speak(confirmMsg, expectReply = _uiState.value.isDialogMode)
                             }
                         } catch (e: Exception) {
+                            e.rethrowIfCancellation()
                             android.util.Log.w("WhatsApp", "Server send failed, fallback: ${e.message}")
                         }
                         if (!sentViaServer) {
@@ -9305,6 +9313,7 @@ class SecretaryViewModel : ViewModel() {
                     onDone?.invoke(false, msg ?: Strings.backendActionFailed(Strings.serviceRates, res.code()))
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 onDone?.invoke(false, e.message ?: Strings.connectionError)
             }
         }
@@ -9328,6 +9337,7 @@ class SecretaryViewModel : ViewModel() {
                     onDone(false, msg ?: Strings.backendActionFailed(Strings.addCustomRateType, res.code()))
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -9347,6 +9357,7 @@ class SecretaryViewModel : ViewModel() {
                     onDone(false, msg ?: Strings.backendActionFailed(Strings.deleteRateType, res.code()))
                 }
             } catch (e: Exception) {
+                e.rethrowIfCancellation()
                 onDone(false, e.message ?: Strings.connectionError)
             }
         }
@@ -9431,6 +9442,7 @@ data class VoiceDisambiguationCandidate(
     val matchedAlias: String,
     val matchConfidence: Float,
     val disambiguationHint: String,
+    val phonePrimary: String,
     val aliasType: String
 )
 
