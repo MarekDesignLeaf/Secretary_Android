@@ -206,11 +206,11 @@ SELECT id, 'lettings_coordination', 'Lettings coordination', 10, true FROM indus
 ON CONFLICT DO NOTHING;
 
 INSERT INTO tenants (name, slug, status)
-VALUES ('DesignLeaf', 'designleaf', 'active')
+VALUES ('Secretary', 'secretary', 'active')
 ON CONFLICT (slug) DO NOTHING;
 
 INSERT INTO tenant_settings (tenant_id, date_format, time_format, email_enabled, whatsapp_enabled, voice_enabled, client_portal_enabled)
-SELECT id, 'DD/MM/YYYY', '24h', true, true, true, false FROM tenants WHERE slug = 'designleaf'
+SELECT id, 'DD/MM/YYYY', '24h', true, true, true, false FROM tenants WHERE slug = 'secretary'
 ON CONFLICT (tenant_id) DO NOTHING;
 
 INSERT INTO tenant_operating_profile (
@@ -240,36 +240,36 @@ SELECT
     ist.id
 FROM tenants t
 LEFT JOIN industry_groups ig ON ig.code = 'trades'
-LEFT JOIN industry_subtypes ist ON ist.industry_group_id = ig.id AND ist.code = 'landscaping'
-WHERE t.slug = 'designleaf'
+-- LEFT JOIN industry_subtypes ist ON ist.industry_group_id = ig.id AND ist.code = 'landscaping'  -- removed: no default industry
+WHERE t.slug = 'secretary'
 ON CONFLICT (tenant_id) DO NOTHING;
 
 INSERT INTO tenant_languages (tenant_id, language_code, language_scope, is_default, is_active, sort_order)
-SELECT id, 'cs-CZ', 'internal', true, true, 10 FROM tenants WHERE slug = 'designleaf'
+SELECT id, 'cs-CZ', 'internal', true, true, 10 FROM tenants WHERE slug = 'secretary'
 ON CONFLICT (tenant_id, language_code, language_scope) DO NOTHING;
 
 INSERT INTO tenant_languages (tenant_id, language_code, language_scope, is_default, is_active, sort_order)
-SELECT id, 'en-GB', 'customer', true, true, 10 FROM tenants WHERE slug = 'designleaf'
+SELECT id, 'en-GB', 'customer', true, true, 10 FROM tenants WHERE slug = 'secretary'
 ON CONFLICT (tenant_id, language_code, language_scope) DO NOTHING;
 
 INSERT INTO tenant_languages (tenant_id, language_code, language_scope, is_default, is_active, sort_order)
-SELECT id, 'cs-CZ', 'voice_input', true, true, 10 FROM tenants WHERE slug = 'designleaf'
+SELECT id, 'cs-CZ', 'voice_input', true, true, 10 FROM tenants WHERE slug = 'secretary'
 ON CONFLICT (tenant_id, language_code, language_scope) DO NOTHING;
 
 INSERT INTO tenant_languages (tenant_id, language_code, language_scope, is_default, is_active, sort_order)
-SELECT id, 'en-GB', 'voice_output', true, true, 10 FROM tenants WHERE slug = 'designleaf'
+SELECT id, 'en-GB', 'voice_output', true, true, 10 FROM tenants WHERE slug = 'secretary'
 ON CONFLICT (tenant_id, language_code, language_scope) DO NOTHING;
 
 INSERT INTO subscription_limits (tenant_id, max_users, max_clients, max_jobs_per_month, max_voice_minutes)
-SELECT id, 10, 1000, 500, 10000 FROM tenants WHERE slug = 'designleaf'
+SELECT id, 10, 1000, 500, 10000 FROM tenants WHERE slug = 'secretary'
 ON CONFLICT (tenant_id) DO NOTHING;
 
 INSERT INTO tenant_industry_profile (tenant_id, industry_group_id, industry_subtype_id, is_primary)
 SELECT t.id, ig.id, ist.id, true
 FROM tenants t
 JOIN industry_groups ig ON ig.code = 'trades'
-LEFT JOIN industry_subtypes ist ON ist.industry_group_id = ig.id AND ist.code = 'landscaping'
-WHERE t.slug = 'designleaf'
+-- LEFT JOIN industry_subtypes ist ON ist.industry_group_id = ig.id AND ist.code = 'landscaping'  -- removed: no default industry
+WHERE t.slug = 'secretary'
 ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS migration_log (

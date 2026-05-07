@@ -5796,25 +5796,25 @@ RULES:
                         cur.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS source TEXT")
                         conn.commit()
                         stats = {}
-                        cur.execute("SELECT COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=1")
+                        cur.execute("SELECT COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=tenant_id")
                         stats["total_clients"] = cur.fetchone()["cnt"]
-                        cur.execute("SELECT status, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=1 GROUP BY status")
+                        cur.execute("SELECT status, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=tenant_id GROUP BY status")
                         stats["by_status"] = {r["status"]: r["cnt"] for r in cur.fetchall()}
-                        cur.execute("SELECT COALESCE(source,'unknown') as src, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=1 GROUP BY COALESCE(source,'unknown')")
+                        cur.execute("SELECT COALESCE(source,'unknown') as src, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=tenant_id GROUP BY COALESCE(source,'unknown')")
                         stats["by_source"] = {r["src"]: r["cnt"] for r in cur.fetchall()}
-                        cur.execute("SELECT client_type, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=1 GROUP BY client_type")
+                        cur.execute("SELECT client_type, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=tenant_id GROUP BY client_type")
                         stats["by_type"] = {r["client_type"]: r["cnt"] for r in cur.fetchall()}
-                        cur.execute("SELECT is_commercial, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=1 GROUP BY is_commercial")
+                        cur.execute("SELECT is_commercial, COUNT(*) as cnt FROM clients WHERE deleted_at IS NULL AND tenant_id=tenant_id GROUP BY is_commercial")
                         stats["commercial"] = {str(r["is_commercial"]): r["cnt"] for r in cur.fetchall()}
-                        cur.execute("SELECT display_name, phone_primary, email_primary, COALESCE(source,'?') as source, created_at::text FROM clients WHERE deleted_at IS NULL AND tenant_id=1 ORDER BY created_at DESC LIMIT 5")
+                        cur.execute("SELECT display_name, phone_primary, email_primary, COALESCE(source,'?') as source, created_at::text FROM clients WHERE deleted_at IS NULL AND tenant_id=tenant_id ORDER BY created_at DESC LIMIT 5")
                         stats["recent_5"] = [dict(r) for r in cur.fetchall()]
                         cur.execute("SELECT COUNT(*) as cnt FROM jobs WHERE deleted_at IS NULL")
                         stats["total_jobs"] = cur.fetchone()["cnt"]
-                        cur.execute("SELECT COUNT(*) as cnt FROM leads WHERE tenant_id=1")
+                        cur.execute("SELECT COUNT(*) as cnt FROM leads WHERE tenant_id=tenant_id")
                         stats["total_leads"] = cur.fetchone()["cnt"]
-                        cur.execute("SELECT COUNT(*) as cnt FROM invoices WHERE tenant_id=1")
+                        cur.execute("SELECT COUNT(*) as cnt FROM invoices WHERE tenant_id=tenant_id")
                         stats["total_invoices"] = cur.fetchone()["cnt"]
-                        cur.execute("SELECT COUNT(*) as cnt FROM tasks WHERE tenant_id=1")
+                        cur.execute("SELECT COUNT(*) as cnt FROM tasks WHERE tenant_id=tenant_id")
                         stats["total_tasks"] = cur.fetchone()["cnt"]
                     # Build human-readable answer
                     lines = [tr("📊 CRM database:", "📊 Databáze CRM:", "📊 Baza CRM:")]
@@ -8694,7 +8694,7 @@ async def export_csv():
 
 # ========== SYSTEM ==========
 @app.get("/system/settings")
-async def get_settings():
+async def get_settings(tenant_id: int = Query(default=1)):
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
@@ -8703,11 +8703,11 @@ async def get_settings():
             cur.execute("SELECT COUNT(*) as cnt FROM tasks"); tc = cur.fetchone()['cnt']
             cur.execute("SELECT COUNT(*) as cnt FROM leads"); lc = cur.fetchone()['cnt']
             cur.execute("SELECT COUNT(*) as cnt FROM users WHERE deleted_at IS NULL"); uc = cur.fetchone()['cnt']
-            cur.execute("SELECT workspace_mode, max_active_users FROM tenant_operating_profile WHERE tenant_id=1")
+            cur.execute("SELECT workspace_mode, max_active_users FROM tenant_operating_profile WHERE tenant_id=%s", (tenant_id,))
             op = cur.fetchone() or {}
-            cur.execute("SELECT max_users FROM subscription_limits WHERE tenant_id=1")
+            cur.execute("SELECT max_users FROM subscription_limits WHERE tenant_id=%s", (tenant_id,))
             sl = cur.fetchone() or {}
-            ts = _get_tenant_settings(conn, 1)
+            ts = _get_tenant_settings(conn, tenant_id)
             return {"company_name": ts.get("company_name","Secretary CRM"), "version": ts.get("app_version","1.0.0"), "database":"PostgreSQL",
                     "clients_count":cc,"jobs_count":jc,"tasks_count":tc,"leads_count":lc,
                     "users_count":uc,
@@ -10988,9 +10988,8 @@ async def get_version():
             release_conn(conn)
 
 @app.get("/tenant/profile")
-async def get_tenant_profile():
+async def get_tenant_profile(tenant_id: int = Query(default=1)):
     conn = None
-    tenant_id = 1
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
@@ -11041,9 +11040,8 @@ async def get_tenant_profile():
             release_conn(conn)
 
 @app.get("/tenant/languages")
-async def get_tenant_languages():
+async def get_tenant_languages(tenant_id: int = Query(default=1)):
     conn = None
-    tenant_id = 1
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
