@@ -363,135 +363,136 @@ def apply_python_repair_024(conn):
     Runs BEFORE seed_industry_catalog so ON CONFLICT clauses work correctly.
     Idempotent — checks migration_log and skips if already applied."""
     REPAIR_NAME = '2026_05_07_python_repair_024.py'
-    with conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM migration_log WHERE filename=%s", (REPAIR_NAME,))
-        if cur.fetchone():
-            return  # already applied
+    print(f"repair 024: checking if already applied...")
+    try:
+        with conn.cursor() as chk:
+            chk.execute("SELECT 1 FROM migration_log WHERE filename=%s", (REPAIR_NAME,))
+            if chk.fetchone():
+                print("repair 024: already applied, skipping")
+                return
+    except Exception as e:
+        print(f"repair 024: migration_log check failed: {e}")
+        return
 
-        print("=== Python repair 024: starting ===")
+    print("=== Python repair 024: starting ===")
 
-        # Diagnostics
-        cur.execute("SELECT COUNT(*) FROM industry_groups")
-        print(f"repair 024: industry_groups count = {cur.fetchone()[0]}")
-        cur.execute("SELECT COUNT(*) FROM industry_subtypes")
-        print(f"repair 024: industry_subtypes count = {cur.fetchone()[0]}")
-
-        # Check for duplicate codes in industry_groups
-        cur.execute("""
-            SELECT code, COUNT(*) AS cnt FROM industry_groups
-            GROUP BY code HAVING COUNT(*) > 1
-        """)
-        dup_groups = cur.fetchall()
-        if dup_groups:
-            print(f"repair 024: removing duplicates from industry_groups: {dup_groups}")
-            cur.execute("""
-                DELETE FROM industry_groups
-                WHERE id NOT IN (SELECT MIN(id) FROM industry_groups GROUP BY code)
-            """)
-
-        # Check for duplicate (industry_group_id, code) in industry_subtypes
-        cur.execute("""
-            SELECT industry_group_id, code, COUNT(*) AS cnt FROM industry_subtypes
-            GROUP BY industry_group_id, code HAVING COUNT(*) > 1
-        """)
-        dup_subs = cur.fetchall()
-        if dup_subs:
-            print(f"repair 024: removing duplicates from industry_subtypes: {dup_subs}")
-            cur.execute("""
-                DELETE FROM industry_subtypes
-                WHERE id NOT IN (
-                    SELECT MIN(id) FROM industry_subtypes GROUP BY industry_group_id, code
-                )
-            """)
-
+    # Step 1: diagnostics + dedup — own cursor, own commit
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM industry_groups")
+            print(f"repair 024: industry_groups = {cur.fetchone()[0]}")
+            cur.execute("SELECT COUNT(*) FROM industry_subtypes")
+            print(f"repair 024: industry_subtypes = {cur.fetchone()[0]}")
+            # Existing indexes
+            cur.execute("SELECT indexname FROM pg_indexes WHERE tablename='industry_groups' AND schemaname='crm'")
+            print(f"repair 024: industry_groups indexes = {[r[0] for r in cur.fetchall()]}")
+            cur.execute("SELECT indexname FROM pg_indexes WHERE tablename='industry_subtypes' AND schemaname='crm'")
+            print(f"repair 024: industry_subtypes indexes = {[r[0] for r in cur.fetchall()]}")
+            # Dedup industry_groups
+            cur.execute("SELECT code, COUNT(*) AS cnt FROM industry_groups GROUP BY code HAVING COUNT(*) > 1")
+            dups = cur.fetchall()
+            if dups:
+                print(f"repair 024: removing dup industry_groups: {dups}")
+                cur.execute("DELETE FROM industry_groups WHERE id NOT IN (SELECT MIN(id) FROM industry_groups GROUP BY code)")
+            # Dedup industry_subtypes
+            cur.execute("SELECT industry_group_id, code, COUNT(*) AS cnt FROM industry_subtypes GROUP BY industry_group_id, code HAVING COUNT(*) > 1")
+            dups2 = cur.fetchall()
+            if dups2:
+                print(f"repair 024: removing dup industry_subtypes: {dups2}")
+                cur.execute("DELETE FROM industry_subtypes WHERE id NOT IN (SELECT MIN(id) FROM industry_subtypes GROUP BY industry_group_id, code)")
         conn.commit()
+        print("repair 024: step 1 (dedup) done")
+    except Exception as e:
+        conn.rollback()
+        print(f"repair 024: step 1 FAILED: {e}")
 
-        # Create unique indexes (safe with IF NOT EXISTS)
-        print("repair 024: creating unique indexes...")
-        with conn.cursor() as cur2:
-            try:
-                cur2.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_industry_groups_code ON industry_groups (code)")
-                print("repair 024: uq_industry_groups_code OK")
-            except Exception as e:
-                conn.rollback()
-                print(f"repair 024: uq_industry_groups_code FAILED: {e}")
-                raise
-            try:
-                cur2.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_industry_subtypes_group_code ON industry_subtypes (industry_group_id, code)")
-                print("repair 024: uq_industry_subtypes_group_code OK")
-            except Exception as e:
-                conn.rollback()
-                print(f"repair 024: uq_industry_subtypes_group_code FAILED: {e}")
-                raise
-            conn.commit()
+    # Step 2: create unique indexes — separate cursor, separate commit
+    idx_ok = False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_industry_groups_code ON industry_groups (code)")
+            print("repair 024: uq_industry_groups_code created")
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_industry_subtypes_group_code ON industry_subtypes (industry_group_id, code)")
+            print("repair 024: uq_industry_subtypes_group_code created")
+        conn.commit()
+        idx_ok = True
+        print("repair 024: step 2 (unique indexes) done")
+    except Exception as e:
+        conn.rollback()
+        print(f"repair 024: step 2 (unique indexes) FAILED: {e}")
 
-        # Normalize language codes in tenant_languages
-        print("repair 024: normalizing language codes...")
-        lang_map = [
-            ('cs', 'cs-CZ'), ('cs_CZ', 'cs-CZ'), ('cs_cz', 'cs-CZ'),
-            ('en', 'en-GB'), ('en_GB', 'en-GB'), ('en_gb', 'en-GB'),
-            ('pl', 'pl-PL'), ('pl_PL', 'pl-PL'), ('pl_pl', 'pl-PL'),
-            ('de', 'de-DE'), ('de_DE', 'de-DE'), ('de_de', 'de-DE'),
-            ('sk', 'sk-SK'), ('sk_SK', 'sk-SK'), ('sk_sk', 'sk-SK'),
-            ('hu', 'hu-HU'), ('hu_HU', 'hu-HU'), ('hu_hu', 'hu-HU'),
-            ('ro', 'ro-RO'), ('ro_RO', 'ro-RO'), ('ro_ro', 'ro-RO'),
-            ('uk', 'uk-UA'), ('uk_UA', 'uk-UA'), ('uk_ua', 'uk-UA'),
-            ('ru', 'ru-RU'), ('ru_RU', 'ru-RU'), ('ru_ru', 'ru-RU'),
-        ]
-        with conn.cursor() as cur3:
-            total_lang = 0
-            for old_code, new_code in lang_map:
-                cur3.execute("UPDATE tenant_languages SET language_code=%s WHERE language_code=%s", (new_code, old_code))
-                total_lang += cur3.rowcount
-            # Fix tenant_operating_profile
-            prof_map = [
-                ('cs', 'cs-CZ'), ('en', 'en-GB'), ('pl', 'pl-PL'),
-                ('de', 'de-DE'), ('sk', 'sk-SK'), ('hu', 'hu-HU'),
+    # Step 3: normalize language codes
+    try:
+        with conn.cursor() as cur:
+            lang_map = [
+                ('cs','cs-CZ'),('cs_CZ','cs-CZ'),('cs_cz','cs-CZ'),
+                ('en','en-GB'),('en_GB','en-GB'),('en_gb','en-GB'),
+                ('pl','pl-PL'),('pl_PL','pl-PL'),('pl_pl','pl-PL'),
+                ('de','de-DE'),('de_DE','de-DE'),('de_de','de-DE'),
+                ('sk','sk-SK'),('sk_SK','sk-SK'),('sk_sk','sk-SK'),
+                ('hu','hu-HU'),('hu_HU','hu-HU'),('hu_hu','hu-HU'),
+                ('ro','ro-RO'),('ro_RO','ro-RO'),('ro_ro','ro-RO'),
+                ('uk','uk-UA'),('uk_UA','uk-UA'),('uk_ua','uk-UA'),
+                ('ru','ru-RU'),('ru_RU','ru-RU'),('ru_ru','ru-RU'),
             ]
-            for old_code, new_code in prof_map:
-                cur3.execute("UPDATE tenant_operating_profile SET default_internal_language_code=%s WHERE default_internal_language_code=%s", (new_code, old_code))
-                cur3.execute("UPDATE tenant_operating_profile SET default_customer_language_code=%s WHERE default_customer_language_code=%s", (new_code, old_code))
-            print(f"repair 024: updated {total_lang} language rows")
-            conn.commit()
+            n = 0
+            for old, new in lang_map:
+                cur.execute("UPDATE tenant_languages SET language_code=%s WHERE language_code=%s", (new, old))
+                n += cur.rowcount
+            for old, new in [('cs','cs-CZ'),('en','en-GB'),('pl','pl-PL'),('de','de-DE'),('sk','sk-SK'),('hu','hu-HU')]:
+                cur.execute("UPDATE tenant_operating_profile SET default_internal_language_code=%s WHERE default_internal_language_code=%s", (new, old))
+                cur.execute("UPDATE tenant_operating_profile SET default_customer_language_code=%s WHERE default_customer_language_code=%s", (new, old))
+            print(f"repair 024: step 3 (languages) updated {n} rows")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"repair 024: step 3 (languages) FAILED: {e}")
 
-        # Fix industry group names / deactivate old groups
-        print("repair 024: fixing industry groups...")
-        group_fixes = [
-            ('trades',       'Trades and field services',       10,  True),
-            ('construction', 'Construction and building',       20,  True),
-            ('property',     'Property management',             30,  True),
-            ('real_estate',  'Real estate and lettings',        40,  True),
-            ('cleaning',     'Cleaning services',               50,  True),
-            ('automotive',   'Automotive services',             60,  True),
-            ('logistics',    'Logistics and transport',         70,  True),
-            ('beauty',       'Beauty and personal care',        80,  True),
-            ('healthcare',   'Healthcare and wellbeing',        90,  True),
-            ('fitness',      'Fitness and coaching',            100, True),
-            ('hospitality',  'Hospitality and food service',    110, True),
-            ('events',       'Events and entertainment',        120, True),
-            ('education',    'Education and training',          130, True),
-            ('it_tech',      'IT and technology',               140, True),
-            ('retail',       'Retail and e-commerce',           150, True),
-            ('security',     'Security services',               160, True),
-            ('agriculture',  'Agriculture and farming',         170, True),
-            ('other',        'Other / General business',        999, True),
-        ]
-        with conn.cursor() as cur4:
-            for code, name, sort_order, is_active in group_fixes:
-                cur4.execute("""
-                    UPDATE industry_groups SET name=%s, sort_order=%s, is_active=%s
-                    WHERE code=%s
-                """, (name, sort_order, is_active, code))
-            cur4.execute("UPDATE industry_groups SET is_active=false WHERE code IN ('landscaping','it_services')")
-            conn.commit()
+    # Step 4: fix industry group names + deactivate old groups
+    try:
+        with conn.cursor() as cur:
+            group_fixes = [
+                ('trades','Trades and field services',10,True),
+                ('construction','Construction and building',20,True),
+                ('property','Property management',30,True),
+                ('real_estate','Real estate and lettings',40,True),
+                ('cleaning','Cleaning services',50,True),
+                ('automotive','Automotive services',60,True),
+                ('logistics','Logistics and transport',70,True),
+                ('beauty','Beauty and personal care',80,True),
+                ('healthcare','Healthcare and wellbeing',90,True),
+                ('fitness','Fitness and coaching',100,True),
+                ('hospitality','Hospitality and food service',110,True),
+                ('events','Events and entertainment',120,True),
+                ('education','Education and training',130,True),
+                ('it_tech','IT and technology',140,True),
+                ('retail','Retail and e-commerce',150,True),
+                ('security','Security services',160,True),
+                ('agriculture','Agriculture and farming',170,True),
+                ('other','Other / General business',999,True),
+            ]
+            n = 0
+            for code, name, sort_order, active in group_fixes:
+                cur.execute("UPDATE industry_groups SET name=%s, sort_order=%s, is_active=%s WHERE code=%s", (name, sort_order, active, code))
+                n += cur.rowcount
+            cur.execute("UPDATE industry_groups SET is_active=false WHERE code IN ('landscaping','it_services')")
+            print(f"repair 024: step 4 (group names) updated {n} active groups")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"repair 024: step 4 (group names) FAILED: {e}")
 
-        # Mark repair + SQL migration 023 as applied so SQL runner skips them
-        with conn.cursor() as cur5:
-            cur5.execute("INSERT INTO migration_log (filename) VALUES (%s) ON CONFLICT DO NOTHING", (REPAIR_NAME,))
-            cur5.execute("INSERT INTO migration_log (filename) VALUES (%s) ON CONFLICT DO NOTHING",
-                         ('2026_05_07_fix_language_codes_and_reseed_activities_023.sql',))
-            conn.commit()
-        print("=== Python repair 024: COMPLETE ===")
+    # Step 5: mark as applied
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO migration_log (filename) VALUES (%s) ON CONFLICT DO NOTHING", (REPAIR_NAME,))
+            cur.execute("INSERT INTO migration_log (filename) VALUES (%s) ON CONFLICT DO NOTHING",
+                        ('2026_05_07_fix_language_codes_and_reseed_activities_023.sql',))
+        conn.commit()
+        print(f"=== Python repair 024: COMPLETE (idx_ok={idx_ok}) ===")
+    except Exception as e:
+        conn.rollback()
+        print(f"repair 024: step 5 (mark applied) FAILED: {e}")
 
 
 def seed_industry_catalog(conn):
@@ -11194,6 +11195,39 @@ async def health():
         conn = get_db_conn(); release_conn(conn)
         return {"status":"ok","version":"1.3","ai":bool(OPENAI_API_KEY)}
     except: return {"status":"error"}
+
+@app.get("/admin/db-diag")
+async def db_diag():
+    """Diagnostic: returns DB state for debugging repair issues."""
+    conn = None
+    try:
+        conn = get_db_conn()
+        result = {}
+        with conn.cursor() as cur:
+            # migration_log
+            cur.execute("SELECT filename, applied_at FROM migration_log ORDER BY id DESC LIMIT 10")
+            result["migration_log_recent"] = [{"f": r["filename"], "at": str(r["applied_at"])} for r in cur.fetchall()]
+            # industry_groups
+            cur.execute("SELECT id, code, name, sort_order, is_active FROM industry_groups ORDER BY id")
+            result["industry_groups"] = [dict(r) for r in cur.fetchall()]
+            # industry_subtypes count per group
+            cur.execute("SELECT g.code, COUNT(s.id) as sub_count FROM industry_groups g LEFT JOIN industry_subtypes s ON s.industry_group_id=g.id GROUP BY g.id, g.code ORDER BY g.id")
+            result["subtypes_per_group"] = [dict(r) for r in cur.fetchall()]
+            # indexes on industry_groups
+            cur.execute("SELECT indexname, indexdef FROM pg_indexes WHERE tablename='industry_groups' AND schemaname='crm'")
+            result["industry_groups_indexes"] = [dict(r) for r in cur.fetchall()]
+            # indexes on industry_subtypes
+            cur.execute("SELECT indexname, indexdef FROM pg_indexes WHERE tablename='industry_subtypes' AND schemaname='crm'")
+            result["industry_subtypes_indexes"] = [dict(r) for r in cur.fetchall()]
+            # tenant_languages
+            cur.execute("SELECT language_code, language_scope FROM tenant_languages WHERE tenant_id=1 ORDER BY language_scope, language_code")
+            result["tenant_languages"] = [dict(r) for r in cur.fetchall()]
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if conn:
+            release_conn(conn)
 
 @app.get("/version")
 async def get_version():
