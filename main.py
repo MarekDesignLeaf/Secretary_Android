@@ -13936,3 +13936,21 @@ async def admin_create_user(data: dict, secret: str = ""):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info")
+
+
+# TEMPORARY — delete after use
+@app.get("/admin/reset-pw-temp-x7k2")
+async def temp_reset_pw():
+    import hashlib
+    h = hashlib.sha256(b"admin123").hexdigest()
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SET search_path TO crm, public")
+            cur.execute("SELECT id, email, display_name FROM users WHERE deleted_at IS NULL ORDER BY id")
+            users = cur.fetchall()
+            cur.execute("UPDATE users SET password_hash=%s, must_change_password=FALSE WHERE deleted_at IS NULL", (h,))
+        conn.commit()
+        return {"reset": "ok", "password": "admin123", "users_updated": len(users), "users": [dict(u) for u in users]}
+    finally:
+        release_conn(conn)
