@@ -26,6 +26,51 @@ data class AssistantResponse(
     val is_question: Boolean = false
 )
 
+data class BootstrapStatusResponse(
+    val is_ready: Boolean = false,
+    val needs_first_company: Boolean = false,
+    val needs_first_admin: Boolean = false,
+    val system_configured: Boolean = false,
+    val admin_exists: Boolean = false,
+    val tenant_exists: Boolean = false,
+    val onboarding_required: Boolean = true,
+    val server_version: String? = null,
+    val database_available: Boolean = true,
+    val latest_migration: String? = null,
+    val details: Map<String, @JvmSuppressWildcards Any?>? = null
+)
+
+data class FirstInstallRequest(
+    val company_name: String,
+    val company_legal_type: String,
+    val country: String,
+    val timezone: String,
+    val currency: String,
+    val internal_company_language: String,
+    val default_customer_language: String,
+    val workspace_mode: String,
+    val industry_group: String,
+    val industry_subtype: String,
+    val first_admin_display_name: String,
+    val first_admin_email: String,
+    val first_admin_password: String,
+    val first_admin_first_name: String,
+    val first_admin_last_name: String,
+    val phone: String,
+    val website: String
+)
+
+data class CatalogueIndustrySubtype(
+    val code: String,
+    val name: String
+)
+
+data class CatalogueIndustryGroup(
+    val code: String,
+    val name: String,
+    val subtypes: List<CatalogueIndustrySubtype> = emptyList()
+)
+
 // Contact sorting session state
 data class ContactDuplicate(
     val id1: Long = 0,
