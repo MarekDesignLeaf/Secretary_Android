@@ -17,6 +17,8 @@ from .models import (
     CompanyProfile,
     CRMRecord,
     FirstCompanyCreate,
+    FirstInstallCreate,
+    FirstInstallResult,
     LanguageScope,
     LanguageSettings,
     Permission,
@@ -39,6 +41,7 @@ class InMemorySecretaryRepository:
         self.company_settings: dict[str, CompanyOperatingSettings] = {}
         self.tenant_operating_profiles: dict[str, TenantOperatingProfile] = {}
         self.tenant_languages: dict[tuple[str, LanguageScope, str], TenantLanguage] = {}
+        self.tenant_configuration: dict[str, dict] = {}
         self.users: dict[str, UserAccount] = {}
         self.password_hashes: dict[str, str] = {}
         self.tenant_pricing: dict[tuple[str, str], TenantActivityPricing] = {}
@@ -74,19 +77,31 @@ class InMemorySecretaryRepository:
         default_customer_language_code = normalize_language_code(
             payload_data.pop("default_customer_language_code", None)
         )
+        workspace_mode = payload_data.pop("workspace_mode", "single_company")
+        industry_group = payload_data.get("industry_group")
+        industry_subtype = payload_data.get("industry_subtype")
         company = CompanyProfile(id=str(uuid4()), **payload_data)
         self.companies[company.id] = company
-        self.company_settings[company.id] = CompanyOperatingSettings()
+        self.company_settings[company.id] = CompanyOperatingSettings(workspace_mode=workspace_mode)
         self.tenant_operating_profiles[company.id] = TenantOperatingProfile(
             company_id=company.id,
-            workspace_mode=self.company_settings[company.id].workspace_mode,
+            workspace_mode=workspace_mode,
+            industry_group=industry_group,
+            industry_subtype=industry_subtype,
             default_internal_language_code=default_internal_language_code,
             default_customer_language_code=default_customer_language_code,
         )
+        self.tenant_configuration[company.id] = {
+            "workspace_mode": workspace_mode,
+            "industry_group": industry_group,
+            "industry_subtype": industry_subtype,
+            "phone": company.phone,
+            "website": company.website,
+        }
         self._seed_default_languages(company.id, default_internal_language_code, default_customer_language_code)
         return company
 
-    def create_first_admin(self, *, company_id: str, email: str, display_name: str, password: str, preferred_language_code: str | None = None) -> UserAccount:
+    def create_first_admin(self, *, company_id: str, email: str, display_name: str, password: str, preferred_language_code: str | None = None, first_name: str | None = None, last_name: str | None = None, phone: str | None = None) -> UserAccount:
         if company_id not in self.companies:
             raise KeyError("Company not found")
         if any(user.role == Role.owner for user in self.users.values()):
@@ -99,10 +114,51 @@ class InMemorySecretaryRepository:
             role=Role.owner,
             permissions=sorted(ROLE_PERMISSIONS[Role.owner]),
             preferred_language_code=normalize_language_code(preferred_language_code) if preferred_language_code else None,
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
         )
         self.users[user.id] = user
         self.password_hashes[user.id] = hash_password(password)
         return user
+
+    def create_first_install(self, payload: FirstInstallCreate) -> FirstInstallResult:
+        if self.companies:
+            raise ValueError("First company already exists")
+        if any(user.role == Role.owner for user in self.users.values()):
+            raise ValueError("First admin already exists")
+        company = self.create_first_company(
+            FirstCompanyCreate(
+                legal_name=payload.company_name,
+                trading_name=payload.company_name,
+                legal_type=payload.company_legal_type,
+                default_country=payload.country,
+                default_currency=payload.currency,
+                timezone=payload.timezone,
+                phone=payload.phone,
+                website=payload.website,
+                workspace_mode=payload.workspace_mode,
+                industry_group=payload.industry_group,
+                industry_subtype=payload.industry_subtype,
+                default_internal_language_code=payload.internal_company_language,
+                default_customer_language_code=payload.default_customer_language,
+            )
+        )
+        admin = self.create_first_admin(
+            company_id=company.id,
+            email=payload.first_admin_email,
+            display_name=payload.first_admin_display_name,
+            password=payload.first_admin_password,
+            preferred_language_code=payload.internal_company_language,
+            first_name=payload.first_admin_first_name,
+            last_name=payload.first_admin_last_name,
+            phone=payload.phone,
+        )
+        return FirstInstallResult(
+            company=company,
+            admin=admin,
+            bootstrap_status=self.bootstrap_status(),
+        )
 
     def authenticate(self, email: str, password: str) -> UserAccount | None:
         normalized = email.lower()
@@ -143,7 +199,10 @@ class InMemorySecretaryRepository:
         return CompanyLegalIdentity(
             legal_name=company.legal_name,
             trading_name=company.trading_name,
+            legal_type=company.legal_type,
             registered_address=None,
+            phone=company.phone,
+            website=company.website,
         )
 
     def update_company_legal_identity(self, company_id: str, identity: CompanyLegalIdentity) -> CompanyLegalIdentity:
@@ -151,7 +210,13 @@ class InMemorySecretaryRepository:
             raise KeyError("Company not found")
         current = self.companies[company_id]
         self.companies[company_id] = current.model_copy(
-            update={"legal_name": identity.legal_name, "trading_name": identity.trading_name}
+            update={
+                "legal_name": identity.legal_name,
+                "trading_name": identity.trading_name,
+                "legal_type": identity.legal_type,
+                "phone": identity.phone,
+                "website": identity.website,
+            }
         )
         return identity
 

@@ -75,17 +75,25 @@ class CompanyProfile(BaseModel):
     id: str
     legal_name: str
     trading_name: str | None = None
+    legal_type: str | None = None
     default_country: str = "GB"
     default_currency: str = "GBP"
     timezone: str = "Europe/London"
+    phone: str | None = None
+    website: str | None = None
+    industry_group: str | None = None
+    industry_subtype: str | None = None
 
 
 class CompanyLegalIdentity(BaseModel):
     legal_name: str
     trading_name: str | None = None
+    legal_type: str | None = None
     registration_number: str | None = None
     tax_number: str | None = None
     registered_address: str | None = None
+    phone: str | None = None
+    website: str | None = None
 
 
 class CompanyOperatingSettings(BaseModel):
@@ -99,6 +107,8 @@ class CompanyOperatingSettings(BaseModel):
 class TenantOperatingProfile(BaseModel):
     company_id: str
     workspace_mode: str = "single_company"
+    industry_group: str | None = None
+    industry_subtype: str | None = None
     internal_language_mode: LanguageMode = LanguageMode.single
     customer_language_mode: LanguageMode = LanguageMode.multilingual
     default_internal_language_code: str = "en-GB"
@@ -117,6 +127,9 @@ class UserAccount(BaseModel):
     role: Role
     permissions: list[Permission]
     preferred_language_code: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
     is_active: bool = True
 
 
@@ -129,9 +142,15 @@ class BootstrapStatus(BaseModel):
 class FirstCompanyCreate(BaseModel):
     legal_name: str
     trading_name: str | None = None
+    legal_type: str | None = None
     default_country: str = "GB"
     default_currency: str = "GBP"
     timezone: str = "Europe/London"
+    phone: str | None = None
+    website: str | None = None
+    workspace_mode: str = "single_company"
+    industry_group: str | None = None
+    industry_subtype: str | None = None
     default_internal_language_code: str = "en-GB"
     default_customer_language_code: str = "en-GB"
 
@@ -142,6 +161,35 @@ class FirstAdminCreate(BaseModel):
     display_name: str
     password: str = Field(min_length=12)
     preferred_language_code: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+
+
+class FirstInstallCreate(BaseModel):
+    company_name: str = Field(min_length=1)
+    company_legal_type: str | None = None
+    country: str = "GB"
+    timezone: str = "Europe/London"
+    currency: str = "GBP"
+    internal_company_language: str = "en-GB"
+    default_customer_language: str = "en-GB"
+    workspace_mode: str = "single_company"
+    industry_group: str | None = None
+    industry_subtype: str | None = None
+    first_admin_display_name: str = Field(min_length=1)
+    first_admin_email: str = Field(min_length=1)
+    first_admin_password: str = Field(min_length=12)
+    first_admin_first_name: str | None = None
+    first_admin_last_name: str | None = None
+    phone: str | None = None
+    website: str | None = None
+
+
+class FirstInstallResult(BaseModel):
+    company: CompanyProfile
+    admin: UserAccount
+    bootstrap_status: BootstrapStatus
 
 
 class LoginRequest(BaseModel):

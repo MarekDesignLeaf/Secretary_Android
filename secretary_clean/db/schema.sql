@@ -7,9 +7,14 @@ CREATE TABLE clean_companies (
     id UUID PRIMARY KEY,
     legal_name TEXT NOT NULL,
     trading_name TEXT,
+    legal_type TEXT,
     default_country TEXT NOT NULL DEFAULT 'GB',
     default_currency TEXT NOT NULL DEFAULT 'GBP',
     timezone TEXT NOT NULL DEFAULT 'Europe/London',
+    phone TEXT,
+    website TEXT,
+    industry_group TEXT,
+    industry_subtype TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -27,6 +32,8 @@ CREATE TABLE clean_company_operating_settings (
 CREATE TABLE tenant_operating_profile (
     company_id UUID PRIMARY KEY REFERENCES clean_companies(id) ON DELETE CASCADE,
     workspace_mode TEXT NOT NULL DEFAULT 'single_company',
+    industry_group TEXT,
+    industry_subtype TEXT,
     internal_language_mode TEXT NOT NULL DEFAULT 'single',
     customer_language_mode TEXT NOT NULL DEFAULT 'multilingual',
     default_internal_language_code TEXT NOT NULL DEFAULT 'en-GB',
@@ -60,9 +67,24 @@ CREATE TABLE clean_users (
     email CITEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
     preferred_language_code TEXT,
+    first_name TEXT,
+    last_name TEXT,
+    phone TEXT,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+CREATE TABLE clean_tenant_configuration (
+    company_id UUID PRIMARY KEY REFERENCES clean_companies(id) ON DELETE CASCADE,
+    workspace_mode TEXT NOT NULL DEFAULT 'single_company',
+    industry_group TEXT,
+    industry_subtype TEXT,
+    phone TEXT,
+    website TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

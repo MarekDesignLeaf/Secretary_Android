@@ -137,3 +137,64 @@ def test_voice_resolver_does_not_execute_fake_action(monkeypatch):
     assert response["executed"] is False
     assert response["resolved_intent"] is None
     assert response["language_context"]["voice_input_language_code"] == "en-GB"
+
+
+def test_clean_first_install_creates_ready_company_admin_languages_and_industry(monkeypatch):
+    monkeypatch.setenv("SECRETARY_CLEAN_JWT_SECRET", "test-secret-for-clean-backend")
+    client = TestClient(create_app())
+
+    first_install = client.post(
+        "/api/v1/bootstrap/first-install",
+        json={
+            "company_name": "Installed Secretary Ltd",
+            "company_legal_type": "limited_company",
+            "country": "GB",
+            "timezone": "Europe/London",
+            "currency": "GBP",
+            "internal_company_language": "en-GB",
+            "default_customer_language": "pl-PL",
+            "workspace_mode": "team",
+            "industry_group": "trades_and_field_services",
+            "industry_subtype": "trades_and_field_services.landscaping",
+            "first_admin_display_name": "Install Owner",
+            "first_admin_email": "install-owner@example.com",
+            "first_admin_password": "very-secure-password",
+            "first_admin_first_name": "Install",
+            "first_admin_last_name": "Owner",
+            "phone": "+441234567890",
+            "website": "https://example.com",
+        },
+    )
+    assert first_install.status_code == 200
+    payload = first_install.json()
+    assert payload["company"]["legal_name"] == "Installed Secretary Ltd"
+    assert payload["company"]["legal_type"] == "limited_company"
+    assert payload["company"]["industry_group"] == "trades_and_field_services"
+    assert payload["company"]["industry_subtype"] == "trades_and_field_services.landscaping"
+    assert payload["admin"]["email"] == "install-owner@example.com"
+    assert payload["admin"]["first_name"] == "Install"
+    assert payload["admin"]["last_name"] == "Owner"
+    assert payload["bootstrap_status"] == {
+        "needs_first_company": False,
+        "needs_first_admin": False,
+        "is_ready": True,
+    }
+
+    status = client.get("/api/v1/bootstrap/status").json()
+    assert status == {
+        "needs_first_company": False,
+        "needs_first_admin": False,
+        "is_ready": True,
+    }
+
+    tokens = client.post(
+        "/api/v1/auth/login",
+        json={"email": "install-owner@example.com", "password": "very-secure-password"},
+    ).json()
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    language_settings = client.get("/api/v1/language/settings", headers=headers).json()
+    assert language_settings["default_internal_language_code"] == "en-GB"
+    assert language_settings["default_customer_language_code"] == "pl-PL"
+    assert language_settings["workspace_mode"] == "team"
+    assert language_settings["industry_group"] == "trades_and_field_services"
+    assert language_settings["industry_subtype"] == "trades_and_field_services.landscaping"
