@@ -361,7 +361,53 @@ private fun BootstrapBlockingScreen(title: String, message: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private data class FirstInstallLanguageOption(
+    val code: String,
+    val label: String
+)
+
+private data class FirstInstallIndustryOption(
+    val label: String,
+    val industryGroup: String,
+    val industrySubtype: String
+) {
+    val key: String get() = "$industryGroup::$industrySubtype"
+}
+
+private val firstInstallLanguageOptions = listOf(
+    FirstInstallLanguageOption("en-GB", "English UK"),
+    FirstInstallLanguageOption("cs-CZ", "Czech"),
+    FirstInstallLanguageOption("pl-PL", "Polish"),
+    FirstInstallLanguageOption("pt-PT", "Portuguese"),
+    FirstInstallLanguageOption("es-ES", "Spanish"),
+    FirstInstallLanguageOption("de-DE", "German"),
+    FirstInstallLanguageOption("fr-FR", "French"),
+    FirstInstallLanguageOption("uk-UA", "Ukrainian"),
+    FirstInstallLanguageOption("ro-RO", "Romanian")
+)
+
+private val requiredFirstInstallIndustryOptions = listOf(
+    FirstInstallIndustryOption("Gardening", "gardening", "gardening"),
+    FirstInstallIndustryOption("Landscaping", "landscaping", "landscaping"),
+    FirstInstallIndustryOption("Garden Maintenance", "gardening", "garden_maintenance"),
+    FirstInstallIndustryOption("Grounds Maintenance", "grounds_maintenance", "grounds_maintenance"),
+    FirstInstallIndustryOption("Tree Surgery", "tree_surgery", "tree_surgery"),
+    FirstInstallIndustryOption("Hedge Cutting", "gardening", "hedge_cutting"),
+    FirstInstallIndustryOption("Fencing", "fencing", "fencing"),
+    FirstInstallIndustryOption("Drainage", "drainage", "drainage"),
+    FirstInstallIndustryOption("Groundworks", "groundworks", "groundworks"),
+    FirstInstallIndustryOption("Paving / Patios", "paving", "patios"),
+    FirstInstallIndustryOption("Construction", "construction", "construction"),
+    FirstInstallIndustryOption("Building Maintenance", "building_maintenance", "building_maintenance"),
+    FirstInstallIndustryOption("Roofing / Guttering", "roofing_guttering", "roofing_guttering"),
+    FirstInstallIndustryOption("Plumbing / Heating", "plumbing_heating", "plumbing_heating"),
+    FirstInstallIndustryOption("Electrical", "electrical", "electrical"),
+    FirstInstallIndustryOption("Carpentry / Joinery", "carpentry_joinery", "carpentry_joinery"),
+    FirstInstallIndustryOption("Painting / Decorating", "painting_decorating", "painting_decorating"),
+    FirstInstallIndustryOption("Design", "design", "design"),
+    FirstInstallIndustryOption("Property Maintenance", "property_maintenance", "property_maintenance")
+)
+
 @Composable
 private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
@@ -372,11 +418,14 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     var country by remember { mutableStateOf("") }
     var timezone by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf("") }
-    var internalCompanyLanguage by remember { mutableStateOf("") }
-    var defaultCustomerLanguage by remember { mutableStateOf("") }
     var workspaceMode by remember { mutableStateOf("") }
-    var selectedGroupCode by remember { mutableStateOf("") }
-    var selectedSubtypeCode by remember { mutableStateOf("") }
+    var selectedLanguages by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var defaultInternalLanguageCode by remember { mutableStateOf("") }
+    var defaultCustomerLanguageCode by remember { mutableStateOf("") }
+    var voiceInputLanguageCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var voiceOutputLanguageCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selectedIndustryKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var primaryIndustryKey by remember { mutableStateOf("") }
     var adminDisplayName by remember { mutableStateOf("") }
     var adminEmail by remember { mutableStateOf("") }
     var adminPassword by remember { mutableStateOf("") }
@@ -387,8 +436,21 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     var website by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf<String?>(null) }
 
-    val selectedGroup = state.firstInstallIndustries.firstOrNull { it.code == selectedGroupCode }
-    val selectedSubtype = selectedGroup?.subtypes?.firstOrNull { it.code == selectedSubtypeCode }
+    val industryOptions = remember(state.firstInstallIndustries) {
+        buildFirstInstallIndustryOptions(state.firstInstallIndustries)
+    }
+    val selectedIndustryOptions = industryOptions.filter { it.key in selectedIndustryKeys }
+    val primaryIndustry = selectedIndustryOptions.firstOrNull { it.key == primaryIndustryKey }
+
+    LaunchedEffect(selectedLanguages) {
+        if (defaultInternalLanguageCode !in selectedLanguages) defaultInternalLanguageCode = ""
+        if (defaultCustomerLanguageCode !in selectedLanguages) defaultCustomerLanguageCode = ""
+        voiceInputLanguageCodes = voiceInputLanguageCodes.intersect(selectedLanguages)
+        voiceOutputLanguageCodes = voiceOutputLanguageCodes.intersect(selectedLanguages)
+    }
+    LaunchedEffect(selectedIndustryKeys) {
+        if (primaryIndustryKey !in selectedIndustryKeys) primaryIndustryKey = ""
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -409,11 +471,58 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
         item { FirstInstallTextField(country, { country = it }, "Country") }
         item { FirstInstallTextField(timezone, { timezone = it }, "Timezone") }
         item { FirstInstallTextField(currency, { currency = it }, "Currency") }
-        item { FirstInstallTextField(internalCompanyLanguage, { internalCompanyLanguage = it }, "Internal company language") }
-        item { FirstInstallTextField(defaultCustomerLanguage, { defaultCustomerLanguage = it }, "Default customer language") }
         item { FirstInstallTextField(workspaceMode, { workspaceMode = it }, "Workspace mode") }
 
-        item { Text("Industry", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
+        item { Text("Languages", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                firstInstallLanguageOptions.forEach { option ->
+                    FirstInstallCheckboxRow(
+                        checked = option.code in selectedLanguages,
+                        label = option.label,
+                        onCheckedChange = { checked ->
+                            selectedLanguages = if (checked) selectedLanguages + option.code else selectedLanguages - option.code
+                        }
+                    )
+                }
+            }
+        }
+        if (selectedLanguages.isNotEmpty()) {
+            item { Text("Default internal language", fontWeight = FontWeight.SemiBold) }
+            item {
+                FirstInstallSingleChoiceSection(
+                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
+                    selectedCode = defaultInternalLanguageCode,
+                    onSelect = { defaultInternalLanguageCode = it }
+                )
+            }
+            item { Text("Default customer language", fontWeight = FontWeight.SemiBold) }
+            item {
+                FirstInstallSingleChoiceSection(
+                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
+                    selectedCode = defaultCustomerLanguageCode,
+                    onSelect = { defaultCustomerLanguageCode = it }
+                )
+            }
+            item { Text("Voice input languages", fontWeight = FontWeight.SemiBold) }
+            item {
+                FirstInstallLanguageCheckboxSection(
+                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
+                    selectedCodes = voiceInputLanguageCodes,
+                    onToggle = { code, checked -> voiceInputLanguageCodes = if (checked) voiceInputLanguageCodes + code else voiceInputLanguageCodes - code }
+                )
+            }
+            item { Text("Voice output languages", fontWeight = FontWeight.SemiBold) }
+            item {
+                FirstInstallLanguageCheckboxSection(
+                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
+                    selectedCodes = voiceOutputLanguageCodes,
+                    onToggle = { code, checked -> voiceOutputLanguageCodes = if (checked) voiceOutputLanguageCodes + code else voiceOutputLanguageCodes - code }
+                )
+            }
+        }
+
+        item { Text("Industries", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
         item {
             when {
                 state.firstInstallIndustriesLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -421,26 +530,38 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                     Spacer(Modifier.width(8.dp))
                     Text("Loading industries…", color = Color.Gray)
                 }
-                state.firstInstallIndustries.isEmpty() -> Text("No industries returned by backend.", color = Color(0xFFFF9800))
-                else -> FirstInstallDropdown(
-                    label = "Industry group",
-                    selectedLabel = selectedGroup?.name ?: "Select industry group",
-                    options = state.firstInstallIndustries.map { it.code to it.name },
-                    onSelect = { code -> selectedGroupCode = code; selectedSubtypeCode = "" }
-                )
+                industryOptions.isEmpty() -> Text("No industries returned by backend.", color = Color(0xFFFF9800))
+                else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    industryOptions.forEach { option ->
+                        FirstInstallCheckboxRow(
+                            checked = option.key in selectedIndustryKeys,
+                            label = option.label,
+                            supportingText = "${option.industryGroup} / ${option.industrySubtype}",
+                            onCheckedChange = { checked ->
+                                selectedIndustryKeys = if (checked) selectedIndustryKeys + option.key else selectedIndustryKeys - option.key
+                            }
+                        )
+                    }
+                }
             }
         }
-        if (selectedGroup != null) {
+        if (selectedIndustryOptions.isNotEmpty()) {
+            item { Text("Primary industry", fontWeight = FontWeight.SemiBold) }
             item {
-                if (selectedGroup.subtypes.isEmpty()) {
-                    Text("No subtypes returned for ${selectedGroup.name}.", color = Color.Gray)
-                } else {
-                    FirstInstallDropdown(
-                        label = "Industry subtype",
-                        selectedLabel = selectedSubtype?.name ?: "Select industry subtype",
-                        options = selectedGroup.subtypes.map { it.code to it.name },
-                        onSelect = { code -> selectedSubtypeCode = code }
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    selectedIndustryOptions.forEach { option ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable { primaryIndustryKey = option.key }.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = primaryIndustryKey == option.key, onClick = { primaryIndustryKey = option.key })
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(option.label)
+                                Text("${option.industryGroup} / ${option.industrySubtype}", fontSize = 11.sp, color = Color.Gray)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -468,6 +589,11 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                 onClick = {
                     localError = when {
                         companyName.isBlank() -> "Company name is required."
+                        selectedLanguages.isEmpty() -> "Select at least one language."
+                        defaultInternalLanguageCode.isBlank() || defaultInternalLanguageCode !in selectedLanguages -> "Default internal language must be selected from selected languages."
+                        defaultCustomerLanguageCode.isBlank() || defaultCustomerLanguageCode !in selectedLanguages -> "Default customer language must be selected from selected languages."
+                        selectedIndustryOptions.isEmpty() -> "Select at least one industry."
+                        primaryIndustry == null -> "Primary industry must be one of the selected industries."
                         adminDisplayName.isBlank() -> "First administrator display name is required."
                         adminEmail.isBlank() -> "First administrator email is required."
                         adminPassword.isBlank() -> "First administrator password is required."
@@ -475,7 +601,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                         confirmPassword != adminPassword -> "Password confirmation must match the first administrator password."
                         else -> null
                     }
-                    if (localError == null) {
+                    if (localError == null && primaryIndustry != null) {
                         viewModel.submitFirstInstall(
                             FirstInstallRequest(
                                 company_name = companyName.trim(),
@@ -483,11 +609,21 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                                 country = country.trim(),
                                 timezone = timezone.trim(),
                                 currency = currency.trim(),
-                                internal_company_language = internalCompanyLanguage.trim(),
-                                default_customer_language = defaultCustomerLanguage.trim(),
+                                selected_languages = selectedLanguages.toList().sorted(),
+                                default_internal_language_code = defaultInternalLanguageCode,
+                                default_customer_language_code = defaultCustomerLanguageCode,
+                                voice_input_language_codes = voiceInputLanguageCodes.toList().sorted(),
+                                voice_output_language_codes = voiceOutputLanguageCodes.toList().sorted(),
                                 workspace_mode = workspaceMode.trim(),
-                                industry_group = selectedGroupCode.trim(),
-                                industry_subtype = selectedSubtypeCode.trim(),
+                                selected_industries = selectedIndustryOptions.map { option ->
+                                    FirstInstallIndustrySelection(
+                                        industry_group = option.industryGroup,
+                                        industry_subtype = option.industrySubtype,
+                                        is_primary = option.key == primaryIndustry.key
+                                    )
+                                },
+                                primary_industry_group = primaryIndustry.industryGroup,
+                                primary_industry_subtype = primaryIndustry.industrySubtype,
                                 first_admin_display_name = adminDisplayName.trim(),
                                 first_admin_email = adminEmail.trim(),
                                 first_admin_password = adminPassword,
@@ -523,34 +659,86 @@ private fun FirstInstallTextField(value: String, onValueChange: (String) -> Unit
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FirstInstallDropdown(
+private fun FirstInstallCheckboxRow(
+    checked: Boolean,
     label: String,
-    selectedLabel: String,
-    options: List<Pair<String, String>>,
-    onSelect: (String) -> Unit
+    supportingText: String? = null,
+    onCheckedChange: (Boolean) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = selectedLabel,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (code, name) ->
-                DropdownMenuItem(
-                    text = { Text(name) },
-                    onClick = { expanded = false; onSelect(code) }
-                )
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) }.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label)
+            if (!supportingText.isNullOrBlank()) {
+                Text(supportingText, fontSize = 11.sp, color = Color.Gray)
             }
         }
     }
 }
+
+@Composable
+private fun FirstInstallSingleChoiceSection(
+    options: List<FirstInstallLanguageOption>,
+    selectedCode: String,
+    onSelect: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        options.forEach { option ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onSelect(option.code) }.padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = selectedCode == option.code, onClick = { onSelect(option.code) })
+                Spacer(Modifier.width(8.dp))
+                Text(option.label)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FirstInstallLanguageCheckboxSection(
+    options: List<FirstInstallLanguageOption>,
+    selectedCodes: Set<String>,
+    onToggle: (String, Boolean) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        options.forEach { option ->
+            FirstInstallCheckboxRow(
+                checked = option.code in selectedCodes,
+                label = option.label,
+                onCheckedChange = { checked -> onToggle(option.code, checked) }
+            )
+        }
+    }
+}
+
+private fun buildFirstInstallIndustryOptions(catalogue: List<CatalogueIndustryGroup>): List<FirstInstallIndustryOption> {
+    val backendOptions = catalogue.flatMap { group ->
+        if (group.subtypes.isEmpty()) {
+            listOf(FirstInstallIndustryOption(group.name, group.code, group.code))
+        } else {
+            group.subtypes.map { subtype ->
+                FirstInstallIndustryOption(subtype.name, group.code, subtype.code)
+            }
+        }
+    }
+    val backendByKey = backendOptions.associateBy { it.key }
+    val backendByNormalizedLabel = backendOptions.associateBy { normalizeFirstInstallLabel(it.label) }
+    return requiredFirstInstallIndustryOptions.map { required ->
+        backendByKey[required.key]
+            ?: backendByNormalizedLabel[normalizeFirstInstallLabel(required.label)]
+            ?: required
+    }.distinctBy { it.key }
+}
+
+private fun normalizeFirstInstallLabel(value: String): String =
+    value.lowercase(Locale.ROOT).replace("&", "and").replace("/", " ").replace(Regex("[^a-z0-9]+"), " ").trim()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
