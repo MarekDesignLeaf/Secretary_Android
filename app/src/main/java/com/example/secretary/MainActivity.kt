@@ -215,7 +215,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 
                 LaunchedEffect(Unit) {
                     vm.setManagers(null, calendarManager, contactManager, mailManager, settingsManager)
-                    vm.checkBootstrapStatus()
                     vm.setOnShutdown {
                         if (serviceBound) { unbindService(serviceConnection); serviceBound = false }
                         val intent = Intent(this@MainActivity, VoiceService::class.java)
@@ -262,27 +261,19 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                     }
                 }
                 
-                when {
-                    !state.bootstrapChecked -> BootstrapLoadingScreen()
-                    state.serverUnavailable -> BootstrapBlockingScreen(
-                        title = "Server or database unavailable",
-                        message = state.bootstrapError ?: "The server/database status could not be verified. Please check the backend connection and try again."
-                    )
-                    state.firstAdminSetupRequired -> FirstInstallWizardScreen(vm)
-                    else -> when (state.loggedIn) {
+                when (state.loggedIn) {
+                    null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    false -> LoginScreen(vm)
+                    true -> when (state.onboardingComplete) {
                         null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
-                        false -> LoginScreen(vm)
-                        true -> when (state.onboardingComplete) {
-                            null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
-                            false -> OnboardingScreen(vm) {}
-                            true -> {
-                                LaunchedEffect(Unit) { vm.loadTenantConfig() }
-                                MainAppScaffold(vm, navController)
-                            }
+                        false -> OnboardingScreen(vm) {}
+                        true -> {
+                            LaunchedEffect(Unit) { vm.loadTenantConfig() }
+                            MainAppScaffold(vm, navController)
                         }
                     }
                 }
@@ -338,407 +329,6 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         ensureVoiceServiceRunning()
     }
 }
-
-@Composable
-private fun BootstrapLoadingScreen() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularProgressIndicator()
-            Text("Checking server setup…", color = Color.Gray)
-        }
-    }
-}
-
-@Composable
-private fun BootstrapBlockingScreen(title: String, message: String) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                Text(message, fontSize = 14.sp, color = MaterialTheme.colorScheme.onErrorContainer)
-            }
-        }
-    }
-}
-
-private data class FirstInstallLanguageOption(
-    val code: String,
-    val label: String
-)
-
-private data class FirstInstallIndustryOption(
-    val label: String,
-    val industryGroup: String,
-    val industrySubtype: String
-) {
-    val key: String get() = "$industryGroup::$industrySubtype"
-}
-
-private val firstInstallLanguageOptions = listOf(
-    FirstInstallLanguageOption("en-GB", "English UK"),
-    FirstInstallLanguageOption("cs-CZ", "Czech"),
-    FirstInstallLanguageOption("pl-PL", "Polish"),
-    FirstInstallLanguageOption("pt-PT", "Portuguese"),
-    FirstInstallLanguageOption("es-ES", "Spanish"),
-    FirstInstallLanguageOption("de-DE", "German"),
-    FirstInstallLanguageOption("fr-FR", "French"),
-    FirstInstallLanguageOption("uk-UA", "Ukrainian"),
-    FirstInstallLanguageOption("ro-RO", "Romanian")
-)
-
-private val requiredFirstInstallIndustryOptions = listOf(
-    FirstInstallIndustryOption("Gardening", "gardening", "gardening"),
-    FirstInstallIndustryOption("Landscaping", "landscaping", "landscaping"),
-    FirstInstallIndustryOption("Garden Maintenance", "gardening", "garden_maintenance"),
-    FirstInstallIndustryOption("Grounds Maintenance", "grounds_maintenance", "grounds_maintenance"),
-    FirstInstallIndustryOption("Tree Surgery", "tree_surgery", "tree_surgery"),
-    FirstInstallIndustryOption("Hedge Cutting", "gardening", "hedge_cutting"),
-    FirstInstallIndustryOption("Fencing", "fencing", "fencing"),
-    FirstInstallIndustryOption("Drainage", "drainage", "drainage"),
-    FirstInstallIndustryOption("Groundworks", "groundworks", "groundworks"),
-    FirstInstallIndustryOption("Paving / Patios", "paving", "patios"),
-    FirstInstallIndustryOption("Construction", "construction", "construction"),
-    FirstInstallIndustryOption("Building Maintenance", "building_maintenance", "building_maintenance"),
-    FirstInstallIndustryOption("Roofing / Guttering", "roofing_guttering", "roofing_guttering"),
-    FirstInstallIndustryOption("Plumbing / Heating", "plumbing_heating", "plumbing_heating"),
-    FirstInstallIndustryOption("Electrical", "electrical", "electrical"),
-    FirstInstallIndustryOption("Carpentry / Joinery", "carpentry_joinery", "carpentry_joinery"),
-    FirstInstallIndustryOption("Painting / Decorating", "painting_decorating", "painting_decorating"),
-    FirstInstallIndustryOption("Design", "design", "design"),
-    FirstInstallIndustryOption("Property Maintenance", "property_maintenance", "property_maintenance")
-)
-
-@Composable
-private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
-    val state by viewModel.uiState.collectAsState()
-    LaunchedEffect(Unit) { viewModel.loadFirstInstallIndustries() }
-
-    var companyName by remember { mutableStateOf("") }
-    var companyLegalType by remember { mutableStateOf("") }
-    var country by remember { mutableStateOf("") }
-    var timezone by remember { mutableStateOf("") }
-    var currency by remember { mutableStateOf("") }
-    var workspaceMode by remember { mutableStateOf("") }
-    var selectedLanguages by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var defaultInternalLanguageCode by remember { mutableStateOf("") }
-    var defaultCustomerLanguageCode by remember { mutableStateOf("") }
-    var voiceInputLanguageCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var voiceOutputLanguageCodes by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var selectedIndustryKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var primaryIndustryKey by remember { mutableStateOf("") }
-    var adminDisplayName by remember { mutableStateOf("") }
-    var adminEmail by remember { mutableStateOf("") }
-    var adminPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var adminFirstName by remember { mutableStateOf("") }
-    var adminLastName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var website by remember { mutableStateOf("") }
-    var localError by remember { mutableStateOf<String?>(null) }
-
-    val industryOptions = remember(state.firstInstallIndustries) {
-        buildFirstInstallIndustryOptions(state.firstInstallIndustries)
-    }
-    val selectedIndustryOptions = industryOptions.filter { it.key in selectedIndustryKeys }
-    val primaryIndustry = selectedIndustryOptions.firstOrNull { it.key == primaryIndustryKey }
-
-    LaunchedEffect(selectedLanguages) {
-        if (defaultInternalLanguageCode !in selectedLanguages) defaultInternalLanguageCode = ""
-        if (defaultCustomerLanguageCode !in selectedLanguages) defaultCustomerLanguageCode = ""
-        voiceInputLanguageCodes = voiceInputLanguageCodes.intersect(selectedLanguages)
-        voiceOutputLanguageCodes = voiceOutputLanguageCodes.intersect(selectedLanguages)
-    }
-    LaunchedEffect(selectedIndustryKeys) {
-        if (primaryIndustryKey !in selectedIndustryKeys) primaryIndustryKey = ""
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        item {
-            Text("First installation setup", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "Create the first company and administrator account before login.",
-                fontSize = 14.sp,
-                color = Color.Gray
-            )
-        }
-        item { Text("Company", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
-        item { FirstInstallTextField(companyName, { companyName = it }, "Company name *") }
-        item { FirstInstallTextField(companyLegalType, { companyLegalType = it }, "Company legal type") }
-        item { FirstInstallTextField(country, { country = it }, "Country") }
-        item { FirstInstallTextField(timezone, { timezone = it }, "Timezone") }
-        item { FirstInstallTextField(currency, { currency = it }, "Currency") }
-        item { FirstInstallTextField(workspaceMode, { workspaceMode = it }, "Workspace mode") }
-
-        item { Text("Languages", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                firstInstallLanguageOptions.forEach { option ->
-                    FirstInstallCheckboxRow(
-                        checked = option.code in selectedLanguages,
-                        label = option.label,
-                        onCheckedChange = { checked ->
-                            selectedLanguages = if (checked) selectedLanguages + option.code else selectedLanguages - option.code
-                        }
-                    )
-                }
-            }
-        }
-        if (selectedLanguages.isNotEmpty()) {
-            item { Text("Default internal language", fontWeight = FontWeight.SemiBold) }
-            item {
-                FirstInstallSingleChoiceSection(
-                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
-                    selectedCode = defaultInternalLanguageCode,
-                    onSelect = { defaultInternalLanguageCode = it }
-                )
-            }
-            item { Text("Default customer language", fontWeight = FontWeight.SemiBold) }
-            item {
-                FirstInstallSingleChoiceSection(
-                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
-                    selectedCode = defaultCustomerLanguageCode,
-                    onSelect = { defaultCustomerLanguageCode = it }
-                )
-            }
-            item { Text("Voice input languages", fontWeight = FontWeight.SemiBold) }
-            item {
-                FirstInstallLanguageCheckboxSection(
-                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
-                    selectedCodes = voiceInputLanguageCodes,
-                    onToggle = { code, checked -> voiceInputLanguageCodes = if (checked) voiceInputLanguageCodes + code else voiceInputLanguageCodes - code }
-                )
-            }
-            item { Text("Voice output languages", fontWeight = FontWeight.SemiBold) }
-            item {
-                FirstInstallLanguageCheckboxSection(
-                    options = firstInstallLanguageOptions.filter { it.code in selectedLanguages },
-                    selectedCodes = voiceOutputLanguageCodes,
-                    onToggle = { code, checked -> voiceOutputLanguageCodes = if (checked) voiceOutputLanguageCodes + code else voiceOutputLanguageCodes - code }
-                )
-            }
-        }
-
-        item { Text("Industries", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
-        item {
-            when {
-                state.firstInstallIndustriesLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Loading industries…", color = Color.Gray)
-                }
-                industryOptions.isEmpty() -> Text("No industries returned by backend.", color = Color(0xFFFF9800))
-                else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    industryOptions.forEach { option ->
-                        FirstInstallCheckboxRow(
-                            checked = option.key in selectedIndustryKeys,
-                            label = option.label,
-                            supportingText = "${option.industryGroup} / ${option.industrySubtype}",
-                            onCheckedChange = { checked ->
-                                selectedIndustryKeys = if (checked) selectedIndustryKeys + option.key else selectedIndustryKeys - option.key
-                            }
-                        )
-                    }
-                }
-            }
-        }
-        if (selectedIndustryOptions.isNotEmpty()) {
-            item { Text("Primary industry", fontWeight = FontWeight.SemiBold) }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    selectedIndustryOptions.forEach { option ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().clickable { primaryIndustryKey = option.key }.padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(selected = primaryIndustryKey == option.key, onClick = { primaryIndustryKey = option.key })
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(option.label)
-                                Text("${option.industryGroup} / ${option.industrySubtype}", fontSize = 11.sp, color = Color.Gray)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        item { Text("First administrator", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
-        item { FirstInstallTextField(adminDisplayName, { adminDisplayName = it }, "Display name *") }
-        item { FirstInstallTextField(adminEmail, { adminEmail = it }, "Email *") }
-        item { FirstInstallTextField(adminPassword, { adminPassword = it }, "Password *") }
-        item { FirstInstallTextField(confirmPassword, { confirmPassword = it }, "Confirm password *") }
-        item { FirstInstallTextField(adminFirstName, { adminFirstName = it }, "First name") }
-        item { FirstInstallTextField(adminLastName, { adminLastName = it }, "Last name") }
-        item { FirstInstallTextField(phone, { phone = it }, "Phone") }
-        item { FirstInstallTextField(website, { website = it }, "Website") }
-
-        item {
-            val errorText = localError ?: state.firstInstallError
-            if (!errorText.isNullOrBlank()) {
-                Text(errorText, color = Color.Red, fontSize = 13.sp)
-            }
-        }
-        item {
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.firstInstallSubmitting,
-                onClick = {
-                    localError = when {
-                        companyName.isBlank() -> "Company name is required."
-                        selectedLanguages.isEmpty() -> "Select at least one language."
-                        defaultInternalLanguageCode.isBlank() || defaultInternalLanguageCode !in selectedLanguages -> "Default internal language must be selected from selected languages."
-                        defaultCustomerLanguageCode.isBlank() || defaultCustomerLanguageCode !in selectedLanguages -> "Default customer language must be selected from selected languages."
-                        selectedIndustryOptions.isEmpty() -> "Select at least one industry."
-                        primaryIndustry == null -> "Primary industry must be one of the selected industries."
-                        adminDisplayName.isBlank() -> "First administrator display name is required."
-                        adminEmail.isBlank() -> "First administrator email is required."
-                        adminPassword.isBlank() -> "First administrator password is required."
-                        adminPassword.length < 12 -> "First administrator password must be at least 12 characters."
-                        confirmPassword != adminPassword -> "Password confirmation must match the first administrator password."
-                        else -> null
-                    }
-                    if (localError == null && primaryIndustry != null) {
-                        viewModel.submitFirstInstall(
-                            FirstInstallRequest(
-                                company_name = companyName.trim(),
-                                company_legal_type = companyLegalType.trim(),
-                                country = country.trim(),
-                                timezone = timezone.trim(),
-                                currency = currency.trim(),
-                                selected_languages = selectedLanguages.toList().sorted(),
-                                default_internal_language_code = defaultInternalLanguageCode,
-                                default_customer_language_code = defaultCustomerLanguageCode,
-                                voice_input_language_codes = voiceInputLanguageCodes.toList().sorted(),
-                                voice_output_language_codes = voiceOutputLanguageCodes.toList().sorted(),
-                                workspace_mode = workspaceMode.trim(),
-                                selected_industries = selectedIndustryOptions.map { option ->
-                                    FirstInstallIndustrySelection(
-                                        industry_group = option.industryGroup,
-                                        industry_subtype = option.industrySubtype,
-                                        is_primary = option.key == primaryIndustry.key
-                                    )
-                                },
-                                primary_industry_group = primaryIndustry.industryGroup,
-                                primary_industry_subtype = primaryIndustry.industrySubtype,
-                                first_admin_display_name = adminDisplayName.trim(),
-                                first_admin_email = adminEmail.trim(),
-                                first_admin_password = adminPassword,
-                                first_admin_first_name = adminFirstName.trim(),
-                                first_admin_last_name = adminLastName.trim(),
-                                phone = phone.trim(),
-                                website = website.trim()
-                            )
-                        )
-                    }
-                }
-            ) {
-                if (state.firstInstallSubmitting) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Creating first installation…")
-                } else {
-                    Text("Create company and first administrator")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FirstInstallTextField(value: String, onValueChange: (String) -> Unit, label: String) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true
-    )
-}
-
-@Composable
-private fun FirstInstallCheckboxRow(
-    checked: Boolean,
-    label: String,
-    supportingText: String? = null,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) }.padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(label)
-            if (!supportingText.isNullOrBlank()) {
-                Text(supportingText, fontSize = 11.sp, color = Color.Gray)
-            }
-        }
-    }
-}
-
-@Composable
-private fun FirstInstallSingleChoiceSection(
-    options: List<FirstInstallLanguageOption>,
-    selectedCode: String,
-    onSelect: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        options.forEach { option ->
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { onSelect(option.code) }.padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(selected = selectedCode == option.code, onClick = { onSelect(option.code) })
-                Spacer(Modifier.width(8.dp))
-                Text(option.label)
-            }
-        }
-    }
-}
-
-@Composable
-private fun FirstInstallLanguageCheckboxSection(
-    options: List<FirstInstallLanguageOption>,
-    selectedCodes: Set<String>,
-    onToggle: (String, Boolean) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        options.forEach { option ->
-            FirstInstallCheckboxRow(
-                checked = option.code in selectedCodes,
-                label = option.label,
-                onCheckedChange = { checked -> onToggle(option.code, checked) }
-            )
-        }
-    }
-}
-
-private fun buildFirstInstallIndustryOptions(catalogue: List<CatalogueIndustryGroup>): List<FirstInstallIndustryOption> {
-    val backendOptions = catalogue.flatMap { group ->
-        if (group.subtypes.isEmpty()) {
-            listOf(FirstInstallIndustryOption(group.name, group.code, group.code))
-        } else {
-            group.subtypes.map { subtype ->
-                FirstInstallIndustryOption(subtype.name, group.code, subtype.code)
-            }
-        }
-    }
-    val backendByKey = backendOptions.associateBy { it.key }
-    val backendByNormalizedLabel = backendOptions.associateBy { normalizeFirstInstallLabel(it.label) }
-    return requiredFirstInstallIndustryOptions.map { required ->
-        backendByKey[required.key]
-            ?: backendByNormalizedLabel[normalizeFirstInstallLabel(required.label)]
-            ?: required
-    }.distinctBy { it.key }
-}
-
-private fun normalizeFirstInstallLabel(value: String): String =
-    value.lowercase(Locale.ROOT).replace("&", "and").replace("/", " ").replace(Regex("[^a-z0-9]+"), " ").trim()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -5115,9 +4705,8 @@ class SecretaryViewModel : ViewModel() {
 
     internal val api by lazy {
         val url = settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
-        val baseUrl = if (url.endsWith("/")) url else "$url/"
         Retrofit.Builder()
-        .baseUrl(baseUrl)
+        .baseUrl(url)
         .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
@@ -5218,154 +4807,8 @@ class SecretaryViewModel : ViewModel() {
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
-    }
-
-    private var bootstrapCheckStarted = false
-    fun checkBootstrapStatus(force: Boolean = false, afterFirstInstallSubmit: Boolean = false) {
-        if (bootstrapCheckStarted && !force) return
-        bootstrapCheckStarted = true
-        _uiState.value = _uiState.value.copy(
-            bootstrapChecked = false,
-            bootstrapError = null,
-            firstAdminSetupRequired = false,
-            serverUnavailable = false
-        )
-        viewModelScope.launch {
-            try {
-                val res = api.getBootstrapStatus()
-                if (res.isSuccessful) {
-                    val status = res.body()
-                    val databaseUnavailable = status == null || status.database_available == false
-                    val firstInstallRequired = status == null || status.needs_first_company || status.needs_first_admin || !status.is_ready
-                    _uiState.value = _uiState.value.copy(
-                        bootstrapStatus = status,
-                        bootstrapChecked = true,
-                        bootstrapError = if (databaseUnavailable) "Database is not available." else null,
-                        firstAdminSetupRequired = firstInstallRequired && !databaseUnavailable,
-                        serverUnavailable = databaseUnavailable,
-                        firstInstallError = when {
-                            status?.is_ready == true -> null
-                            afterFirstInstallSubmit && firstInstallRequired -> "First install was submitted, but backend setup is not ready yet."
-                            else -> _uiState.value.firstInstallError
-                        }
-                    )
-                    if (status?.is_ready == true && !databaseUnavailable) {
-                        autoLogin()
-                    }
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        bootstrapChecked = true,
-                        bootstrapError = "Bootstrap status failed: ${res.code()} ${res.message()}",
-                        serverUnavailable = true,
-                        loggedIn = null,
-                        onboardingComplete = null
-                    )
-                }
-            } catch (e: Exception) {
-                e.rethrowIfCancellation()
-                Log.e("ViewModel", "Bootstrap status check error", e)
-                _uiState.value = _uiState.value.copy(
-                    bootstrapChecked = true,
-                    bootstrapError = e.message ?: "Bootstrap status check failed.",
-                    serverUnavailable = true,
-                    loggedIn = null,
-                    onboardingComplete = null
-                )
-            }
-        }
-    }
-
-    fun loadFirstInstallIndustries() {
-        if (_uiState.value.firstInstallIndustriesLoading || _uiState.value.firstInstallIndustries.isNotEmpty()) return
-        _uiState.value = _uiState.value.copy(firstInstallIndustriesLoading = true, firstInstallError = null)
-        viewModelScope.launch {
-            try {
-                val res = api.getCatalogueIndustries()
-                if (res.isSuccessful) {
-                    _uiState.value = _uiState.value.copy(
-                        firstInstallIndustries = parseCatalogueIndustries(res.body()),
-                        firstInstallIndustriesLoading = false
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        firstInstallIndustriesLoading = false,
-                        firstInstallError = "Industry catalogue failed: ${res.code()} ${res.message()}"
-                    )
-                }
-            } catch (e: Exception) {
-                e.rethrowIfCancellation()
-                _uiState.value = _uiState.value.copy(
-                    firstInstallIndustriesLoading = false,
-                    firstInstallError = e.message ?: "Industry catalogue failed."
-                )
-            }
-        }
-    }
-
-    fun submitFirstInstall(request: FirstInstallRequest) {
-        _uiState.value = _uiState.value.copy(firstInstallSubmitting = true, firstInstallError = null)
-        viewModelScope.launch {
-            try {
-                val res = api.submitFirstInstall(request)
-                if (res.isSuccessful) {
-                    _uiState.value = _uiState.value.copy(firstInstallSubmitting = false)
-                    checkBootstrapStatus(force = true, afterFirstInstallSubmit = true)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        firstInstallSubmitting = false,
-                        firstInstallError = "First install failed: ${res.code()} ${res.message()}"
-                    )
-                }
-            } catch (e: Exception) {
-                e.rethrowIfCancellation()
-                _uiState.value = _uiState.value.copy(
-                    firstInstallSubmitting = false,
-                    firstInstallError = e.message ?: "First install failed."
-                )
-            }
-        }
-    }
-
-    private fun parseCatalogueIndustries(raw: Any?): List<CatalogueIndustryGroup> {
-        val root = raw as? Map<*, *>
-        val items = when (raw) {
-            is List<*> -> raw
-            is Map<*, *> -> (root?.get("industries") as? List<*>)
-                ?: (root?.get("items") as? List<*>)
-                ?: (root?.get("groups") as? List<*>)
-                ?: (root?.get("data") as? List<*>)
-                ?: emptyList<Any?>()
-            else -> emptyList()
-        }
-        return items.mapNotNull { item ->
-            val map = item as? Map<*, *> ?: return@mapNotNull null
-            val code = firstString(map, "code", "group_code", "industry_group", "id")
-            if (code.isBlank()) return@mapNotNull null
-            val name = firstString(map, "name", "display_name", "label", "title").ifBlank { code }
-            val subtypeItems = (map["subtypes"] as? List<*>)
-                ?: (map["industry_subtypes"] as? List<*>)
-                ?: (map["subindustries"] as? List<*>)
-                ?: (map["children"] as? List<*>)
-                ?: emptyList<Any?>()
-            val subtypes = subtypeItems.mapNotNull { sub ->
-                val subMap = sub as? Map<*, *> ?: return@mapNotNull null
-                val subCode = firstString(subMap, "code", "subtype_code", "industry_subtype", "id")
-                if (subCode.isBlank()) return@mapNotNull null
-                CatalogueIndustrySubtype(
-                    code = subCode,
-                    name = firstString(subMap, "name", "display_name", "label", "title").ifBlank { subCode }
-                )
-            }
-            CatalogueIndustryGroup(code = code, name = name, subtypes = subtypes)
-        }
-    }
-
-    private fun firstString(map: Map<*, *>, vararg keys: String): String {
-        keys.forEach { key ->
-            val value = map[key]
-            if (value != null) return value.toString()
-        }
-        return ""
+        // Auto-login then check onboarding
+        autoLogin()
     }
 
     private var autoLoginStarted = false
@@ -6025,10 +5468,7 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(onboardingComplete = false)
                 }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Onboarding check error", e)
-                _uiState.value = _uiState.value.copy(
-                    onboardingComplete = false,
-                    tenantConfigError = e.message ?: "Onboarding status check failed."
-                )
+                _uiState.value = _uiState.value.copy(onboardingComplete = true) // fallback: skip onboarding if server unreachable
             }
         }
     }
@@ -10048,15 +9488,6 @@ data class UiState(
     val recognitionLocale: String = Strings.getRecognitionLocale(),
     val status: String = Strings.ready, 
     val lastAiReply: String = Strings.waitingForYourCommand,
-    val bootstrapStatus: BootstrapStatusResponse? = null,
-    val bootstrapChecked: Boolean = false,
-    val bootstrapError: String? = null,
-    val firstAdminSetupRequired: Boolean = false,
-    val serverUnavailable: Boolean = false,
-    val firstInstallIndustries: List<CatalogueIndustryGroup> = emptyList(),
-    val firstInstallIndustriesLoading: Boolean = false,
-    val firstInstallSubmitting: Boolean = false,
-    val firstInstallError: String? = null,
     val history: List<ChatMessage> = emptyList(),
     val pendingNavigationAddress: String? = null,
     val awaitingNavigationAddress: Boolean = false,

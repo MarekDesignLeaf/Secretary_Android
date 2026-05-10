@@ -42,26 +42,26 @@ data class BootstrapStatusResponse(
 
 data class FirstInstallRequest(
     val company_name: String,
-    val company_legal_type: String,
-    val country: String,
-    val timezone: String,
-    val currency: String,
-    val selected_languages: List<String>,
-    val default_internal_language_code: String,
-    val default_customer_language_code: String,
+    val company_legal_type: String? = null,
+    val country: String? = null,
+    val timezone: String? = null,
+    val currency: String? = null,
+    val selected_languages: List<String> = emptyList(),
+    val default_internal_language_code: String? = null,
+    val default_customer_language_code: String? = null,
     val voice_input_language_codes: List<String> = emptyList(),
     val voice_output_language_codes: List<String> = emptyList(),
-    val workspace_mode: String,
-    val selected_industries: List<FirstInstallIndustrySelection>,
-    val primary_industry_group: String,
-    val primary_industry_subtype: String,
+    val workspace_mode: String? = null,
+    val selected_industries: List<FirstInstallIndustrySelection> = emptyList(),
+    val primary_industry_group: String? = null,
+    val primary_industry_subtype: String? = null,
     val first_admin_display_name: String,
     val first_admin_email: String,
     val first_admin_password: String,
-    val first_admin_first_name: String,
-    val first_admin_last_name: String,
-    val phone: String,
-    val website: String
+    val first_admin_first_name: String? = null,
+    val first_admin_last_name: String? = null,
+    val phone: String? = null,
+    val website: String? = null
 )
 
 data class FirstInstallIndustrySelection(
@@ -70,15 +70,23 @@ data class FirstInstallIndustrySelection(
     val is_primary: Boolean = false
 )
 
-data class CatalogueIndustrySubtype(
-    val code: String,
-    val name: String
+data class CatalogueIndustryGroup(
+    val code: String = "",
+    val name: String = "",
+    val subtypes: List<CatalogueIndustrySubtype> = emptyList(),
+    val work_activities: List<CatalogueWorkActivity> = emptyList()
 )
 
-data class CatalogueIndustryGroup(
-    val code: String,
-    val name: String,
-    val subtypes: List<CatalogueIndustrySubtype> = emptyList()
+data class CatalogueIndustrySubtype(
+    val code: String = "",
+    val name: String = "",
+    val work_activities: List<CatalogueWorkActivity> = emptyList()
+)
+
+data class CatalogueWorkActivity(
+    val code: String = "",
+    val name: String = "",
+    val unit: String? = null
 )
 
 // Contact sorting session state

@@ -317,15 +317,15 @@ interface SecretaryApi {
     @GET("health")
     suspend fun healthCheck(): Response<Map<String, @JvmSuppressWildcards Any>>
 
-    // === BOOTSTRAP ===
+    // === BOOTSTRAP / FIRST INSTALL ===
     @GET("api/v1/bootstrap/status")
     suspend fun getBootstrapStatus(): Response<BootstrapStatusResponse>
 
     @POST("api/v1/bootstrap/first-install")
-    suspend fun submitFirstInstall(@Body request: FirstInstallRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun postFirstInstall(@Body request: FirstInstallRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @GET("api/v1/catalogue/industries")
-    suspend fun getCatalogueIndustries(): Response<Any>
+    suspend fun getCatalogueIndustries(): Response<List<CatalogueIndustryGroup>>
 
     // === ONBOARDING ===
     @GET("onboarding/status/{tenantId}")
