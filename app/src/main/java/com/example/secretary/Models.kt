@@ -89,6 +89,12 @@ data class CatalogueWorkActivity(
     val unit: String? = null
 )
 
+data class LanguageOption(
+    val code: String = "",
+    val label: String = "",
+    val is_default: Boolean = false
+)
+
 // Contact sorting session state
 data class ContactDuplicate(
     val id1: Long = 0,
