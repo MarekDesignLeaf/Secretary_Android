@@ -69,9 +69,9 @@ class SettingsManager(context: Context) {
     var apiUrl: String
         get() {
             val saved = prefs.getString("api_url", null)
-            return if (saved.isNullOrBlank()) BuildConfig.BASE_URL else saved
+            return ApiUrlNormalizer.normalize(if (saved.isNullOrBlank()) BuildConfig.BASE_URL else saved)
         }
-        set(v) = prefs.edit { putString("api_url", v) }
+        set(v) = prefs.edit { putString("api_url", ApiUrlNormalizer.normalize(v)) }
     var offlineMode: Boolean
         get() = prefs.getBoolean("offline_mode", false)
         set(v) = prefs.edit { putBoolean("offline_mode", v) }

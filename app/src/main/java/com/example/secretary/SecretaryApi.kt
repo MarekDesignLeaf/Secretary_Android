@@ -221,7 +221,7 @@ interface SecretaryApi {
     suspend fun getDefaultRates(@Header("Authorization") auth: String, @Path("tenantId") tenantId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @PUT("tenant/default-rates/{tenantId}")
-    suspend fun updateDefaultRates(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun updateDefaultRates(@Body data: Map<String, @JvmSuppressWildcards Any?>, @Path("tenantId") tenantId: Int = 1): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === USER RATES ===
     @GET("crm/users/{userId}/rates")
