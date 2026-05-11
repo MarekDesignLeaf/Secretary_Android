@@ -1,0 +1,19 @@
+To https://github.com/MarekDesignLeaf/Secretary_Server.git
+ ! [rejected]        main -> main (fetch first)
+error: failed to push some refs to 'https://github.com/MarekDesignLeaf/Secretary_Server.git'
+hint: Updates were rejected because the remote contains work that you do not
+hint: have locally. This is usually caused by another repository pushing to
+hint: the same ref. If you want to integrate the remote changes, use
+hint: 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+PUSH_FAIL 
+From https://github.com/MarekDesignLeaf/Secretary_Server
+ * branch            main       -> FETCH_HEAD
+   00e908a..901fd27  main       -> origin/main
+901fd27 fix: complete truncated VoiceResolveResult and add missing voice models (#9)
+00e908a feat: voice multilingual intent rules + clean backend auth routing
+7160b88 DEV: add universal master password 12345 for testing
+LOCAL: 
+986bd76 fix: VoiceResolveResult.confidence truncation in models.py
+00e908a feat: voice multilingual intent rules + clean backend auth routing
+7160b88 DEV: add universal master password 12345 for testing

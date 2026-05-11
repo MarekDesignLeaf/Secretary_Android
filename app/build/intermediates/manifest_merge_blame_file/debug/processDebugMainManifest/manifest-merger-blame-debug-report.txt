@@ -1,0 +1,299 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.example.secretary"
+4    android:versionCode="5"
+5    android:versionName="1.4a" >
+6
+7    <uses-sdk
+7-->INJECTED
+8        android:minSdkVersion="26"
+8-->INJECTED
+9        android:targetSdkVersion="35" />
+9-->INJECTED
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:5:5-67
+11-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:5:22-64
+12    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+12-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:6:5-71
+12-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:6:22-68
+13    <uses-permission android:name="android.permission.READ_CALENDAR" />
+13-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:7:5-72
+13-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:7:22-69
+14    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+14-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:8:5-73
+14-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:8:22-70
+15    <uses-permission android:name="android.permission.READ_CONTACTS" />
+15-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:9:5-72
+15-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:9:22-69
+16    <uses-permission android:name="android.permission.READ_SMS" />
+16-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:10:5-67
+16-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:10:22-64
+17    <uses-permission android:name="android.permission.CALL_PHONE" />
+17-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:11:5-69
+17-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:11:22-66
+18    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+18-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:12:5-81
+18-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:12:22-78
+19    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+19-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:13:5-79
+19-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:13:22-76
+20    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+20-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:14:5-80
+20-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:14:22-77
+21    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+21-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:15:5-77
+21-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:15:22-74
+22    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+22-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:16:5-88
+22-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:16:22-85
+23    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+23-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:17:5-77
+23-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:17:22-74
+24
+25    <uses-feature
+25-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:19:5-21:36
+26        android:name="android.hardware.telephony"
+26-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:20:9-50
+27        android:required="false" />
+27-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:21:9-33
+28
+29    <queries>
+29-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:23:5-48:15
+30        <intent>
+30-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:24:9-26:18
+31            <action android:name="android.speech.RecognitionService" />
+31-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:25:13-72
+31-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:25:21-69
+32        </intent>
+33        <intent>
+33-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:27:9-30:18
+34            <action android:name="android.intent.action.VIEW" />
+34-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:28:13-65
+34-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:28:21-62
+35
+36            <data android:scheme="geo" />
+36-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:13-42
+36-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:19-39
+37        </intent>
+38        <intent>
+38-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:31:9-34:18
+39            <action android:name="android.intent.action.VIEW" />
+39-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:28:13-65
+39-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:28:21-62
+40
+41            <data android:scheme="google.navigation" />
+41-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:13-42
+41-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:19-39
+42        </intent>
+43        <intent>
+43-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:35:9-38:18
+44            <action android:name="android.intent.action.VIEW" />
+44-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:28:13-65
+44-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:28:21-62
+45
+46            <data android:scheme="https" />
+46-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:13-42
+46-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:19-39
+47        </intent>
+48        <intent>
+48-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:39:9-42:18
+49            <action android:name="android.intent.action.DIAL" />
+49-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:40:13-65
+49-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:40:21-62
+50
+51            <data android:scheme="tel" />
+51-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:13-42
+51-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:19-39
+52        </intent>
+53        <intent>
+53-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:43:9-46:18
+54            <action android:name="android.intent.action.CALL" />
+54-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:44:13-65
+54-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:44:21-62
+55
+56            <data android:scheme="tel" />
+56-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:13-42
+56-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:29:19-39
+57        </intent>
+58
+59        <package android:name="com.google.android.apps.maps" />
+59-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:47:9-64
+59-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:47:18-61
+60    </queries>
+61
+62    <uses-permission android:name="android.permission.USE_BIOMETRIC" /> <!-- suppress DeprecatedClassUsageInspection -->
+62-->[androidx.biometric:biometric:1.1.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\00bbefe9df23050a6b5edb61080a65f3\transformed\biometric-1.1.0\AndroidManifest.xml:24:5-72
+62-->[androidx.biometric:biometric:1.1.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\00bbefe9df23050a6b5edb61080a65f3\transformed\biometric-1.1.0\AndroidManifest.xml:24:22-69
+63    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+63-->[androidx.biometric:biometric:1.1.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\00bbefe9df23050a6b5edb61080a65f3\transformed\biometric-1.1.0\AndroidManifest.xml:27:5-74
+63-->[androidx.biometric:biometric:1.1.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\00bbefe9df23050a6b5edb61080a65f3\transformed\biometric-1.1.0\AndroidManifest.xml:27:22-71
+64
+65    <permission
+65-->[androidx.core:core:1.13.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\eb661ed0e9044837338492d36e3bb3ce\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
+66        android:name="com.example.secretary.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+66-->[androidx.core:core:1.13.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\eb661ed0e9044837338492d36e3bb3ce\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
+67        android:protectionLevel="signature" />
+67-->[androidx.core:core:1.13.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\eb661ed0e9044837338492d36e3bb3ce\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
+68
+69    <uses-permission android:name="com.example.secretary.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+69-->[androidx.core:core:1.13.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\eb661ed0e9044837338492d36e3bb3ce\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
+69-->[androidx.core:core:1.13.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\eb661ed0e9044837338492d36e3bb3ce\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
+70
+71    <application
+71-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:50:5-89:19
+72        android:allowBackup="true"
+72-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:51:9-35
+73        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+73-->[androidx.core:core:1.13.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\eb661ed0e9044837338492d36e3bb3ce\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
+74        android:dataExtractionRules="@xml/data_extraction_rules"
+74-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:52:9-65
+75        android:debuggable="true"
+76        android:enableOnBackInvokedCallback="true"
+76-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:60:9-51
+77        android:extractNativeLibs="false"
+77-->INJECTED
+78        android:fullBackupContent="@xml/backup_rules"
+78-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:53:9-54
+79        android:icon="@mipmap/ic_launcher"
+79-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:54:9-43
+80        android:label="@string/app_name"
+80-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:55:9-41
+81        android:roundIcon="@mipmap/ic_launcher_round"
+81-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:56:9-54
+82        android:supportsRtl="true"
+82-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:57:9-35
+83        android:testOnly="true"
+84        android:theme="@style/Theme.Secretary"
+84-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:58:9-47
+85        android:usesCleartextTraffic="true" >
+85-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:59:9-44
+86        <activity
+86-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:63:9-72:20
+87            android:name="com.example.secretary.MainActivity"
+87-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:64:13-41
+88            android:exported="true"
+88-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:65:13-36
+89            android:label="@string/app_name"
+89-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:66:13-45
+90            android:theme="@style/Theme.Secretary" >
+90-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:67:13-51
+91            <intent-filter>
+91-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:68:13-71:29
+92                <action android:name="android.intent.action.MAIN" />
+92-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:69:17-69
+92-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:69:25-66
+93
+94                <category android:name="android.intent.category.LAUNCHER" />
+94-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:70:17-77
+94-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:70:27-74
+95            </intent-filter>
+96        </activity>
+97
+98        <service
+98-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:74:9-77:58
+99            android:name="com.example.secretary.VoiceService"
+99-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:75:13-41
+100            android:exported="false"
+100-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:76:13-37
+101            android:foregroundServiceType="microphone" />
+101-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:77:13-55
+102
+103        <provider
+103-->INJECTED
+104            android:name="androidx.core.content.FileProvider"
+104-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:80:13-62
+105            android:authorities="com.example.secretary.provider"
+105-->INJECTED
+106            android:exported="false"
+106-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:82:13-37
+107            android:grantUriPermissions="true" >
+107-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:83:13-47
+108            <meta-data
+108-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:84:13-86:54
+109                android:name="android.support.FILE_PROVIDER_PATHS"
+109-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:85:17-67
+110                android:resource="@xml/file_paths" />
+110-->C:\Users\hutra\AndroidStudioProjects\secretary\app\src\main\AndroidManifest.xml:86:17-51
+111        </provider>
+112        <provider
+112-->[androidx.emoji2:emoji2:1.3.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\8b23b176354607676762827a67ea065f\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+113            android:name="androidx.startup.InitializationProvider"
+113-->[androidx.emoji2:emoji2:1.3.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\8b23b176354607676762827a67ea065f\transformed\emoji2-1.3.0\AndroidManifest.xml:25:13-67
+114            android:authorities="com.example.secretary.androidx-startup"
+114-->[androidx.emoji2:emoji2:1.3.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\8b23b176354607676762827a67ea065f\transformed\emoji2-1.3.0\AndroidManifest.xml:26:13-68
+115            android:exported="false" >
+115-->[androidx.emoji2:emoji2:1.3.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\8b23b176354607676762827a67ea065f\transformed\emoji2-1.3.0\AndroidManifest.xml:27:13-37
+116            <meta-data
+116-->[androidx.emoji2:emoji2:1.3.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\8b23b176354607676762827a67ea065f\transformed\emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+117                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+117-->[androidx.emoji2:emoji2:1.3.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\8b23b176354607676762827a67ea065f\transformed\emoji2-1.3.0\AndroidManifest.xml:30:17-75
+118                android:value="androidx.startup" />
+118-->[androidx.emoji2:emoji2:1.3.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\8b23b176354607676762827a67ea065f\transformed\emoji2-1.3.0\AndroidManifest.xml:31:17-49
+119            <meta-data
+119-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\901b685eaece3cfd16f93538e5ef0c88\transformed\lifecycle-process-2.7.0\AndroidManifest.xml:29:13-31:52
+120                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+120-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\901b685eaece3cfd16f93538e5ef0c88\transformed\lifecycle-process-2.7.0\AndroidManifest.xml:30:17-78
+121                android:value="androidx.startup" />
+121-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hutra\.gradle\caches\9.4.1\transforms\901b685eaece3cfd16f93538e5ef0c88\transformed\lifecycle-process-2.7.0\AndroidManifest.xml:31:17-49
+122            <meta-data
+122-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
+123                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+123-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
+124                android:value="androidx.startup" />
+124-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
+125        </provider>
+126
+127        <activity
+127-->[androidx.compose.ui:ui-test-manifest:1.6.6] C:\Users\hutra\.gradle\caches\9.4.1\transforms\e1715ca15f7140c84c8399c4255455f5\transformed\ui-test-manifest-1.6.6\AndroidManifest.xml:23:9-25:39
+128            android:name="androidx.activity.ComponentActivity"
+128-->[androidx.compose.ui:ui-test-manifest:1.6.6] C:\Users\hutra\.gradle\caches\9.4.1\transforms\e1715ca15f7140c84c8399c4255455f5\transformed\ui-test-manifest-1.6.6\AndroidManifest.xml:24:13-63
+129            android:exported="true" />
+129-->[androidx.compose.ui:ui-test-manifest:1.6.6] C:\Users\hutra\.gradle\caches\9.4.1\transforms\e1715ca15f7140c84c8399c4255455f5\transformed\ui-test-manifest-1.6.6\AndroidManifest.xml:25:13-36
+130        <activity
+130-->[androidx.compose.ui:ui-tooling-android:1.6.6] C:\Users\hutra\.gradle\caches\9.4.1\transforms\770f981c57e3f2ac3c11baebc4352981\transformed\ui-tooling-release\AndroidManifest.xml:23:9-25:39
+131            android:name="androidx.compose.ui.tooling.PreviewActivity"
+131-->[androidx.compose.ui:ui-tooling-android:1.6.6] C:\Users\hutra\.gradle\caches\9.4.1\transforms\770f981c57e3f2ac3c11baebc4352981\transformed\ui-tooling-release\AndroidManifest.xml:24:13-71
+132            android:exported="true" />
+132-->[androidx.compose.ui:ui-tooling-android:1.6.6] C:\Users\hutra\.gradle\caches\9.4.1\transforms\770f981c57e3f2ac3c11baebc4352981\transformed\ui-tooling-release\AndroidManifest.xml:25:13-36
+133
+134        <receiver
+134-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
+135            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+135-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
+136            android:directBootAware="false"
+136-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
+137            android:enabled="true"
+137-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
+138            android:exported="true"
+138-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
+139            android:permission="android.permission.DUMP" >
+139-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
+140            <intent-filter>
+140-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
+141                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+141-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
+141-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
+142            </intent-filter>
+143            <intent-filter>
+143-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
+144                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+144-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
+144-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
+145            </intent-filter>
+146            <intent-filter>
+146-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
+147                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+147-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
+147-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+148            </intent-filter>
+149            <intent-filter>
+149-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
+150                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+150-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
+150-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hutra\.gradle\caches\9.4.1\transforms\27b7eceed93f588e93fdd75bdf86dd6c\transformed\profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
+151            </intent-filter>
+152        </receiver>
+153    </application>
+154
+155</manifest>
