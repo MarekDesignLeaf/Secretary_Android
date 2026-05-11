@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import android.Manifest
 import android.content.ComponentName
@@ -53,8 +53,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -1935,14 +1933,23 @@ class SecretaryViewModel : ViewModel() {
         .retryOnConnectionFailure(true)
         .build()
 
-    internal val api by lazy {
-        val url = settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
-        Retrofit.Builder()
-        .baseUrl(url)
-        .client(okHttpClient)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-        .create(SecretaryApi::class.java) }
+    private var cachedApiBaseUrl: String? = null
+    private var cachedApi: SecretaryApi? = null
+
+    internal val api: SecretaryApi
+        get() {
+            val url = ApiUrlNormalizer.normalize(settingsManager?.apiUrl ?: BuildConfig.BASE_URL)
+            if (cachedApi == null || cachedApiBaseUrl != url) {
+                cachedApiBaseUrl = url
+                cachedApi = Retrofit.Builder()
+                    .baseUrl(url)
+                    .client(okHttpClient)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                    .create(SecretaryApi::class.java)
+            }
+            return cachedApi!!
+        }
 
     fun setManagers(vm: VoiceManager?, cm: CalendarManager, ctm: ContactManager, mm: MailManager, sm: SettingsManager) {
         voiceManager = vm; calendarManager = cm; contactManager = ctm; mailManager = mm; settingsManager = sm
@@ -2009,19 +2016,20 @@ class SecretaryViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(loggedIn = false, onboardingComplete = null, tenantConfig = null)
     }
 
-    fun tryRefreshToken(): Boolean {
+    suspend fun tryRefreshToken(): Boolean {
         val rt = settingsManager?.refreshToken ?: return false
         return try {
-            val url = (settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL) + "auth/refresh"
-            val body = """{"refresh_token":"$rt"}""".toRequestBody("application/json; charset=utf-8".toMediaType())
-            val request = okhttp3.Request.Builder().url(url).post(body).build()
-            val response = okhttp3.OkHttpClient().newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = org.json.JSONObject(response.body?.string() ?: "{}")
-                settingsManager?.accessToken = json.optString("access_token", null)
-                Log.d("ViewModel", "Token refreshed")
-                true
-            } else false
+            val response = api.authRefresh(mapOf("refresh_token" to rt))
+            if (!response.isSuccessful) return false
+            val body = response.body() ?: return false
+            val accessToken = body["access_token"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }
+                ?: return false
+            settingsManager?.accessToken = accessToken
+            body["refresh_token"]?.toString()?.takeIf { it.isNotBlank() && it != "null" }?.let { newRefreshToken ->
+                settingsManager?.refreshToken = newRefreshToken
+            }
+            Log.d("ViewModel", "Token refreshed")
+            true
         } catch (e: Exception) {
             Log.e("ViewModel", "Token refresh error", e)
             false
