@@ -5378,7 +5378,7 @@ class SecretaryViewModel : ViewModel() {
                         bootstrapError = if (databaseUnavailable) "Database is not available." else null,
                         firstAdminSetupRequired = firstInstallRequired && !databaseUnavailable,
                         serverUnavailable = databaseUnavailable,
-                        isCleanBackend = status?.is_ready == true,
+                        isCleanBackend = true, // bootstrap/status endpoint exists → always clean backend
                         firstInstallError = when {
                             status?.is_ready == true -> null
                             afterFirstInstallSubmit && firstInstallRequired -> "First install was submitted, but backend setup is not ready yet."
