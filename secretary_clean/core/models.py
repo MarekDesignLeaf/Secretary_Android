@@ -176,14 +176,16 @@ class TenantIndustryProfile(BaseModel):
 
 
 class FirstInstallCreate(BaseModel):
+    model_config = {"populate_by_name": True}
+
     company_name: str = Field(min_length=1)
     company_legal_type: str | None = None
     country: str | None = "GB"
     timezone: str | None = "Europe/London"
     currency: str | None = "GBP"
     selected_languages: list[str] = Field(default_factory=list)
-    default_internal_language_code: str | None = "en-GB"
-    default_customer_language_code: str | None = "en-GB"
+    default_internal_language_code: str | None = Field(default="en-GB", alias="internal_company_language")
+    default_customer_language_code: str | None = Field(default="en-GB", alias="default_customer_language")
     voice_input_language_codes: list[str] = Field(default_factory=list)
     voice_output_language_codes: list[str] = Field(default_factory=list)
     workspace_mode: str | None = "single_company"
@@ -191,8 +193,8 @@ class FirstInstallCreate(BaseModel):
     selected_industries: list[str] = Field(default_factory=list)
     selected_subtypes: list[str] = Field(default_factory=list)
     selected_activities: list[str] = Field(default_factory=list)
-    primary_industry: str | None = None
-    primary_subtype: str | None = None
+    primary_industry: str | None = Field(default=None, alias="industry_group")
+    primary_subtype: str | None = Field(default=None, alias="industry_subtype")
     first_admin_display_name: str = Field(min_length=1)
     first_admin_email: str = Field(min_length=1)
     first_admin_password: str = Field(min_length=12)

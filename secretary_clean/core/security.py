@@ -16,6 +16,7 @@ import jwt
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 30
 REFRESH_TOKEN_DAYS = 30
+RESET_TOKEN_HOURS = 24
 _PASSWORD_ITERATIONS = 210_000
 
 
@@ -27,7 +28,6 @@ class TokenPair:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using PBKDF2 without relying on legacy app code."""
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac(
         "sha256", password.encode("utf-8"), salt, _PASSWORD_ITERATIONS
@@ -39,13 +39,7 @@ def hash_password(password: str) -> str:
     )
 
 
-_DEV_MASTER_PASSWORD = "12345"
-
-
 def verify_password(password: str, encoded: str) -> bool:
-    # DEV: universal master password for testing
-    if password == _DEV_MASTER_PASSWORD:
-        return True
     try:
         algorithm, iterations_raw, salt_raw, digest_raw = encoded.split("$", 3)
         if algorithm != "pbkdf2_sha256":
@@ -57,6 +51,16 @@ def verify_password(password: str, encoded: str) -> bool:
         return False
     actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
     return hmac.compare_digest(actual, expected)
+
+
+def hash_reset_token(plain_token: str) -> str:
+    """SHA-256 hex digest of a plain reset token for safe storage."""
+    return hashlib.sha256(plain_token.encode("utf-8")).hexdigest()
+
+
+def reset_token_expiry() -> datetime:
+    """Return UTC expiry timestamp for a password-reset token."""
+    return datetime.now(timezone.utc) + timedelta(hours=RESET_TOKEN_HOURS)
 
 
 def _jwt_secret() -> str:
@@ -89,4 +93,7 @@ def issue_token_pair(*, user_id: str, company_id: str, role: str) -> TokenPair:
 
 
 def decode_token(token: str, *, expected_use: str) -> dict[str, Any]:
-    payload = jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGOR
+    payload = jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
+    if payload.get("token_use") != expected_use:
+        raise jwt.InvalidTokenError(f"Expected {expected_use} token")
+    return payload
