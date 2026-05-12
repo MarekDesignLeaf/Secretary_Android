@@ -10,12 +10,13 @@ from fastapi import FastAPI
 
 from secretary_clean.api.routes import auth, bootstrap, catalogue, company, crm, language, tenant_pricing, users, voice
 from secretary_clean.catalogue.source_parser import load_catalogue
+from secretary_clean.core.persistence import PersistentRepository
 from secretary_clean.core.repository import InMemorySecretaryRepository
 
 
 def create_app(repository: InMemorySecretaryRepository | None = None) -> FastAPI:
     app = FastAPI(title="Secretary Clean Backend", version="0.1.0")
-    app.state.repository = repository or InMemorySecretaryRepository()
+    app.state.repository = repository or PersistentRepository()
     app.state.catalogue = load_catalogue()
     app.include_router(bootstrap.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
