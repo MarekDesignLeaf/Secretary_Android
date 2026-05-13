@@ -5230,6 +5230,24 @@ class SecretaryViewModel : ViewModel() {
         .build()
         .create(SecretaryApi::class.java) }
 
+    // Clean backend: all legacy paths (crm/, activities/, work-reports/, etc.) live under /api/v1/
+    // Using a second Retrofit instance with BASE/api/v1/ base URL so that e.g. "crm/clients"
+    // resolves to BASE/api/v1/crm/clients without touching every call site individually.
+    internal val apiV1 by lazy {
+        val url = settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
+        val base = if (url.endsWith("/")) url.dropLast(1) else url
+        Retrofit.Builder()
+        .baseUrl("$base/api/v1/")
+        .client(okHttpClient)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+        .create(SecretaryApi::class.java) }
+
+    // Use this for all legacy CRM/activity/etc. path calls.
+    // On clean backend routes through apiV1 (adds /api/v1/ prefix automatically).
+    internal val legacyOrV1Api: SecretaryApi
+        get() = if (_uiState.value.isCleanBackend) apiV1 else api
+
     private fun extractPermissionMap(raw: Any?): Map<String, Boolean> {
         val map = raw as? Map<*, *> ?: return emptyMap()
         return map.entries.mapNotNull { (key, value) ->
@@ -6546,7 +6564,7 @@ class SecretaryViewModel : ViewModel() {
                         "planning_note" to replacementDraft.planningNote
                     )
                 }
-                val res = api.updateTask(taskId, payload)
+                val res = legacyOrV1Api.updateTask(taskId, payload)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone?.invoke(true, null)
@@ -6579,7 +6597,7 @@ class SecretaryViewModel : ViewModel() {
                     "set_as_next_action" to draft.setAsNextAction,
                     "source" to "manualne"
                 )
-                val res = api.createTask(payload)
+                val res = legacyOrV1Api.createTask(payload)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7112,16 +7130,16 @@ class SecretaryViewModel : ViewModel() {
     fun refreshCrmData() {
         viewModelScope.launch {
             try {
-                val cl = api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
-                val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
-                val sc = api.getSharedContacts(); if (sc.isSuccessful) { _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList()); checkContactDuplicates() }
-                val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
-                val jb = api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
-                val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
-                val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
-                val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
+                val cl = legacyOrV1Api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
+                val cs = legacyOrV1Api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
+                val sc = legacyOrV1Api.getSharedContacts(); if (sc.isSuccessful) { _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList()); checkContactDuplicates() }
+                val pr = legacyOrV1Api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
+                val jb = legacyOrV1Api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
+                val ld = legacyOrV1Api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
+                val qt = legacyOrV1Api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
+                val iv = legacyOrV1Api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
                 val language = _uiState.value.appLanguage
-                val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
+                val nh = legacyOrV1Api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
@@ -7134,16 +7152,16 @@ class SecretaryViewModel : ViewModel() {
     private fun refreshCrmDataKeepTasks() {
         viewModelScope.launch {
             try {
-                val cl = api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
-                val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
-                val sc = api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
-                val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
-                val jb = api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
-                val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
-                val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
-                val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
+                val cl = legacyOrV1Api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
+                val cs = legacyOrV1Api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
+                val sc = legacyOrV1Api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
+                val pr = legacyOrV1Api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
+                val jb = legacyOrV1Api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
+                val ld = legacyOrV1Api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
+                val qt = legacyOrV1Api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
+                val iv = legacyOrV1Api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
                 val language = _uiState.value.appLanguage
-                val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
+                val nh = legacyOrV1Api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
@@ -7160,7 +7178,7 @@ class SecretaryViewModel : ViewModel() {
 
     private suspend fun loadCalendarFeedFromServer(days: Int = 30) {
         try {
-            val res = api.getCalendarFeed(days)
+            val res = legacyOrV1Api.getCalendarFeed(days)
             if (res.isSuccessful) {
                 val entries = res.body() ?: emptyList()
                 _uiState.value = _uiState.value.copy(calendarFeed = entries)
@@ -7174,7 +7192,7 @@ class SecretaryViewModel : ViewModel() {
 
     private suspend fun loadWorkReportsFromServer() {
         try {
-            val res = api.getWorkReports()
+            val res = legacyOrV1Api.getWorkReports()
             if (res.isSuccessful) {
                 val raw = res.body() ?: emptyList()
                 val reports = raw.map { m ->
@@ -7202,7 +7220,7 @@ class SecretaryViewModel : ViewModel() {
     }
     private suspend fun loadTasksFromServer() {
         try {
-            val tr = api.getTasks()
+            val tr = legacyOrV1Api.getTasks()
             if (tr.isSuccessful) {
                 val serverTasks = (tr.body() ?: emptyList()).map { m ->
                     Task(
@@ -7240,7 +7258,7 @@ class SecretaryViewModel : ViewModel() {
     fun loadTenantRateTypes() {
         viewModelScope.launch {
             try {
-                val res = api.getDefaultRates(1)
+                val res = legacyOrV1Api.getDefaultRates(1)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(tenantRateTypes = res.body() ?: emptyList())
                 }
@@ -7257,8 +7275,8 @@ class SecretaryViewModel : ViewModel() {
                 tenantActivityPricing = emptyList()
             )
             try {
-                val tRes = api.getActivityTemplates(subtypeCode = subtypeCode, groupCode = groupCode)
-                val pRes = api.getTenantActivityPricing(1, subtypeCode = subtypeCode)
+                val tRes = legacyOrV1Api.getActivityTemplates(subtypeCode = subtypeCode, groupCode = groupCode)
+                val pRes = legacyOrV1Api.getTenantActivityPricing(1, subtypeCode = subtypeCode)
                 _uiState.value = _uiState.value.copy(
                     activityTemplates = if (tRes.isSuccessful) tRes.body() ?: emptyList() else emptyList(),
                     tenantActivityPricing = if (pRes.isSuccessful) pRes.body() ?: emptyList() else emptyList(),
@@ -7280,7 +7298,7 @@ class SecretaryViewModel : ViewModel() {
     fun upsertActivityPricing(templateId: Long, data: Map<String, Any?>, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val res = api.upsertTenantActivityPricing(1, templateId, data)
+                val res = legacyOrV1Api.upsertTenantActivityPricing(1, templateId, data)
                 if (res.isSuccessful) onDone()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Upsert activity pricing error", e)
             }
@@ -7290,7 +7308,7 @@ class SecretaryViewModel : ViewModel() {
     fun resetActivityPricing(templateId: Long, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val res = api.resetTenantActivityPricing(1, templateId)
+                val res = legacyOrV1Api.resetTenantActivityPricing(1, templateId)
                 if (res.isSuccessful) onDone()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Reset activity pricing error", e)
             }
@@ -7368,7 +7386,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(selectedClientDetail = null)
             try {
-                val res = api.getClientDetail(clientId)
+                val res = legacyOrV1Api.getClientDetail(clientId)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(selectedClientDetail = res.body())
                 }
@@ -7395,7 +7413,7 @@ class SecretaryViewModel : ViewModel() {
                         "planning_note" to draft.firstAction.planningNote
                     )
                 )
-                val res = api.createClient(data)
+                val res = legacyOrV1Api.createClient(data)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7411,7 +7429,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateClient(clientId: Long, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
-                val res = api.updateClient(clientId, data)
+                val res = legacyOrV1Api.updateClient(clientId, data)
                 if (res.isSuccessful) { loadClientDetail(clientId); refreshCrmData() }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update client error", e) }
         }
@@ -7420,7 +7438,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateClientServiceRates(clientId: Long, rates: Map<String, Any?>, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = api.updateClientServiceRates(clientId, rates)
+                val res = legacyOrV1Api.updateClientServiceRates(clientId, rates)
                 if (res.isSuccessful) {
                     loadClientDetail(clientId)
                     refreshCrmData()
@@ -7445,7 +7463,7 @@ class SecretaryViewModel : ViewModel() {
     fun addClientNote(clientId: Long, note: String) {
         viewModelScope.launch {
             try {
-                val res = api.addClientNote(clientId, mapOf("note" to note))
+                val res = legacyOrV1Api.addClientNote(clientId, mapOf("note" to note))
                 if (res.isSuccessful) loadClientDetail(clientId)
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add note error", e) }
         }
@@ -7522,7 +7540,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val localContacts = preparePhoneContacts(context)
-                val res = api.syncContacts(mapOf("contacts" to localContacts, "filter_uk" to false))
+                val res = legacyOrV1Api.syncContacts(mapOf("contacts" to localContacts, "filter_uk" to false))
                 if (res.isSuccessful) {
                     val remoteMap = (res.body()?.contacts ?: emptyList()).associateBy { it.contact_key }
                     val merged = localContacts.map { local ->
@@ -7589,7 +7607,7 @@ class SecretaryViewModel : ViewModel() {
                         "selected_as_client" to contact.selected_as_client
                     )
                 }
-                val res = api.syncContacts(mapOf("contacts" to payload, "filter_uk" to false))
+                val res = legacyOrV1Api.syncContacts(mapOf("contacts" to payload, "filter_uk" to false))
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7644,7 +7662,7 @@ class SecretaryViewModel : ViewModel() {
     fun createContactSection(displayName: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = api.createContactSection(mapOf("display_name" to displayName))
+                val res = legacyOrV1Api.createContactSection(mapOf("display_name" to displayName))
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7661,7 +7679,7 @@ class SecretaryViewModel : ViewModel() {
     fun saveSharedContact(data: Map<String, Any?>, contactId: Long? = null, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = if (contactId == null) api.createSharedContact(data) else api.updateSharedContact(contactId, data)
+                val res = if (contactId == null) legacyOrV1Api.createSharedContact(data) else legacyOrV1Api.updateSharedContact(contactId, data)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7678,7 +7696,7 @@ class SecretaryViewModel : ViewModel() {
     fun deleteSharedContact(contactId: Long, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = api.deleteSharedContact(contactId)
+                val res = legacyOrV1Api.deleteSharedContact(contactId)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7710,7 +7728,7 @@ class SecretaryViewModel : ViewModel() {
                         "selected" to it.selected
                     )
                 }
-                val res = api.importSharedContacts(mapOf("contacts" to payload))
+                val res = legacyOrV1Api.importSharedContacts(mapOf("contacts" to payload))
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7735,7 +7753,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val contacts = preparePhoneContacts(context, onlyUkNumbers, skipWithoutPhone, skipWithoutName, removeDuplicates, includeEmail)
-                val res = api.syncContacts(mapOf("contacts" to contacts, "filter_uk" to onlyUkNumbers))
+                val res = legacyOrV1Api.syncContacts(mapOf("contacts" to contacts, "filter_uk" to onlyUkNumbers))
                 if (res.isSuccessful) {
                     refreshCrmData()
                 }
@@ -7746,7 +7764,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateLead(leadId: Long, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
-                api.updateLead(leadId, data)
+                legacyOrV1Api.updateLead(leadId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update lead error", e) }
         }
@@ -7756,7 +7774,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "grand_total" to amount, "due_date" to dueDate)
-                api.createInvoice(data)
+                legacyOrV1Api.createInvoice(data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create invoice error", e) }
         }
@@ -7766,7 +7784,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("status" to status)
-                api.updateInvoice(invoiceId, data)
+                legacyOrV1Api.updateInvoice(invoiceId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update invoice error", e) }
         }
@@ -7777,7 +7795,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val data = mapOf<String, Any?>("tenant_id" to 1, "client_id" to clientId, "work_date" to workDate,
                     "total_hours" to totalHours, "total_price" to totalPrice, "notes" to notes, "input_type" to "manual", "status" to "draft")
-                api.createWorkReport(data)
+                legacyOrV1Api.createWorkReport(data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create work report error", e) }
         }
@@ -7791,7 +7809,7 @@ class SecretaryViewModel : ViewModel() {
                     "note" to note,
                     "note_type" to noteType
                 )
-                val response = api.addJobNote(jobId, data)
+                val response = legacyOrV1Api.addJobNote(jobId, data)
                 if (response.isSuccessful) {
                     addJobAuditEntry(jobId, "note_added", "Added $noteType note: $note")
                     loadJobDetail(jobId)
@@ -7804,7 +7822,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "quote_title" to title)
-                api.createQuote(data)
+                legacyOrV1Api.createQuote(data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create quote error", e) }
         }
@@ -7814,7 +7832,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("create_job" to createJob)
-                api.approveQuote(quoteId, data)
+                legacyOrV1Api.approveQuote(quoteId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Approve quote error", e) }
         }
@@ -7824,7 +7842,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("description" to description, "quantity" to qty, "unit_price" to price)
-                api.addQuoteItem(quoteId, data)
+                legacyOrV1Api.addQuoteItem(quoteId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add quote item error", e) }
         }
@@ -7852,7 +7870,7 @@ class SecretaryViewModel : ViewModel() {
                         "planning_note" to draft.firstAction.planningNote
                     )
                 )
-                val res = api.createJob(data)
+                val res = legacyOrV1Api.createJob(data)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7869,7 +7887,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(selectedJobDetail = null)
             try {
-                val res = api.getJobDetail(jobId)
+                val res = legacyOrV1Api.getJobDetail(jobId)
                 if (res.isSuccessful) _uiState.value = _uiState.value.copy(selectedJobDetail = res.body())
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Job detail error", e) }
         }
@@ -7878,7 +7896,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateJob(jobId: Long, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
-                val res = api.updateJob(jobId, data)
+                val res = legacyOrV1Api.updateJob(jobId, data)
                 if (res.isSuccessful) { loadJobDetail(jobId); refreshCrmData() }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update job error", e) }
         }
@@ -7887,7 +7905,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateTask(taskId: String, data: Map<String, Any?>, onDone: ((Boolean, String?) -> Unit)? = null) {
         viewModelScope.launch {
             try {
-                val res = api.updateTask(taskId, data)
+                val res = legacyOrV1Api.updateTask(taskId, data)
                 if (res.isSuccessful) {
                     // Update local state
                     val tasks = _uiState.value.tasks.map { t ->
@@ -7925,7 +7943,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf("name" to name, "source" to source, "email" to email, "phone" to phone, "description" to description)
-                val res = api.createLead(data)
+                val res = legacyOrV1Api.createLead(data)
                 if (res.isSuccessful) refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create lead error", e) }
         }
@@ -7935,7 +7953,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf("name" to name, "email" to email, "phone" to phone)
-                val res = api.convertLeadToClient(leadId, data)
+                val res = legacyOrV1Api.convertLeadToClient(leadId, data)
                 if (res.isSuccessful) refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Convert lead error", e) }
         }
@@ -7945,7 +7963,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("title" to title)
-                val res = api.convertLeadToJob(leadId, data)
+                val res = legacyOrV1Api.convertLeadToJob(leadId, data)
                 if (res.isSuccessful) refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Convert lead to job error", e) }
         }
@@ -7955,7 +7973,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "job_id" to jobId, "comm_type" to commType, "subject" to subject, "message" to message, "direction" to direction)
-                api.logCommunication(data)
+                legacyOrV1Api.logCommunication(data)
                 if (clientId != null) loadClientDetail(clientId)
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Log comm error", e) }
         }
@@ -8933,7 +8951,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(status = Strings.processing)
             try {
-                val res = api.getContactsForSorting(sortBy = sortBy, phonePrefix = phonePrefix)
+                val res = legacyOrV1Api.getContactsForSorting(sortBy = sortBy, phonePrefix = phonePrefix)
                 if (!res.isSuccessful) {
                     voiceManager?.speak(Strings.errorLoadingContacts, expectReply = false)
                     return@launch
@@ -9023,7 +9041,7 @@ class SecretaryViewModel : ViewModel() {
         if (norm.startsWith("smazat") || norm.startsWith("odstranit") || norm == "delete" || norm == "remove") {
             session.current?.existingId?.let { id ->
                 viewModelScope.launch {
-                    try { api.deleteSharedContact(id) } catch (_: Exception) {}
+                    try { legacyOrV1Api.deleteSharedContact(id) } catch (_: Exception) {}
                 }
             }
             val msg = "${session.current?.displayName} odstraněn."
@@ -9055,7 +9073,7 @@ class SecretaryViewModel : ViewModel() {
                 viewModelScope.launch {
                     try {
                         if (primary.existingId != null && secondary.existingId != null) {
-                            api.mergeSharedContacts(mapOf(
+                            legacyOrV1Api.mergeSharedContacts(mapOf(
                                 "primary_id" to primary.existingId,
                                 "secondary_id" to secondary.existingId
                             ))
@@ -9090,7 +9108,7 @@ class SecretaryViewModel : ViewModel() {
             val contact = session.current!!
             viewModelScope.launch {
                 try {
-                    api.assignContactSection(mapOf(
+                    legacyOrV1Api.assignContactSection(mapOf(
                         "display_name" to contact.displayName,
                         "phone" to contact.phone,
                         "section_code" to sectionCode,
@@ -9124,7 +9142,7 @@ class SecretaryViewModel : ViewModel() {
     fun checkContactDuplicates() {
         viewModelScope.launch {
             try {
-                val res = api.getContactDuplicates()
+                val res = legacyOrV1Api.getContactDuplicates()
                 if (res.isSuccessful) {
                     val body = res.body() ?: return@launch
                     @Suppress("UNCHECKED_CAST")
@@ -9153,7 +9171,7 @@ class SecretaryViewModel : ViewModel() {
     fun mergeContactsById(primaryId: Long, secondaryId: Long) {
         viewModelScope.launch {
             try {
-                val res = api.mergeSharedContacts(mapOf("primary_id" to primaryId, "secondary_id" to secondaryId))
+                val res = legacyOrV1Api.mergeSharedContacts(mapOf("primary_id" to primaryId, "secondary_id" to secondaryId))
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
                         contactDuplicates = _uiState.value.contactDuplicates.filter {
@@ -9181,7 +9199,7 @@ class SecretaryViewModel : ViewModel() {
     private fun refreshSharedContacts() {
         viewModelScope.launch {
             try {
-                val res = api.getSharedContacts()
+                val res = legacyOrV1Api.getSharedContacts()
                 if (res.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = res.body() ?: emptyList())
             } catch (_: Exception) {}
         }
@@ -10173,7 +10191,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateDefaultRates(rates: Map<String, Any?>, onDone: ((Boolean, String?) -> Unit)? = null) {
         viewModelScope.launch {
             try {
-                val res = api.updateDefaultRates(1, rates)
+                val res = legacyOrV1Api.updateDefaultRates(1, rates)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(tenantRateTypes = res.body() ?: _uiState.value.tenantRateTypes)
                     onDone?.invoke(true, null)
@@ -10193,7 +10211,7 @@ class SecretaryViewModel : ViewModel() {
     fun addServiceRateType(rateType: String, description: String, defaultRate: Double, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = api.addServiceRateType(1, mapOf(
+                val res = legacyOrV1Api.addServiceRateType(1, mapOf(
                     "rate_type" to rateType,
                     "description" to description,
                     "rate" to defaultRate
@@ -10217,7 +10235,7 @@ class SecretaryViewModel : ViewModel() {
     fun deleteServiceRateType(rateType: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = api.deleteServiceRateType(1, rateType)
+                val res = legacyOrV1Api.deleteServiceRateType(1, rateType)
                 if (res.isSuccessful) {
                     loadTenantRateTypes()
                     onDone(true, null)
@@ -10237,7 +10255,7 @@ class SecretaryViewModel : ViewModel() {
     fun createInvoiceFromWorkReport(workReportId: Long, onResult: (Map<String, Any?>?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = api.createInvoiceFromWorkReport(mapOf("work_report_id" to workReportId))
+                val res = legacyOrV1Api.createInvoiceFromWorkReport(mapOf("work_report_id" to workReportId))
                 if (res.isSuccessful) onResult(res.body()) else onResult(null)
             } catch (_: Exception) { onResult(null) }
         }
@@ -10246,7 +10264,7 @@ class SecretaryViewModel : ViewModel() {
     fun batchInvoiceFromWorkReports(ids: List<Long>, onResult: (Map<String, Any?>?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = api.batchInvoiceFromWorkReports(mapOf("work_report_ids" to ids))
+                val res = legacyOrV1Api.batchInvoiceFromWorkReports(mapOf("work_report_ids" to ids))
                 if (res.isSuccessful) onResult(res.body()) else onResult(null)
             } catch (_: Exception) { onResult(null) }
         }

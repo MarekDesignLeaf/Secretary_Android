@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import FastAPI
@@ -10,33 +11,36 @@ from secretary_clean.api.routes import auth, bootstrap, catalogue, company, crm,
 from secretary_clean.catalogue.source_parser import load_catalogue
 from secretary_clean.core.repository import InMemorySecretaryRepository
 
+logger = logging.getLogger(__name__)
 
-def _default_repository() -> InMemorySecretaryRepository:
-    """Return PersistentRepository on Railway / when SECRETARY_PERSISTENT=1, else in-memory."""
+
+def _default_repository():
+    """Select and return the appropriate repository implementation.
+
+    Priority:
+    1. DATABASE_URL env var  -> run migration, return PostgresSecretaryRepository
+    2. SECRETARY_PERSISTENT=1 or RAILWAY_ENVIRONMENT set (without DATABASE_URL)
+       -> JSON-file PersistentRepository (legacy fallback)
+    3. Otherwise -> InMemorySecretaryRepository (tests / local dev without DB)
+    """
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        try:
+            from secretary_clean.db.migration import run_migrations
+            from secretary_clean.db.postgres_repository import PostgresSecretaryRepository
+            run_migrations(database_url)
+            logger.info("Using PostgresSecretaryRepository")
+            return PostgresSecretaryRepository(database_url)
+        except Exception as exc:
+            logger.error(
+                "Failed to connect/migrate PostgreSQL (%s); falling back to in-memory repository",
+                exc,
+            )
+            return InMemorySecretaryRepository()
+
     use_persistent = (
         os.getenv("SECRETARY_PERSISTENT", "").lower() in ("1", "true", "yes")
         or os.getenv("RAILWAY_ENVIRONMENT") is not None
     )
     if use_persistent:
-        from secretary_clean.core.persistence import PersistentRepository
-        return PersistentRepository()
-    return InMemorySecretaryRepository()
-
-
-def create_app(repository: InMemorySecretaryRepository | None = None) -> FastAPI:
-    app = FastAPI(title="Secretary Clean Backend", version="0.1.0")
-    app.state.repository = repository if repository is not None else _default_repository()
-    app.state.catalogue = load_catalogue()
-    app.include_router(bootstrap.router, prefix="/api/v1")
-    app.include_router(auth.router, prefix="/api/v1")
-    app.include_router(company.router, prefix="/api/v1")
-    app.include_router(users.router, prefix="/api/v1")
-    app.include_router(catalogue.router, prefix="/api/v1")
-    app.include_router(language.router, prefix="/api/v1")
-    app.include_router(tenant_pricing.router, prefix="/api/v1")
-    app.include_router(crm.router, prefix="/api/v1")
-    app.include_router(voice.router, prefix="/api/v1")
-    return app
-
-
-app = create_app()
+        from secretary_clean
