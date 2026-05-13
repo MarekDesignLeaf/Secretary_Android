@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="nature_recognition_v1_0_1">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/server/tool_packages/nature_recognition_v1_0_0.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -5652,6 +5652,8 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun loadBackendRoles() {
+        // Clean backend: no legacy /auth/roles endpoint — roles come from /api/v1/auth/me as a string field.
+        if (_uiState.value.isCleanBackend) return
         viewModelScope.launch {
             try {
                 val res = api.getAuthRoles()
@@ -5679,20 +5681,51 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(backendUsersLoading = true, backendUsersError = null)
             try {
-                val res = api.getAuthUsers()
-                if (res.isSuccessful) {
-                    _uiState.value = _uiState.value.copy(
-                        backendUsers = res.body() ?: emptyList(),
-                        backendUsersLoading = false,
-                        backendUsersError = null
-                    )
+                if (_uiState.value.isCleanBackend) {
+                    // Clean backend: GET /api/v1/users returns UUID-based user objects
+                    val res = api.cleanGetUsers()
+                    if (res.isSuccessful) {
+                        val users = (res.body() ?: emptyList()).mapIndexed { idx, u ->
+                            @Suppress("UNCHECKED_CAST")
+                            val perms = (u["permissions"] as? List<String>).orEmpty()
+                            BackendUser(
+                                id = idx.toLong() + 1, // synthetic index; UUID kept in email lookup
+                                display_name = u["display_name"]?.toString() ?: u["email"]?.toString() ?: "",
+                                email = u["email"]?.toString() ?: "",
+                                phone = u["phone"]?.toString(),
+                                status = if (u["is_active"] == true) "active" else "inactive",
+                                role_name = u["role"]?.toString(),
+                                permissions = perms.associateWith { true }
+                            )
+                        }
+                        _uiState.value = _uiState.value.copy(
+                            backendUsers = users,
+                            backendUsersLoading = false,
+                            backendUsersError = null
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            backendUsers = emptyList(),
+                            backendUsersLoading = false,
+                            backendUsersError = "HTTP ${res.code()}"
+                        )
+                    }
                 } else {
-                    val rawError = res.errorBody()?.string()
-                    _uiState.value = _uiState.value.copy(
-                        backendUsers = emptyList(),
-                        backendUsersLoading = false,
-                        backendUsersError = parseBackendAdminError(res.code(), rawError, Strings.backendUsersLoadFailed)
-                    )
+                    val res = api.getAuthUsers()
+                    if (res.isSuccessful) {
+                        _uiState.value = _uiState.value.copy(
+                            backendUsers = res.body() ?: emptyList(),
+                            backendUsersLoading = false,
+                            backendUsersError = null
+                        )
+                    } else {
+                        val rawError = res.errorBody()?.string()
+                        _uiState.value = _uiState.value.copy(
+                            backendUsers = emptyList(),
+                            backendUsersLoading = false,
+                            backendUsersError = parseBackendAdminError(res.code(), rawError, Strings.backendUsersLoadFailed)
+                        )
+                    }
                 }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend users load error", e)
                 _uiState.value = _uiState.value.copy(
@@ -6234,9 +6267,8 @@ class SecretaryViewModel : ViewModel() {
                 if (_uiState.value.isCleanBackend) {
                     val res = api.cleanGetTenantLanguages()
                     if (res.isSuccessful) {
-                        // Clean backend returns {"value":[...], "Count":N} — extract the "value" list
-                        @Suppress("UNCHECKED_CAST")
-                        val list = (res.body()?.get("value") as? List<Map<String, Any?>>).orEmpty()
+                        // Clean backend returns a plain JSON array of language objects
+                        val list = res.body().orEmpty()
                         val adapted = list.map { item ->
                             mapOf<String, Any?>(
                                 "code" to (item["language_code"] ?: item["code"]),
@@ -7266,6 +7298,15 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun loadSystemSettings() {
+        // Clean backend: /system/settings does not exist. Connection was already verified via
+        // checkBootstrapStatus() → mark as CONNECTED without a network call.
+        if (_uiState.value.isCleanBackend) {
+            _uiState.value = _uiState.value.copy(
+                connectionStatus = ConnectionStatus.CONNECTED,
+                status = Strings.connected
+            )
+            return
+        }
         viewModelScope.launch {
             try {
                 val res = api.getSettings()

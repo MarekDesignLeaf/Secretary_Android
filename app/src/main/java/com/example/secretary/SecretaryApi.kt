@@ -345,12 +345,15 @@ interface SecretaryApi {
     @GET("api/v1/company/profile")
     suspend fun cleanGetCompanyProfile(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    // Server returns {"value":[...], "Count":N} — use Map wrapper, extract "value" list in ViewModel
+    // Server returns a plain JSON array of language objects
     @GET("api/v1/language/tenant")
-    suspend fun cleanGetTenantLanguages(): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun cleanGetTenantLanguages(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @GET("api/v1/company/operating-profile")
     suspend fun cleanGetTenantConfig(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("api/v1/users")
+    suspend fun cleanGetUsers(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     // ── Password reset / recovery ────────────────────────────────────────────
     @POST("api/v1/auth/password-reset/request")
