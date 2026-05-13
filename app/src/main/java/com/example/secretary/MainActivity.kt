@@ -1681,7 +1681,9 @@ private fun taskHasPlanning(task: Task): Boolean =
     !task.plannedStartAt.isNullOrBlank() || !task.deadline.isNullOrBlank()
 
 private fun canManageHierarchy(state: UiState): Boolean =
-    state.currentUserPermissions["manage_users"] == true ||
+    state.currentUserPermissions["manage_users"] == true ||   // legacy backend
+        state.currentUserPermissions["users.manage"] == true ||  // clean backend
+        state.currentUserRole.equals("owner", ignoreCase = true) ||
         state.currentUserRole.equals("admin", ignoreCase = true) ||
         state.currentUserRole.equals("manager", ignoreCase = true)
 
@@ -5561,9 +5563,18 @@ class SecretaryViewModel : ViewModel() {
                     val body = res.body()
                     settingsManager?.accessToken = body?.get("access_token")?.toString()
                     settingsManager?.refreshToken = body?.get("refresh_token")?.toString()
-                    applyCurrentUserData(body)
+                    // Clean backend: fetch real user identity from /api/v1/auth/me after saving token.
+                    // Legacy backend: parse user data directly from login response body.
+                    if (_uiState.value.isCleanBackend) {
+                        try {
+                            val meRes = api.cleanAuthMe()
+                            if (meRes.isSuccessful) applyCleanUserData(meRes.body())
+                        } catch (_: Exception) {}
+                    } else {
+                        applyCurrentUserData(body)
+                    }
                     if (_uiState.value.mustChangePassword) {
-                        loadFirstLoginUsers()
+                        if (!_uiState.value.isCleanBackend) loadFirstLoginUsers()
                         _uiState.value = _uiState.value.copy(
                             loggedIn = false,
                             awaitingBiometricEnrollment = false,
@@ -5583,7 +5594,9 @@ class SecretaryViewModel : ViewModel() {
                     } else {
                         _uiState.value = _uiState.value.copy(
                             loggedIn = false,
-                            firstLoginUsers = _uiState.value.firstLoginUsers.filterNot { it.email.equals(email, ignoreCase = true) },
+                            // Clean backend: no legacy firstLoginUsers list
+                            firstLoginUsers = if (_uiState.value.isCleanBackend) emptyList()
+                                             else _uiState.value.firstLoginUsers.filterNot { it.email.equals(email, ignoreCase = true) },
                             awaitingBiometricEnrollment = true,
                             loginNotice = null
                         )
@@ -5804,7 +5817,9 @@ class SecretaryViewModel : ViewModel() {
 
     private fun shouldLoadHierarchyIntegrity(): Boolean {
         val state = _uiState.value
-        return state.currentUserPermissions["manage_users"] == true ||
+        return state.currentUserPermissions["manage_users"] == true ||   // legacy backend
+            state.currentUserPermissions["users.manage"] == true ||  // clean backend
+            state.currentUserRole == "owner" ||
             state.currentUserRole == "admin" ||
             state.currentUserRole == "manager"
     }
@@ -6190,15 +6205,17 @@ class SecretaryViewModel : ViewModel() {
             var profile: Map<String, Any?>? = null
             var languages: Map<String, Any?>? = null
 
-            // /version
-            try {
-                val res = api.getServerVersion()
-                if (res.isSuccessful) versionInfo = res.body()
-                else errors["version"] = "HTTP ${res.code()}"
-            } catch (e: Exception) {
-                e.rethrowIfCancellation()
-                errors["version"] = e.message ?: "error"
-                Log.e("ViewModel", "loadSettings /version error", e)
+            // /version — NOT available on clean backend (uses /api/v1/ prefix for everything)
+            if (!_uiState.value.isCleanBackend) {
+                try {
+                    val res = api.getServerVersion()
+                    if (res.isSuccessful) versionInfo = res.body()
+                    else errors["version"] = "HTTP ${res.code()}"
+                } catch (e: Exception) {
+                    e.rethrowIfCancellation()
+                    errors["version"] = e.message ?: "error"
+                    Log.e("ViewModel", "loadSettings /version error", e)
+                }
             }
 
             // /tenant/profile  (clean: /api/v1/company/profile)
@@ -6217,8 +6234,9 @@ class SecretaryViewModel : ViewModel() {
                 if (_uiState.value.isCleanBackend) {
                     val res = api.cleanGetTenantLanguages()
                     if (res.isSuccessful) {
-                        // clean backend returns list[TenantLanguage]; adapt to legacy Map shape
-                        val list = res.body() ?: emptyList()
+                        // Clean backend returns {"value":[...], "Count":N} — extract the "value" list
+                        @Suppress("UNCHECKED_CAST")
+                        val list = (res.body()?.get("value") as? List<Map<String, Any?>>).orEmpty()
                         val adapted = list.map { item ->
                             mapOf<String, Any?>(
                                 "code" to (item["language_code"] ?: item["code"]),
@@ -6256,6 +6274,8 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
+                    _uiState.value.currentUserPermissions["users.manage"] == true ||
+                    _uiState.value.currentUserRole == "owner" ||
                     _uiState.value.currentUserRole == "admin"
                 if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return@launch }
                 val res = api.updateTenantLanguages(1, mapOf("default_internal_language_code" to lang))
@@ -6269,6 +6289,8 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
+                    _uiState.value.currentUserPermissions["users.manage"] == true ||
+                    _uiState.value.currentUserRole == "owner" ||
                     _uiState.value.currentUserRole == "admin"
                 if (!canManage) {
                     onDone(false, Strings.backendPermissionDenied())

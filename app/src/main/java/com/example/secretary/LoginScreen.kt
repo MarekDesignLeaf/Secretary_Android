@@ -91,7 +91,11 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
     var autoBiometricTriggered by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        viewModel.loadFirstLoginUsers()
+        // Legacy first-login-users list is NOT used in clean backend mode.
+        // Clean backend authenticates only via POST /api/v1/auth/login.
+        if (!state.isCleanBackend) {
+            viewModel.loadFirstLoginUsers()
+        }
     }
 
     LaunchedEffect(state.loginNotice) {
