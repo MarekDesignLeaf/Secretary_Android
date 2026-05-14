@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 
@@ -65,6 +66,24 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
             ) { Text(Strings.logout) }
+        }
+        item {
+            val ctx = LocalContext.current
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    ctx.startActivity(Intent(ctx, UninstallActivity::class.java))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Uninstall / Remove app")
+            }
         }
         item { Spacer(Modifier.height(40.dp)) }
     }

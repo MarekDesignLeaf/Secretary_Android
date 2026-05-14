@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "secretary": {
+      "command": "C:\\Users\\hutra\\secretary-mcp-server\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\hutra\\secretary-mcp-server\\secretary_mcp_server.py"
+      ]
+    }
+  }
+}

@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -324,49 +324,8 @@ interface SecretaryApi {
     @POST("api/v1/bootstrap/first-install")
     suspend fun submitFirstInstall(@Body request: FirstInstallRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    // ── Clean backend auth ───────────────────────────────────────────────────
-    @POST("api/v1/auth/login")
-    suspend fun cleanAuthLogin(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @GET("api/v1/auth/me")
-    suspend fun cleanAuthMe(): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @POST("api/v1/auth/refresh")
-    suspend fun cleanAuthRefresh(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    // ── Clean backend voice ──────────────────────────────────────────────────
-    @POST("api/v1/voice/resolve")
-    suspend fun cleanVoiceResolve(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @POST("api/v1/voice/execute")
-    suspend fun cleanVoiceExecute(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    // ── Clean backend settings ────────────────────────────────────────────────
-    @GET("api/v1/company/profile")
-    suspend fun cleanGetCompanyProfile(): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    // Server returns a plain JSON array of language objects
-    @GET("api/v1/language/tenant")
-    suspend fun cleanGetTenantLanguages(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
-
-    @GET("api/v1/company/operating-profile")
-    suspend fun cleanGetTenantConfig(): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @GET("api/v1/users")
-    suspend fun cleanGetUsers(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
-
-    // ── Password reset / recovery ────────────────────────────────────────────
-    @POST("api/v1/auth/password-reset/request")
-    suspend fun requestPasswordReset(@Body request: PasswordResetRequestBody): Response<GenericApiResponse>
-
-    @POST("api/v1/auth/password-reset/confirm")
-    suspend fun confirmPasswordReset(@Body request: PasswordResetConfirmBody): Response<GenericApiResponse>
-
-    @POST("api/v1/auth/recovery/admin-reset")
-    suspend fun adminRecovery(@Body request: AdminRecoveryBody): Response<GenericApiResponse>
-
     @GET("api/v1/catalogue/industries")
-    suspend fun getCatalogueIndustries(): Response<List<CatalogueIndustryGroup>>
+    suspend fun getCatalogueIndustries(): Response<Any>
 
     // === ONBOARDING ===
     @GET("onboarding/status/{tenantId}")
@@ -693,6 +652,42 @@ interface SecretaryApi {
     suspend fun voiceContext(
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    // === BACKUP / UNINSTALL ===
+
+    /** Create a pre-uninstall backup. Admin gets full scope; others get personal scope. */
+    @POST("api/v1/backup/create")
+    suspend fun createBackup(
+        @Header("Authorization") auth: String,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    /** List all server-stored backup manifests (admin only). */
+    @GET("api/v1/backup/manifests")
+    suspend fun listBackupManifests(
+        @Header("Authorization") auth: String
+    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
+    /** Download a backup by restore token. */
+    @GET("api/v1/backup/restore/{token}")
+    suspend fun getBackupByToken(
+        @Header("Authorization") auth: String,
+        @Path("token") token: String
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    /** Register a biometric (fingerprint) hash for the current user. */
+    @POST("api/v1/backup/biometric/register")
+    suspend fun registerBiometric(
+        @Header("Authorization") auth: String,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    /** Remove a biometric entry for a device. */
+    @DELETE("api/v1/backup/biometric/{deviceId}")
+    suspend fun removeBiometric(
+        @Header("Authorization") auth: String,
+        @Path("deviceId") deviceId: String
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
 }
 
 data class ToolHubTile(
@@ -709,5 +704,6 @@ data class ToolHubTile(
 
 data class ToolHubTilesResponse(
     val tenant_id: Int = 1,
-    val tiles: List<ToolHubTile> = emptyList()
+    val tiles: List<ToolHubTile> = emptyList(),
+    val count: Int = 0
 )
