@@ -356,8 +356,17 @@ interface SecretaryApi {
     @GET("api/v1/company/profile")
     suspend fun getTenantProfile(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    // Returns TenantOperatingProfile (language modes, defaults)
     @GET("api/v1/language/settings")
     suspend fun getTenantLanguages(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    // Returns list of TenantLanguage — used for language selector dropdowns
+    @GET("api/v1/language/tenant")
+    suspend fun getTenantLanguageList(@Header("Authorization") auth: String): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
+    // Available languages for dropdowns
+    @GET("api/v1/language/available")
+    suspend fun getAvailableLanguages(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     // === SERVICE RATE TYPES ===
     @GET("tenant/default-rates/{tenantId}")
@@ -419,38 +428,48 @@ interface SecretaryApi {
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === AUTH ===
-    @POST("auth/login")
+    @POST("api/v1/auth/login")
     suspend fun authLogin(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("auth/refresh")
+    @POST("api/v1/auth/refresh")
     suspend fun authRefresh(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("auth/register")
-    suspend fun registerUser(@Body request: RegisterRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
+    @POST("api/v1/auth/register")
+    suspend fun registerUser(
+        @Header("Authorization") auth: String,
+        @Body request: RegisterRequest
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("auth/first-login-users")
+    @GET("api/v1/auth/first-login-users")
     suspend fun getFirstLoginUsers(@Query("tenant_id") tenantId: Int = 1): Response<List<FirstLoginUser>>
 
-    @GET("auth/roles")
+    @GET("api/v1/auth/roles")
     suspend fun getAuthRoles(): Response<List<BackendRole>>
 
-    @GET("auth/users")
-    suspend fun getAuthUsers(): Response<List<BackendUser>>
+    @GET("api/v1/users")
+    suspend fun getAuthUsers(@Header("Authorization") auth: String): Response<List<BackendUser>>
 
-    @PUT("auth/users/{userId}")
+    @PUT("api/v1/users/{userId}")
     suspend fun updateAuthUser(
-        @Path("userId") userId: Long,
+        @Header("Authorization") auth: String,
+        @Path("userId") userId: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @DELETE("auth/users/{userId}")
-    suspend fun deleteAuthUser(@Path("userId") userId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    @DELETE("api/v1/users/{userId}")
+    suspend fun deleteAuthUser(
+        @Header("Authorization") auth: String,
+        @Path("userId") userId: String
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("auth/me")
+    @GET("api/v1/auth/me")
     suspend fun authMe(@retrofit2.http.Header("Authorization") token: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @PUT("auth/change-password")
-    suspend fun changePassword(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
+    @PUT("api/v1/auth/change-password")
+    suspend fun changePassword(
+        @Header("Authorization") auth: String,
+        @Body data: Map<String, String>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === INVOICE ITEMS ===
     @GET("crm/invoices/{invoiceId}/items")

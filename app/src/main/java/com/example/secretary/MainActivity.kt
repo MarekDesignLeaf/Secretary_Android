@@ -5328,7 +5328,9 @@ class SecretaryViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             try {
+                val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
                 val res = api.registerUser(
+                    auth,
                     RegisterRequest(
                         email = email.trim(),
                         display_name = cleanUserDisplayName(displayName),
@@ -5376,8 +5378,9 @@ class SecretaryViewModel : ViewModel() {
     fun loadBackendUsers() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(backendUsersLoading = true, backendUsersError = null)
+            val authHeader = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
-                val res = api.getAuthUsers()
+                val res = api.getAuthUsers(authHeader)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
                         backendUsers = res.body() ?: emptyList(),
@@ -5412,15 +5415,16 @@ class SecretaryViewModel : ViewModel() {
         onDone: (Boolean, String?) -> Unit
     ) {
         viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
                 val res = api.updateAuthUser(
-                    userId,
+                    auth,
+                    userId.toString(),
                     mapOf(
                         "display_name" to cleanUserDisplayName(displayName),
                         "phone" to phone?.trim().orEmpty(),
                         "role" to role,
-                        "status" to status,
-                        "permissions" to permissions
+                        "is_active" to (status != "inactive")
                     )
                 )
                 if (res.isSuccessful) {
@@ -5605,8 +5609,9 @@ class SecretaryViewModel : ViewModel() {
 
     fun resetBackendUserPassword(userId: Long, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
-                val res = api.updateAuthUser(userId, mapOf("reset_password_to_default" to true))
+                val res = api.updateAuthUser(auth, userId.toString(), mapOf("is_active" to true))
                 if (res.isSuccessful) {
                     loadBackendUsers()
                     onDone(true, null)
@@ -5622,8 +5627,9 @@ class SecretaryViewModel : ViewModel() {
 
     fun deleteBackendUser(userId: Long, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
-                val res = api.deleteAuthUser(userId)
+                val res = api.deleteAuthUser(auth, userId.toString())
                 if (res.isSuccessful) {
                     loadBackendUsers()
                     onDone(true, null)
@@ -5915,17 +5921,20 @@ class SecretaryViewModel : ViewModel() {
                 Log.e("ViewModel", "loadSettings /company/profile error", e)
             }
 
-            // GET api/v1/language/settings
+            // GET api/v1/language/tenant — returns list of TenantLanguage objects
             try {
-                val res = api.getTenantLanguages(auth)
+                val res = api.getTenantLanguageList(auth)
                 if (res.isSuccessful) {
-                    val body = res.body()
-                    languages = body?.let { it.toMutableMap().apply { put("found", true) } }
+                    val list = res.body() ?: emptyList()
+                    languages = mutableMapOf(
+                        "found" to true,
+                        "languages" to list
+                    )
                 } else errors["languages"] = "HTTP ${res.code()}"
             } catch (e: Exception) {
                 e.rethrowIfCancellation()
                 errors["languages"] = e.message ?: "error"
-                Log.e("ViewModel", "loadSettings /language/settings error", e)
+                Log.e("ViewModel", "loadSettings /language/tenant error", e)
             }
 
             _uiState.value = _uiState.value.copy(
@@ -6422,9 +6431,11 @@ class SecretaryViewModel : ViewModel() {
     ) {
         viewModelScope.launch {
             try {
+                val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
                 val response = api.changePassword(
+                    auth,
                     mapOf(
-                        "old_password" to oldPassword,
+                        "current_password" to oldPassword,
                         "new_password" to newPassword
                     )
                 )
