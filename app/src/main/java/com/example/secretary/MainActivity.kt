@@ -362,89 +362,21 @@ private fun BootstrapBlockingScreen(title: String, message: String) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-// ─── Onboarding language / country option lists ──────────────────────────────
-private val LANGUAGE_OPTIONS = listOf(
-    "en" to "English", "cs" to "Czech", "pl" to "Polish", "de" to "German",
-    "fr" to "French", "es" to "Spanish", "pt" to "Portuguese", "it" to "Italian",
-    "nl" to "Dutch", "uk" to "Ukrainian", "ru" to "Russian", "sk" to "Slovak",
-    "ro" to "Romanian", "hu" to "Hungarian", "tr" to "Turkish", "ar" to "Arabic",
-    "hi" to "Hindi", "zh" to "Chinese", "ja" to "Japanese"
-)
-private val COUNTRY_OPTIONS = listOf(
-    "GB" to "United Kingdom", "US" to "United States", "AU" to "Australia",
-    "CZ" to "Czech Republic", "PL" to "Poland", "DE" to "Germany",
-    "FR" to "France", "ES" to "Spain", "PT" to "Portugal", "BR" to "Brazil",
-    "IT" to "Italy", "NL" to "Netherlands", "UA" to "Ukraine", "RU" to "Russia",
-    "SK" to "Slovakia", "RO" to "Romania", "HU" to "Hungary", "TR" to "Turkey",
-    "SA" to "Saudi Arabia", "IN" to "India", "CN" to "China", "JP" to "Japan"
-)
-private val CURRENCY_OPTIONS = listOf(
-    "CZK" to "CZK – Czech Koruna",
-    "EUR" to "EUR – Euro",
-    "GBP" to "GBP – British Pound",
-    "USD" to "USD – US Dollar",
-    "PLN" to "PLN – Polish Złoty",
-    "HUF" to "HUF – Hungarian Forint",
-    "RON" to "RON – Romanian Leu",
-    "UAH" to "UAH – Ukrainian Hryvnia",
-    "CHF" to "CHF – Swiss Franc",
-    "SEK" to "SEK – Swedish Krona",
-    "NOK" to "NOK – Norwegian Krone",
-    "DKK" to "DKK – Danish Krone",
-    "AUD" to "AUD – Australian Dollar",
-    "CAD" to "CAD – Canadian Dollar"
-)
-private val LOCALE_OPTIONS = listOf(
-    "cs-CZ" to "Czech – Czech Republic",
-    "en-GB" to "English – United Kingdom",
-    "en-US" to "English – United States",
-    "en-AU" to "English – Australia",
-    "pl-PL" to "Polish – Poland",
-    "de-DE" to "German – Germany",
-    "sk-SK" to "Slovak – Slovakia",
-    "hu-HU" to "Hungarian – Hungary",
-    "ro-RO" to "Romanian – Romania",
-    "uk-UA" to "Ukrainian – Ukraine",
-    "ru-RU" to "Russian – Russia",
-    "fr-FR" to "French – France",
-    "es-ES" to "Spanish – Spain",
-    "pt-PT" to "Portuguese – Portugal",
-    "pt-BR" to "Portuguese – Brazil",
-    "it-IT" to "Italian – Italy",
-    "nl-NL" to "Dutch – Netherlands",
-    "tr-TR" to "Turkish – Turkey",
-    "ar-SA" to "Arabic – Saudi Arabia",
-    "hi-IN" to "Hindi – India",
-    "zh-CN" to "Chinese – China",
-    "ja-JP" to "Japanese – Japan"
-)
-
-
 @Composable
 private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadFirstInstallIndustries() }
 
-    // ─── Basic company info ───────────────────────────────────────────────
     var companyName by remember { mutableStateOf("") }
     var companyLegalType by remember { mutableStateOf("") }
     var country by remember { mutableStateOf("") }
-    var timezone by remember { mutableStateOf("Europe/London") }
-    var currency by remember { mutableStateOf("GBP") }
-    // Language/country — starts empty, user must explicitly choose
-    var internalLocale by remember { mutableStateOf("") }
-    var customerLocale by remember { mutableStateOf("") }
-
-    // ─── Catalogue selections (code strings from backend) ────────────────
-    var selectedIndustryCodes by remember { mutableStateOf(emptySet<String>()) }
-    var selectedSubtypeCodes by remember { mutableStateOf(emptySet<String>()) }
-    var selectedActivityCodes by remember { mutableStateOf(emptySet<String>()) }
-
-    // Expand state for the tree
-    var expandedIndustryCodes by remember { mutableStateOf(emptySet<String>()) }
-    var expandedSubtypeCodes by remember { mutableStateOf(emptySet<String>()) }
-
-    // ─── Admin info ───────────────────────────────────────────────────────
+    var timezone by remember { mutableStateOf("") }
+    var currency by remember { mutableStateOf("") }
+    var internalCompanyLanguage by remember { mutableStateOf("") }
+    var defaultCustomerLanguage by remember { mutableStateOf("") }
+    var workspaceMode by remember { mutableStateOf("") }
+    var selectedGroupCode by remember { mutableStateOf("") }
+    var selectedSubtypeCode by remember { mutableStateOf("") }
     var adminDisplayName by remember { mutableStateOf("") }
     var adminEmail by remember { mutableStateOf("") }
     var adminPassword by remember { mutableStateOf("") }
@@ -455,281 +387,65 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     var website by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf<String?>(null) }
 
+    val selectedGroup = state.firstInstallIndustries.firstOrNull { it.code == selectedGroupCode }
+    val selectedSubtype = selectedGroup?.subtypes?.firstOrNull { it.code == selectedSubtypeCode }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item {
             Text("First installation setup", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text("Create the first company and administrator before login.", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Create the first company and administrator account before login.",
+                fontSize = 14.sp,
+                color = Color.Gray
+            )
         }
-
-        // ── Company ───────────────────────────────────────────────────────
         item { Text("Company", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
         item { FirstInstallTextField(companyName, { companyName = it }, "Company name *") }
-        item { FirstInstallTextField(companyLegalType, { companyLegalType = it }, "Legal type") }
-        item {
-            FirstInstallDropdown(
-                label = "Company country",
-                selectedLabel = COUNTRY_OPTIONS.find { it.first == country }?.second ?: if (country.isBlank()) "Select country" else country,
-                options = COUNTRY_OPTIONS,
-                onSelect = { country = it }
-            )
-        }
+        item { FirstInstallTextField(companyLegalType, { companyLegalType = it }, "Company legal type") }
+        item { FirstInstallTextField(country, { country = it }, "Country") }
         item { FirstInstallTextField(timezone, { timezone = it }, "Timezone") }
+        item { FirstInstallTextField(currency, { currency = it }, "Currency") }
+        item { FirstInstallTextField(internalCompanyLanguage, { internalCompanyLanguage = it }, "Internal company language") }
+        item { FirstInstallTextField(defaultCustomerLanguage, { defaultCustomerLanguage = it }, "Default customer language") }
+        item { FirstInstallTextField(workspaceMode, { workspaceMode = it }, "Workspace mode") }
+
+        item { Text("Industry", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
         item {
-            FirstInstallDropdown(
-                label = "Currency",
-                selectedLabel = CURRENCY_OPTIONS.find { it.first == currency }?.second ?: if (currency.isBlank()) "Select currency" else currency,
-                options = CURRENCY_OPTIONS,
-                onSelect = { currency = it }
-            )
-        }
-        // ── Internal language ─────────────────────────────────────────────
-        item {
-            Spacer(Modifier.height(4.dp))
-            Text("Internal language", fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
-                color = MaterialTheme.colorScheme.onSurface)
-            Text("Language used by staff within the business",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        item {
-            FirstInstallDropdown(
-                label = "Language *",
-                selectedLabel = LOCALE_OPTIONS.find { it.first == internalLocale }?.second ?: "Select language",
-                options = LOCALE_OPTIONS,
-                onSelect = { internalLocale = it }
-            )
-        }
-        // ── Customer language ─────────────────────────────────────────────
-        item {
-            Spacer(Modifier.height(4.dp))
-            Text("Customer language", fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
-                color = MaterialTheme.colorScheme.onSurface)
-            Text("Default language used when communicating with customers.",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        item {
-            FirstInstallDropdown(
-                label = "Customer language",
-                selectedLabel = LOCALE_OPTIONS.find { it.first == customerLocale }?.second ?: "Select language",
-                options = LOCALE_OPTIONS,
-                onSelect = { customerLocale = it }
-            )
-        }
-                // ── Industry / subtype / activity checkbox tree ───────────────────
-        item {
-            Spacer(Modifier.height(4.dp))
-            Text("Work types", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-            Text(
-                "Select industries, subtypes and concrete activities your company performs.",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (selectedActivityCodes.isNotEmpty()) {
-                Text(
-                    "${selectedActivityCodes.size} activities selected across ${selectedIndustryCodes.size} industries",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 2.dp)
+            when {
+                state.firstInstallIndustriesLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Loading industries…", color = Color.Gray)
+                }
+                state.firstInstallIndustries.isEmpty() -> Text("No industries returned by backend.", color = Color(0xFFFF9800))
+                else -> FirstInstallDropdown(
+                    label = "Industry group",
+                    selectedLabel = selectedGroup?.name ?: "Select industry group",
+                    options = state.firstInstallIndustries.map { it.code to it.name },
+                    onSelect = { code -> selectedGroupCode = code; selectedSubtypeCode = "" }
                 )
             }
         }
-        when {
-            state.firstInstallIndustriesLoading -> item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Loading catalogue…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            state.firstInstallIndustries.isEmpty() -> item {
-                Text("No catalogue data from backend.", color = MaterialTheme.colorScheme.error)
-            }
-            else -> {
-                // For each industry group
-                state.firstInstallIndustries.forEach { industry ->
-                    val industryChecked = industry.code in selectedIndustryCodes
-                    val industryExpanded = industry.code in expandedIndustryCodes
-                    val anySubtypeSelected = industry.subtypes.any { it.code in selectedSubtypeCodes }
-
-                    // ── Industry row ──────────────────────────────────────
-                    item(key = "ind_${industry.code}") {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (industryChecked || anySubtypeSelected)
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        ) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        expandedIndustryCodes = if (industryExpanded)
-                                            expandedIndustryCodes - industry.code
-                                        else expandedIndustryCodes + industry.code
-                                    }
-                                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = industryChecked,
-                                    onCheckedChange = { checked ->
-                                        if (checked) {
-                                            // Select industry + all subtypes + all activities
-                                            selectedIndustryCodes = selectedIndustryCodes + industry.code
-                                            val subtypeCodes = industry.subtypes.map { it.code }.toSet()
-                                            selectedSubtypeCodes = selectedSubtypeCodes + subtypeCodes
-                                            val actCodes = industry.subtypes.flatMap { sub ->
-                                                sub.activities.map { it.code }
-                                            }.toSet()
-                                            selectedActivityCodes = selectedActivityCodes + actCodes
-                                        } else {
-                                            // Deselect industry + all its subtypes + activities
-                                            selectedIndustryCodes = selectedIndustryCodes - industry.code
-                                            val subtypeCodes = industry.subtypes.map { it.code }.toSet()
-                                            selectedSubtypeCodes = selectedSubtypeCodes - subtypeCodes
-                                            val actCodes = industry.subtypes.flatMap { sub ->
-                                                sub.activities.map { it.code }
-                                            }.toSet()
-                                            selectedActivityCodes = selectedActivityCodes - actCodes
-                                        }
-                                    }
-                                )
-                                Text(
-                                    industry.name,
-                                    modifier = Modifier.weight(1f).padding(start = 4.dp),
-                                    fontWeight = if (industryChecked || anySubtypeSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    fontSize = 15.sp
-                                )
-                                Icon(
-                                    if (industryExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    // ── Subtype rows (shown when industry expanded) ────────
-                    if (industryExpanded) {
-                        industry.subtypes.forEach { subtype ->
-                            val subtypeChecked = subtype.code in selectedSubtypeCodes
-                            val subtypeExpanded = subtype.code in expandedSubtypeCodes
-                            val anyActSelected = subtype.activities.any { it.code in selectedActivityCodes }
-
-                            item(key = "sub_${subtype.code}") {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 20.dp, top = 1.dp, bottom = 1.dp),
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = if (subtypeChecked || anyActSelected)
-                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                                    else MaterialTheme.colorScheme.surface,
-                                ) {
-                                    Row(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                expandedSubtypeCodes = if (subtypeExpanded)
-                                                    expandedSubtypeCodes - subtype.code
-                                                else expandedSubtypeCodes + subtype.code
-                                            }
-                                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Checkbox(
-                                            checked = subtypeChecked,
-                                            onCheckedChange = { checked ->
-                                                if (checked) {
-                                                    selectedSubtypeCodes = selectedSubtypeCodes + subtype.code
-                                                    selectedIndustryCodes = selectedIndustryCodes + industry.code
-                                                    val actCodes = subtype.activities.map { it.code }.toSet()
-                                                    selectedActivityCodes = selectedActivityCodes + actCodes
-                                                } else {
-                                                    selectedSubtypeCodes = selectedSubtypeCodes - subtype.code
-                                                    val actCodes = subtype.activities.map { it.code }.toSet()
-                                                    selectedActivityCodes = selectedActivityCodes - actCodes
-                                                    // Deselect industry if no subtypes remain selected
-                                                    val remainingSubtypes = industry.subtypes.filter { it.code in selectedSubtypeCodes }
-                                                    if (remainingSubtypes.isEmpty()) {
-                                                        selectedIndustryCodes = selectedIndustryCodes - industry.code
-                                                    }
-                                                }
-                                            }
-                                        )
-                                        Text(
-                                            subtype.name,
-                                            modifier = Modifier.weight(1f).padding(start = 4.dp),
-                                            fontWeight = if (subtypeChecked || anyActSelected) FontWeight.Medium else FontWeight.Normal,
-                                            fontSize = 14.sp
-                                        )
-                                        Icon(
-                                            if (subtypeExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            // ── Activity rows (shown when subtype expanded) ──
-                            if (subtypeExpanded) {
-                                subtype.activities.forEach { activity ->
-                                    val actChecked = activity.code in selectedActivityCodes
-                                    item(key = "act_${activity.code}") {
-                                        Row(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .padding(start = 44.dp, top = 1.dp, bottom = 1.dp)
-                                                .clickable {
-                                                    if (actChecked) {
-                                                        selectedActivityCodes = selectedActivityCodes - activity.code
-                                                        // Deselect subtype if no activities remain
-                                                        val remainingActs = subtype.activities.filter { it.code in selectedActivityCodes }
-                                                        if (remainingActs.isEmpty()) {
-                                                            selectedSubtypeCodes = selectedSubtypeCodes - subtype.code
-                                                        }
-                                                        // Deselect industry if no subtypes remain
-                                                        val remainingSubtypes = industry.subtypes.filter { it.code in selectedSubtypeCodes }
-                                                        if (remainingSubtypes.isEmpty()) {
-                                                            selectedIndustryCodes = selectedIndustryCodes - industry.code
-                                                        }
-                                                    } else {
-                                                        selectedActivityCodes = selectedActivityCodes + activity.code
-                                                        selectedSubtypeCodes = selectedSubtypeCodes + subtype.code
-                                                        selectedIndustryCodes = selectedIndustryCodes + industry.code
-                                                    }
-                                                },
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Checkbox(
-                                                checked = actChecked,
-                                                onCheckedChange = null  // handled by Row click
-                                            )
-                                            Text(
-                                                activity.name,
-                                                modifier = Modifier.weight(1f).padding(start = 4.dp),
-                                                fontSize = 13.sp,
-                                                fontWeight = if (actChecked) FontWeight.Medium else FontWeight.Normal
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+        if (selectedGroup != null) {
+            item {
+                if (selectedGroup.subtypes.isEmpty()) {
+                    Text("No subtypes returned for ${selectedGroup.name}.", color = Color.Gray)
+                } else {
+                    FirstInstallDropdown(
+                        label = "Industry subtype",
+                        selectedLabel = selectedSubtype?.name ?: "Select industry subtype",
+                        options = selectedGroup.subtypes.map { it.code to it.name },
+                        onSelect = { code -> selectedSubtypeCode = code }
+                    )
                 }
             }
         }
 
-        // ── First administrator ───────────────────────────────────────────
-        item {
-            Spacer(Modifier.height(8.dp))
-            Text("First administrator", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-        }
+        item { Text("First administrator", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
         item { FirstInstallTextField(adminDisplayName, { adminDisplayName = it }, "Display name *") }
         item { FirstInstallTextField(adminEmail, { adminEmail = it }, "Email *") }
         item { FirstInstallTextField(adminPassword, { adminPassword = it }, "Password *") }
@@ -739,11 +455,10 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
         item { FirstInstallTextField(phone, { phone = it }, "Phone") }
         item { FirstInstallTextField(website, { website = it }, "Website") }
 
-        // ── Error / submit ────────────────────────────────────────────────
         item {
             val errorText = localError ?: state.firstInstallError
             if (!errorText.isNullOrBlank()) {
-                Text(errorText, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                Text(errorText, color = Color.Red, fontSize = 13.sp)
             }
         }
         item {
@@ -753,42 +468,33 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                 onClick = {
                     localError = when {
                         companyName.isBlank() -> "Company name is required."
-                        internalLocale.isBlank() -> "Select an internal language."
-                        selectedIndustryCodes.isEmpty() -> "Select at least one industry."
-                        selectedSubtypeCodes.isEmpty() -> "Select at least one subtype."
-                        selectedActivityCodes.isEmpty() -> "Select at least one activity."
                         adminDisplayName.isBlank() -> "First administrator display name is required."
                         adminEmail.isBlank() -> "First administrator email is required."
                         adminPassword.isBlank() -> "First administrator password is required."
-                        adminPassword.length < 12 -> "Password must be at least 12 characters."
-                        confirmPassword != adminPassword -> "Passwords do not match."
+                        adminPassword.length < 12 -> "First administrator password must be at least 12 characters."
+                        confirmPassword != adminPassword -> "Password confirmation must match the first administrator password."
                         else -> null
                     }
                     if (localError == null) {
-                        val primaryIndustry = selectedIndustryCodes.firstOrNull()
-                        val primarySubtype = selectedSubtypeCodes.firstOrNull()
                         viewModel.submitFirstInstall(
                             FirstInstallRequest(
                                 company_name = companyName.trim(),
-                                company_legal_type = companyLegalType.trim().ifBlank { null },
-                                country = country.trim().ifBlank { "GB" },
-                                timezone = timezone.trim().ifBlank { "Europe/London" },
-                                currency = currency.ifBlank { "CZK" },
-                                default_internal_language_code = internalLocale.ifBlank { "cs-CZ" },
-                                default_customer_language_code = customerLocale.ifBlank { internalLocale.ifBlank { "cs-CZ" } },
-                                workspace_mode = "single_company",
-                                selected_industries = selectedIndustryCodes.toList(),
-                                selected_subtypes = selectedSubtypeCodes.toList(),
-                                selected_activities = selectedActivityCodes.toList(),
-                                primary_industry = primaryIndustry,
-                                primary_subtype = primarySubtype,
+                                company_legal_type = companyLegalType.trim(),
+                                country = country.trim(),
+                                timezone = timezone.trim(),
+                                currency = currency.trim(),
+                                internal_company_language = internalCompanyLanguage.trim(),
+                                default_customer_language = defaultCustomerLanguage.trim(),
+                                workspace_mode = workspaceMode.trim(),
+                                industry_group = selectedGroupCode.trim(),
+                                industry_subtype = selectedSubtypeCode.trim(),
                                 first_admin_display_name = adminDisplayName.trim(),
                                 first_admin_email = adminEmail.trim(),
                                 first_admin_password = adminPassword,
-                                first_admin_first_name = adminFirstName.trim().ifBlank { null },
-                                first_admin_last_name = adminLastName.trim().ifBlank { null },
-                                phone = phone.trim().ifBlank { null },
-                                website = website.trim().ifBlank { null }
+                                first_admin_first_name = adminFirstName.trim(),
+                                first_admin_last_name = adminLastName.trim(),
+                                phone = phone.trim(),
+                                website = website.trim()
                             )
                         )
                     }
@@ -799,12 +505,13 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                     Spacer(Modifier.width(8.dp))
                     Text("Creating first installation…")
                 } else {
-                    Text("Create company and administrator")
+                    Text("Create company and first administrator")
                 }
             }
         }
     }
 }
+
 @Composable
 private fun FirstInstallTextField(value: String, onValueChange: (String) -> Unit, label: String) {
     OutlinedTextField(
@@ -1681,9 +1388,7 @@ private fun taskHasPlanning(task: Task): Boolean =
     !task.plannedStartAt.isNullOrBlank() || !task.deadline.isNullOrBlank()
 
 private fun canManageHierarchy(state: UiState): Boolean =
-    state.currentUserPermissions["manage_users"] == true ||   // legacy backend
-        state.currentUserPermissions["users.manage"] == true ||  // clean backend
-        state.currentUserRole.equals("owner", ignoreCase = true) ||
+    state.currentUserPermissions["manage_users"] == true ||
         state.currentUserRole.equals("admin", ignoreCase = true) ||
         state.currentUserRole.equals("manager", ignoreCase = true)
 
@@ -5230,24 +4935,6 @@ class SecretaryViewModel : ViewModel() {
         .build()
         .create(SecretaryApi::class.java) }
 
-    // Clean backend: all legacy paths (crm/, activities/, work-reports/, etc.) live under /api/v1/
-    // Using a second Retrofit instance with BASE/api/v1/ base URL so that e.g. "crm/clients"
-    // resolves to BASE/api/v1/crm/clients without touching every call site individually.
-    internal val apiV1 by lazy {
-        val url = settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
-        val base = if (url.endsWith("/")) url.dropLast(1) else url
-        Retrofit.Builder()
-        .baseUrl("$base/api/v1/")
-        .client(okHttpClient)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-        .create(SecretaryApi::class.java) }
-
-    // Use this for all legacy CRM/activity/etc. path calls.
-    // On clean backend routes through apiV1 (adds /api/v1/ prefix automatically).
-    internal val legacyOrV1Api: SecretaryApi
-        get() = if (_uiState.value.isCleanBackend) apiV1 else api
-
     private fun extractPermissionMap(raw: Any?): Map<String, Boolean> {
         val map = raw as? Map<*, *> ?: return emptyMap()
         return map.entries.mapNotNull { (key, value) ->
@@ -5288,34 +4975,6 @@ class SecretaryViewModel : ViewModel() {
         if (refreshVoice) {
             voiceManager?.refreshLanguage()
         }
-    }
-
-    /** Maps clean backend UserAccount (UUID id, List<Permission>) to UiState. */
-    private fun applyCleanUserData(raw: Map<String, @JvmSuppressWildcards Any?>?) {
-        val source = raw ?: return
-        val idStr = source["id"]?.toString() ?: ""
-        val userId = idStr.toLongOrNull() ?: Math.abs(idStr.hashCode().toLong())
-        val displayName = source["display_name"]?.toString()
-        val email = source["email"]?.toString()
-        val role = source["role"]?.toString()
-        val permissions: Map<String, Boolean> = when (val rawPerms = source["permissions"]) {
-            is List<*> -> rawPerms.mapNotNull { it?.toString() }.associateWith { true }
-            is Map<*, *> -> @Suppress("UNCHECKED_CAST") extractPermissionMap(rawPerms as Map<*, *>)
-            else -> emptyMap()
-        }
-        val preferredLang = source["preferred_language_code"]?.toString()?.takeIf { it.isNotBlank() }
-        val resolvedLang = settingsManager?.getAppLanguageForUser(userId, preferredLang ?: settingsManager?.appLanguage ?: "cs") ?: preferredLang ?: "cs"
-        applyAppLanguage(resolvedLang, persist = true, refreshVoice = false)
-        settingsManager?.setCurrentBackendUser(userId, role)
-        _uiState.value = _uiState.value.copy(
-            currentUserId = userId,
-            currentUserDisplayName = displayName,
-            currentUserEmail = email,
-            currentUserRole = role,
-            currentUserPermissions = permissions,
-            currentTenantId = 1,
-            mustChangePassword = false
-        )
     }
 
     private fun applyCurrentUserData(raw: Map<String, @JvmSuppressWildcards Any?>?) {
@@ -5371,8 +5030,6 @@ class SecretaryViewModel : ViewModel() {
         // Clear any stale voice session on startup
         sm.pendingVoiceSessionId = null
         endVoiceSession()
-        // Check bootstrap/first-install status, then auto-login
-        checkBootstrapStatus()
     }
 
     private var bootstrapCheckStarted = false
@@ -5398,7 +5055,6 @@ class SecretaryViewModel : ViewModel() {
                         bootstrapError = if (databaseUnavailable) "Database is not available." else null,
                         firstAdminSetupRequired = firstInstallRequired && !databaseUnavailable,
                         serverUnavailable = databaseUnavailable,
-                        isCleanBackend = true, // bootstrap/status endpoint exists → always clean backend
                         firstInstallError = when {
                             status?.is_ready == true -> null
                             afterFirstInstallSubmit && firstInstallRequired -> "First install was submitted, but backend setup is not ready yet."
@@ -5439,7 +5095,7 @@ class SecretaryViewModel : ViewModel() {
                 val res = api.getCatalogueIndustries()
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
-                        firstInstallIndustries = res.body() ?: emptyList(),
+                        firstInstallIndustries = parseCatalogueIndustries(res.body()),
                         firstInstallIndustriesLoading = false
                     )
                 } else {
@@ -5482,6 +5138,48 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    private fun parseCatalogueIndustries(raw: Any?): List<CatalogueIndustryGroup> {
+        val root = raw as? Map<*, *>
+        val items = when (raw) {
+            is List<*> -> raw
+            is Map<*, *> -> (root?.get("industries") as? List<*>)
+                ?: (root?.get("items") as? List<*>)
+                ?: (root?.get("groups") as? List<*>)
+                ?: (root?.get("data") as? List<*>)
+                ?: emptyList<Any?>()
+            else -> emptyList()
+        }
+        return items.mapNotNull { item ->
+            val map = item as? Map<*, *> ?: return@mapNotNull null
+            val code = firstString(map, "code", "group_code", "industry_group", "id")
+            if (code.isBlank()) return@mapNotNull null
+            val name = firstString(map, "name", "display_name", "label", "title").ifBlank { code }
+            val subtypeItems = (map["subtypes"] as? List<*>)
+                ?: (map["industry_subtypes"] as? List<*>)
+                ?: (map["subindustries"] as? List<*>)
+                ?: (map["children"] as? List<*>)
+                ?: emptyList<Any?>()
+            val subtypes = subtypeItems.mapNotNull { sub ->
+                val subMap = sub as? Map<*, *> ?: return@mapNotNull null
+                val subCode = firstString(subMap, "code", "subtype_code", "industry_subtype", "id")
+                if (subCode.isBlank()) return@mapNotNull null
+                CatalogueIndustrySubtype(
+                    code = subCode,
+                    name = firstString(subMap, "name", "display_name", "label", "title").ifBlank { subCode }
+                )
+            }
+            CatalogueIndustryGroup(code = code, name = name, subtypes = subtypes)
+        }
+    }
+
+    private fun firstString(map: Map<*, *>, vararg keys: String): String {
+        keys.forEach { key ->
+            val value = map[key]
+            if (value != null) return value.toString()
+        }
+        return ""
+    }
+
     private var autoLoginStarted = false
     private fun autoLogin() {
         if (autoLoginStarted) return
@@ -5491,11 +5189,9 @@ class SecretaryViewModel : ViewModel() {
             val token = settingsManager?.accessToken
             if (token != null) {
                 try {
-                    val res = if (_uiState.value.isCleanBackend) api.cleanAuthMe()
-                              else api.authMe("Bearer $token")
+                    val res = api.authMe("Bearer $token")
                     if (res.isSuccessful) {
-                        if (_uiState.value.isCleanBackend) applyCleanUserData(res.body())
-                        else applyCurrentUserData(res.body())
+                        applyCurrentUserData(res.body())
                         if (_uiState.value.mustChangePassword) {
                             settingsManager?.accessToken = null
                             settingsManager?.refreshToken = null
@@ -5523,11 +5219,9 @@ class SecretaryViewModel : ViewModel() {
                 // Token invalid — try refresh
                 if (tryRefreshToken()) {
                     try {
-                        val refreshed = if (_uiState.value.isCleanBackend) api.cleanAuthMe()
-                                         else api.authMe("Bearer ${settingsManager?.accessToken}")
+                        val refreshed = api.authMe("Bearer ${settingsManager?.accessToken}")
                         if (refreshed.isSuccessful) {
-                            if (_uiState.value.isCleanBackend) applyCleanUserData(refreshed.body())
-                            else applyCurrentUserData(refreshed.body())
+                            applyCurrentUserData(refreshed.body())
                             if (_uiState.value.mustChangePassword) {
                                 settingsManager?.accessToken = null
                                 settingsManager?.refreshToken = null
@@ -5566,33 +5260,21 @@ class SecretaryViewModel : ViewModel() {
                 mustChangePassword = false,
                 awaitingBiometricEnrollment = false
             )
-            if (!_uiState.value.isCleanBackend) loadFirstLoginUsers()
+            loadFirstLoginUsers()
         }
     }
 
     fun login(email: String, password: String, fromBiometric: Boolean = false, onError: (String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = if (_uiState.value.isCleanBackend)
-                    api.cleanAuthLogin(mapOf("email" to email, "password" to password))
-                else
-                    api.authLogin(mapOf("email" to email, "password" to password))
+                val res = api.authLogin(mapOf("email" to email, "password" to password))
                 if (res.isSuccessful) {
                     val body = res.body()
                     settingsManager?.accessToken = body?.get("access_token")?.toString()
                     settingsManager?.refreshToken = body?.get("refresh_token")?.toString()
-                    // Clean backend: fetch real user identity from /api/v1/auth/me after saving token.
-                    // Legacy backend: parse user data directly from login response body.
-                    if (_uiState.value.isCleanBackend) {
-                        try {
-                            val meRes = api.cleanAuthMe()
-                            if (meRes.isSuccessful) applyCleanUserData(meRes.body())
-                        } catch (_: Exception) {}
-                    } else {
-                        applyCurrentUserData(body)
-                    }
+                    applyCurrentUserData(body)
                     if (_uiState.value.mustChangePassword) {
-                        if (!_uiState.value.isCleanBackend) loadFirstLoginUsers()
+                        loadFirstLoginUsers()
                         _uiState.value = _uiState.value.copy(
                             loggedIn = false,
                             awaitingBiometricEnrollment = false,
@@ -5612,9 +5294,7 @@ class SecretaryViewModel : ViewModel() {
                     } else {
                         _uiState.value = _uiState.value.copy(
                             loggedIn = false,
-                            // Clean backend: no legacy firstLoginUsers list
-                            firstLoginUsers = if (_uiState.value.isCleanBackend) emptyList()
-                                             else _uiState.value.firstLoginUsers.filterNot { it.email.equals(email, ignoreCase = true) },
+                            firstLoginUsers = _uiState.value.firstLoginUsers.filterNot { it.email.equals(email, ignoreCase = true) },
                             awaitingBiometricEnrollment = true,
                             loginNotice = null
                         )
@@ -5670,8 +5350,6 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun loadBackendRoles() {
-        // Clean backend: no legacy /auth/roles endpoint — roles come from /api/v1/auth/me as a string field.
-        if (_uiState.value.isCleanBackend) return
         viewModelScope.launch {
             try {
                 val res = api.getAuthRoles()
@@ -5699,51 +5377,20 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(backendUsersLoading = true, backendUsersError = null)
             try {
-                if (_uiState.value.isCleanBackend) {
-                    // Clean backend: GET /api/v1/users returns UUID-based user objects
-                    val res = api.cleanGetUsers()
-                    if (res.isSuccessful) {
-                        val users = (res.body() ?: emptyList()).mapIndexed { idx, u ->
-                            @Suppress("UNCHECKED_CAST")
-                            val perms = (u["permissions"] as? List<String>).orEmpty()
-                            BackendUser(
-                                id = idx.toLong() + 1, // synthetic index; UUID kept in email lookup
-                                display_name = u["display_name"]?.toString() ?: u["email"]?.toString() ?: "",
-                                email = u["email"]?.toString() ?: "",
-                                phone = u["phone"]?.toString(),
-                                status = if (u["is_active"] == true) "active" else "inactive",
-                                role_name = u["role"]?.toString(),
-                                permissions = perms.associateWith { true }
-                            )
-                        }
-                        _uiState.value = _uiState.value.copy(
-                            backendUsers = users,
-                            backendUsersLoading = false,
-                            backendUsersError = null
-                        )
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            backendUsers = emptyList(),
-                            backendUsersLoading = false,
-                            backendUsersError = "HTTP ${res.code()}"
-                        )
-                    }
+                val res = api.getAuthUsers()
+                if (res.isSuccessful) {
+                    _uiState.value = _uiState.value.copy(
+                        backendUsers = res.body() ?: emptyList(),
+                        backendUsersLoading = false,
+                        backendUsersError = null
+                    )
                 } else {
-                    val res = api.getAuthUsers()
-                    if (res.isSuccessful) {
-                        _uiState.value = _uiState.value.copy(
-                            backendUsers = res.body() ?: emptyList(),
-                            backendUsersLoading = false,
-                            backendUsersError = null
-                        )
-                    } else {
-                        val rawError = res.errorBody()?.string()
-                        _uiState.value = _uiState.value.copy(
-                            backendUsers = emptyList(),
-                            backendUsersLoading = false,
-                            backendUsersError = parseBackendAdminError(res.code(), rawError, Strings.backendUsersLoadFailed)
-                        )
-                    }
+                    val rawError = res.errorBody()?.string()
+                    _uiState.value = _uiState.value.copy(
+                        backendUsers = emptyList(),
+                        backendUsersLoading = false,
+                        backendUsersError = parseBackendAdminError(res.code(), rawError, Strings.backendUsersLoadFailed)
+                    )
                 }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend users load error", e)
                 _uiState.value = _uiState.value.copy(
@@ -5868,9 +5515,7 @@ class SecretaryViewModel : ViewModel() {
 
     private fun shouldLoadHierarchyIntegrity(): Boolean {
         val state = _uiState.value
-        return state.currentUserPermissions["manage_users"] == true ||   // legacy backend
-            state.currentUserPermissions["users.manage"] == true ||  // clean backend
-            state.currentUserRole == "owner" ||
+        return state.currentUserPermissions["manage_users"] == true ||
             state.currentUserRole == "admin" ||
             state.currentUserRole == "manager"
     }
@@ -6153,22 +5798,11 @@ class SecretaryViewModel : ViewModel() {
             awaitingBiometricEnrollment = false,
             loginNotice = null
         )
-        if (!_uiState.value.isCleanBackend) loadFirstLoginUsers()
+        loadFirstLoginUsers()
     }
 
     suspend fun tryRefreshToken(): Boolean {
         val rt = settingsManager?.refreshToken ?: return false
-        // Clean backend: use api/v1/auth/refresh via Retrofit (token interceptor adds Bearer for us)
-        if (_uiState.value.isCleanBackend) {
-            return try {
-                val res = api.cleanAuthRefresh(mapOf("refresh_token" to rt))
-                if (res.isSuccessful) {
-                    settingsManager?.accessToken = res.body()?.get("access_token")?.toString()?.takeIf { it.isNotBlank() }
-                    Log.d("ViewModel", "Clean token refreshed OK")
-                    true
-                } else false
-            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Clean token refresh error", e); false }
-        }
         return withContext(Dispatchers.IO) {
             try {
                 val url = (settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL) + "auth/refresh"
@@ -6192,13 +5826,6 @@ class SecretaryViewModel : ViewModel() {
     fun getCalendarText(days: Int = 7): String = calendarManager?.getCalendarContext(days) ?: "Kalendář není dostupný"
 
     fun checkOnboardingStatus() {
-        // Clean backend: company is fully set up during FirstInstallWizardScreen.
-        // The legacy onboarding/status endpoint does not exist on the clean backend,
-        // so we treat any logged-in clean-backend user as onboarding-complete.
-        if (_uiState.value.isCleanBackend) {
-            _uiState.value = _uiState.value.copy(onboardingComplete = true)
-            return
-        }
         viewModelScope.launch {
             try {
                 val res = api.getOnboardingStatus(1)
@@ -6220,15 +5847,16 @@ class SecretaryViewModel : ViewModel() {
 
     fun loadTenantConfig() {
         viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
-                val res = if (_uiState.value.isCleanBackend) api.cleanGetTenantConfig() else api.getTenantConfig(1)
+                val res = api.getTenantConfig(auth)
                 val now = System.currentTimeMillis()
                 if (res.isSuccessful) {
                     val config = res.body()
-                    val err = config?.get("error")?.toString()
+                    // Clean backend returns TenantOperatingProfile — no "error" key
                     _uiState.value = _uiState.value.copy(
                         tenantConfig = config,
-                        tenantConfigError = err,
+                        tenantConfigError = null,
                         tenantConfigRefreshMs = now
                     )
                 } else {
@@ -6251,63 +5879,53 @@ class SecretaryViewModel : ViewModel() {
 
     fun loadSettings() {
         viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             val errors = mutableMapOf<String, String>()
             var versionInfo: Map<String, Any?>? = null
             var profile: Map<String, Any?>? = null
             var languages: Map<String, Any?>? = null
 
-            // /version — NOT available on clean backend (uses /api/v1/ prefix for everything)
-            if (!_uiState.value.isCleanBackend) {
-                try {
-                    val res = api.getServerVersion()
-                    if (res.isSuccessful) versionInfo = res.body()
-                    else errors["version"] = "HTTP ${res.code()}"
-                } catch (e: Exception) {
-                    e.rethrowIfCancellation()
-                    errors["version"] = e.message ?: "error"
-                    Log.e("ViewModel", "loadSettings /version error", e)
-                }
+            // GET api/v1/version (no auth)
+            try {
+                val res = api.getServerVersion()
+                if (res.isSuccessful) versionInfo = res.body()
+                else errors["version"] = "HTTP ${res.code()}"
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                errors["version"] = e.message ?: "error"
+                Log.e("ViewModel", "loadSettings /version error", e)
             }
 
-            // /tenant/profile  (clean: /api/v1/company/profile)
+            // GET api/v1/company/profile
             try {
-                val res = if (_uiState.value.isCleanBackend) api.cleanGetCompanyProfile() else api.getTenantProfile()
-                if (res.isSuccessful) profile = res.body()
-                else errors["profile"] = "HTTP ${res.code()}"
+                val res = api.getTenantProfile(auth)
+                if (res.isSuccessful) {
+                    val body = res.body()
+                    // Normalise clean response so SettingsScreen can find "found" and "default_customer_lang"
+                    profile = body?.let { it.toMutableMap().apply {
+                        put("found", true)
+                        // Map clean field names to legacy names the UI reads
+                        put("default_customer_lang", it["default_customer_language_code"] ?: it["default_currency"])
+                        put("name", it["legal_name"] ?: it["trading_name"])
+                    }}
+                } else errors["profile"] = "HTTP ${res.code()}"
             } catch (e: Exception) {
                 e.rethrowIfCancellation()
                 errors["profile"] = e.message ?: "error"
-                Log.e("ViewModel", "loadSettings /tenant/profile error", e)
+                Log.e("ViewModel", "loadSettings /company/profile error", e)
             }
 
-            // /tenant/languages  (clean: /api/v1/language/tenant)
+            // GET api/v1/language/settings
             try {
-                if (_uiState.value.isCleanBackend) {
-                    val res = api.cleanGetTenantLanguages()
-                    if (res.isSuccessful) {
-                        // Clean backend returns a plain JSON array of language objects
-                        val list = res.body().orEmpty()
-                        val adapted = list.map { item ->
-                            mapOf<String, Any?>(
-                                "code" to (item["language_code"] ?: item["code"]),
-                                "scope" to (item["language_scope"] ?: item["scope"]),
-                                "is_enabled" to item["is_enabled"],
-                                "is_default" to item["is_default"]
-                            )
-                        }
-                        languages = mapOf("found" to true, "languages" to adapted)
-                    } else {
-                        errors["languages"] = "HTTP ${res.code()}"
-                    }
-                } else {
-                    val res = api.getTenantLanguages()
-                    if (res.isSuccessful) languages = res.body()
-                    else errors["languages"] = "HTTP ${res.code()}"
-                }
+                val res = api.getTenantLanguages(auth)
+                if (res.isSuccessful) {
+                    val body = res.body()
+                    languages = body?.let { it.toMutableMap().apply { put("found", true) } }
+                } else errors["languages"] = "HTTP ${res.code()}"
             } catch (e: Exception) {
                 e.rethrowIfCancellation()
                 errors["languages"] = e.message ?: "error"
-                Log.e("ViewModel", "loadSettings /tenant/languages error", e)
+                Log.e("ViewModel", "loadSettings /language/settings error", e)
             }
 
             _uiState.value = _uiState.value.copy(
@@ -6322,13 +5940,12 @@ class SecretaryViewModel : ViewModel() {
 
     fun updateInternalLanguage(lang: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
                 val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
-                    _uiState.value.currentUserPermissions["users.manage"] == true ||
-                    _uiState.value.currentUserRole == "owner" ||
                     _uiState.value.currentUserRole == "admin"
                 if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return@launch }
-                val res = api.updateTenantLanguages(1, mapOf("default_internal_language_code" to lang))
+                val res = api.updateTenantLanguages(auth, mapOf("default_internal_language_code" to lang))
                 if (res.isSuccessful) { loadSettings(); loadTenantConfig(); onDone(true, null) }
                 else { onDone(false, parseBackendAdminError(res.code(), res.errorBody()?.string(), Strings.save)) }
             } catch (e: Exception) { e.rethrowIfCancellation(); onDone(false, e.message ?: Strings.connectionError) }
@@ -6337,16 +5954,15 @@ class SecretaryViewModel : ViewModel() {
 
     fun updateCustomerLanguage(customerLang: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
                 val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
-                    _uiState.value.currentUserPermissions["users.manage"] == true ||
-                    _uiState.value.currentUserRole == "owner" ||
                     _uiState.value.currentUserRole == "admin"
                 if (!canManage) {
                     onDone(false, Strings.backendPermissionDenied())
                     return@launch
                 }
-                val res = api.updateTenantLanguages(1, mapOf("default_customer_language_code" to customerLang))
+                val res = api.updateTenantLanguages(auth, mapOf("default_customer_language_code" to customerLang))
                 if (res.isSuccessful) {
                     loadTenantConfig()
                     onDone(true, null)
@@ -6564,7 +6180,7 @@ class SecretaryViewModel : ViewModel() {
                         "planning_note" to replacementDraft.planningNote
                     )
                 }
-                val res = legacyOrV1Api.updateTask(taskId, payload)
+                val res = api.updateTask(taskId, payload)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone?.invoke(true, null)
@@ -6597,7 +6213,7 @@ class SecretaryViewModel : ViewModel() {
                     "set_as_next_action" to draft.setAsNextAction,
                     "source" to "manualne"
                 )
-                val res = legacyOrV1Api.createTask(payload)
+                val res = api.createTask(payload)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7130,16 +6746,16 @@ class SecretaryViewModel : ViewModel() {
     fun refreshCrmData() {
         viewModelScope.launch {
             try {
-                val cl = legacyOrV1Api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
-                val cs = legacyOrV1Api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
-                val sc = legacyOrV1Api.getSharedContacts(); if (sc.isSuccessful) { _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList()); checkContactDuplicates() }
-                val pr = legacyOrV1Api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
-                val jb = legacyOrV1Api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
-                val ld = legacyOrV1Api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
-                val qt = legacyOrV1Api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
-                val iv = legacyOrV1Api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
+                val cl = api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
+                val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
+                val sc = api.getSharedContacts(); if (sc.isSuccessful) { _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList()); checkContactDuplicates() }
+                val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
+                val jb = api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
+                val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
+                val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
+                val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
                 val language = _uiState.value.appLanguage
-                val nh = legacyOrV1Api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
+                val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
@@ -7152,16 +6768,16 @@ class SecretaryViewModel : ViewModel() {
     private fun refreshCrmDataKeepTasks() {
         viewModelScope.launch {
             try {
-                val cl = legacyOrV1Api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
-                val cs = legacyOrV1Api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
-                val sc = legacyOrV1Api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
-                val pr = legacyOrV1Api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
-                val jb = legacyOrV1Api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
-                val ld = legacyOrV1Api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
-                val qt = legacyOrV1Api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
-                val iv = legacyOrV1Api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
+                val cl = api.getClients(); if (cl.isSuccessful) { _uiState.value = _uiState.value.copy(clients = cl.body() ?: emptyList()); _cachedKnownNames = null }
+                val cs = api.getContactSections(); if (cs.isSuccessful) _uiState.value = _uiState.value.copy(contactSections = cs.body() ?: emptyList())
+                val sc = api.getSharedContacts(); if (sc.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = sc.body() ?: emptyList())
+                val pr = api.getProperties(); if (pr.isSuccessful) _uiState.value = _uiState.value.copy(properties = pr.body() ?: emptyList())
+                val jb = api.getJobs(); if (jb.isSuccessful) _uiState.value = _uiState.value.copy(jobs = jb.body() ?: emptyList())
+                val ld = api.getLeads(); if (ld.isSuccessful) _uiState.value = _uiState.value.copy(leads = ld.body() ?: emptyList())
+                val qt = api.getQuotes(); if (qt.isSuccessful) _uiState.value = _uiState.value.copy(quotes = qt.body() ?: emptyList())
+                val iv = api.getInvoices(); if (iv.isSuccessful) _uiState.value = _uiState.value.copy(invoices = iv.body() ?: emptyList())
                 val language = _uiState.value.appLanguage
-                val nh = legacyOrV1Api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
+                val nh = api.getNatureHistory(limit = 30, language = language); if (nh.isSuccessful) _uiState.value = _uiState.value.copy(recognitionHistory = nh.body() ?: emptyList())
                 loadTasksFromServer()
                 loadWorkReportsFromServer()
                 loadCalendarFeedFromServer()
@@ -7178,7 +6794,7 @@ class SecretaryViewModel : ViewModel() {
 
     private suspend fun loadCalendarFeedFromServer(days: Int = 30) {
         try {
-            val res = legacyOrV1Api.getCalendarFeed(days)
+            val res = api.getCalendarFeed(days)
             if (res.isSuccessful) {
                 val entries = res.body() ?: emptyList()
                 _uiState.value = _uiState.value.copy(calendarFeed = entries)
@@ -7192,7 +6808,7 @@ class SecretaryViewModel : ViewModel() {
 
     private suspend fun loadWorkReportsFromServer() {
         try {
-            val res = legacyOrV1Api.getWorkReports()
+            val res = api.getWorkReports()
             if (res.isSuccessful) {
                 val raw = res.body() ?: emptyList()
                 val reports = raw.map { m ->
@@ -7220,7 +6836,7 @@ class SecretaryViewModel : ViewModel() {
     }
     private suspend fun loadTasksFromServer() {
         try {
-            val tr = legacyOrV1Api.getTasks()
+            val tr = api.getTasks()
             if (tr.isSuccessful) {
                 val serverTasks = (tr.body() ?: emptyList()).map { m ->
                     Task(
@@ -7258,7 +6874,7 @@ class SecretaryViewModel : ViewModel() {
     fun loadTenantRateTypes() {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.getDefaultRates(1)
+                val res = api.getDefaultRates(1)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(tenantRateTypes = res.body() ?: emptyList())
                 }
@@ -7275,8 +6891,8 @@ class SecretaryViewModel : ViewModel() {
                 tenantActivityPricing = emptyList()
             )
             try {
-                val tRes = legacyOrV1Api.getActivityTemplates(subtypeCode = subtypeCode, groupCode = groupCode)
-                val pRes = legacyOrV1Api.getTenantActivityPricing(1, subtypeCode = subtypeCode)
+                val tRes = api.getActivityTemplates(subtypeCode = subtypeCode, groupCode = groupCode)
+                val pRes = api.getTenantActivityPricing(1, subtypeCode = subtypeCode)
                 _uiState.value = _uiState.value.copy(
                     activityTemplates = if (tRes.isSuccessful) tRes.body() ?: emptyList() else emptyList(),
                     tenantActivityPricing = if (pRes.isSuccessful) pRes.body() ?: emptyList() else emptyList(),
@@ -7298,7 +6914,7 @@ class SecretaryViewModel : ViewModel() {
     fun upsertActivityPricing(templateId: Long, data: Map<String, Any?>, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.upsertTenantActivityPricing(1, templateId, data)
+                val res = api.upsertTenantActivityPricing(1, templateId, data)
                 if (res.isSuccessful) onDone()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Upsert activity pricing error", e)
             }
@@ -7308,7 +6924,7 @@ class SecretaryViewModel : ViewModel() {
     fun resetActivityPricing(templateId: Long, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.resetTenantActivityPricing(1, templateId)
+                val res = api.resetTenantActivityPricing(1, templateId)
                 if (res.isSuccessful) onDone()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Reset activity pricing error", e)
             }
@@ -7316,15 +6932,6 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun loadSystemSettings() {
-        // Clean backend: /system/settings does not exist. Connection was already verified via
-        // checkBootstrapStatus() → mark as CONNECTED without a network call.
-        if (_uiState.value.isCleanBackend) {
-            _uiState.value = _uiState.value.copy(
-                connectionStatus = ConnectionStatus.CONNECTED,
-                status = Strings.connected
-            )
-            return
-        }
         viewModelScope.launch {
             try {
                 val res = api.getSettings()
@@ -7386,7 +6993,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(selectedClientDetail = null)
             try {
-                val res = legacyOrV1Api.getClientDetail(clientId)
+                val res = api.getClientDetail(clientId)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(selectedClientDetail = res.body())
                 }
@@ -7413,7 +7020,7 @@ class SecretaryViewModel : ViewModel() {
                         "planning_note" to draft.firstAction.planningNote
                     )
                 )
-                val res = legacyOrV1Api.createClient(data)
+                val res = api.createClient(data)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7429,7 +7036,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateClient(clientId: Long, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.updateClient(clientId, data)
+                val res = api.updateClient(clientId, data)
                 if (res.isSuccessful) { loadClientDetail(clientId); refreshCrmData() }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update client error", e) }
         }
@@ -7438,7 +7045,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateClientServiceRates(clientId: Long, rates: Map<String, Any?>, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.updateClientServiceRates(clientId, rates)
+                val res = api.updateClientServiceRates(clientId, rates)
                 if (res.isSuccessful) {
                     loadClientDetail(clientId)
                     refreshCrmData()
@@ -7463,7 +7070,7 @@ class SecretaryViewModel : ViewModel() {
     fun addClientNote(clientId: Long, note: String) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.addClientNote(clientId, mapOf("note" to note))
+                val res = api.addClientNote(clientId, mapOf("note" to note))
                 if (res.isSuccessful) loadClientDetail(clientId)
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add note error", e) }
         }
@@ -7540,7 +7147,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val localContacts = preparePhoneContacts(context)
-                val res = legacyOrV1Api.syncContacts(mapOf("contacts" to localContacts, "filter_uk" to false))
+                val res = api.syncContacts(mapOf("contacts" to localContacts, "filter_uk" to false))
                 if (res.isSuccessful) {
                     val remoteMap = (res.body()?.contacts ?: emptyList()).associateBy { it.contact_key }
                     val merged = localContacts.map { local ->
@@ -7607,7 +7214,7 @@ class SecretaryViewModel : ViewModel() {
                         "selected_as_client" to contact.selected_as_client
                     )
                 }
-                val res = legacyOrV1Api.syncContacts(mapOf("contacts" to payload, "filter_uk" to false))
+                val res = api.syncContacts(mapOf("contacts" to payload, "filter_uk" to false))
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7662,7 +7269,7 @@ class SecretaryViewModel : ViewModel() {
     fun createContactSection(displayName: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.createContactSection(mapOf("display_name" to displayName))
+                val res = api.createContactSection(mapOf("display_name" to displayName))
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7679,7 +7286,7 @@ class SecretaryViewModel : ViewModel() {
     fun saveSharedContact(data: Map<String, Any?>, contactId: Long? = null, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = if (contactId == null) legacyOrV1Api.createSharedContact(data) else legacyOrV1Api.updateSharedContact(contactId, data)
+                val res = if (contactId == null) api.createSharedContact(data) else api.updateSharedContact(contactId, data)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7696,7 +7303,7 @@ class SecretaryViewModel : ViewModel() {
     fun deleteSharedContact(contactId: Long, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.deleteSharedContact(contactId)
+                val res = api.deleteSharedContact(contactId)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7728,7 +7335,7 @@ class SecretaryViewModel : ViewModel() {
                         "selected" to it.selected
                     )
                 }
-                val res = legacyOrV1Api.importSharedContacts(mapOf("contacts" to payload))
+                val res = api.importSharedContacts(mapOf("contacts" to payload))
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7753,7 +7360,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val contacts = preparePhoneContacts(context, onlyUkNumbers, skipWithoutPhone, skipWithoutName, removeDuplicates, includeEmail)
-                val res = legacyOrV1Api.syncContacts(mapOf("contacts" to contacts, "filter_uk" to onlyUkNumbers))
+                val res = api.syncContacts(mapOf("contacts" to contacts, "filter_uk" to onlyUkNumbers))
                 if (res.isSuccessful) {
                     refreshCrmData()
                 }
@@ -7764,7 +7371,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateLead(leadId: Long, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
-                legacyOrV1Api.updateLead(leadId, data)
+                api.updateLead(leadId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update lead error", e) }
         }
@@ -7774,7 +7381,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "grand_total" to amount, "due_date" to dueDate)
-                legacyOrV1Api.createInvoice(data)
+                api.createInvoice(data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create invoice error", e) }
         }
@@ -7784,7 +7391,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("status" to status)
-                legacyOrV1Api.updateInvoice(invoiceId, data)
+                api.updateInvoice(invoiceId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update invoice error", e) }
         }
@@ -7795,7 +7402,7 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val data = mapOf<String, Any?>("tenant_id" to 1, "client_id" to clientId, "work_date" to workDate,
                     "total_hours" to totalHours, "total_price" to totalPrice, "notes" to notes, "input_type" to "manual", "status" to "draft")
-                legacyOrV1Api.createWorkReport(data)
+                api.createWorkReport(data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create work report error", e) }
         }
@@ -7809,7 +7416,7 @@ class SecretaryViewModel : ViewModel() {
                     "note" to note,
                     "note_type" to noteType
                 )
-                val response = legacyOrV1Api.addJobNote(jobId, data)
+                val response = api.addJobNote(jobId, data)
                 if (response.isSuccessful) {
                     addJobAuditEntry(jobId, "note_added", "Added $noteType note: $note")
                     loadJobDetail(jobId)
@@ -7822,7 +7429,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "quote_title" to title)
-                legacyOrV1Api.createQuote(data)
+                api.createQuote(data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create quote error", e) }
         }
@@ -7832,7 +7439,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("create_job" to createJob)
-                legacyOrV1Api.approveQuote(quoteId, data)
+                api.approveQuote(quoteId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Approve quote error", e) }
         }
@@ -7842,7 +7449,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("description" to description, "quantity" to qty, "unit_price" to price)
-                legacyOrV1Api.addQuoteItem(quoteId, data)
+                api.addQuoteItem(quoteId, data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Add quote item error", e) }
         }
@@ -7870,7 +7477,7 @@ class SecretaryViewModel : ViewModel() {
                         "planning_note" to draft.firstAction.planningNote
                     )
                 )
-                val res = legacyOrV1Api.createJob(data)
+                val res = api.createJob(data)
                 if (res.isSuccessful) {
                     refreshCrmData()
                     onDone(true, null)
@@ -7887,7 +7494,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(selectedJobDetail = null)
             try {
-                val res = legacyOrV1Api.getJobDetail(jobId)
+                val res = api.getJobDetail(jobId)
                 if (res.isSuccessful) _uiState.value = _uiState.value.copy(selectedJobDetail = res.body())
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Job detail error", e) }
         }
@@ -7896,7 +7503,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateJob(jobId: Long, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.updateJob(jobId, data)
+                val res = api.updateJob(jobId, data)
                 if (res.isSuccessful) { loadJobDetail(jobId); refreshCrmData() }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Update job error", e) }
         }
@@ -7905,7 +7512,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateTask(taskId: String, data: Map<String, Any?>, onDone: ((Boolean, String?) -> Unit)? = null) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.updateTask(taskId, data)
+                val res = api.updateTask(taskId, data)
                 if (res.isSuccessful) {
                     // Update local state
                     val tasks = _uiState.value.tasks.map { t ->
@@ -7943,7 +7550,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf("name" to name, "source" to source, "email" to email, "phone" to phone, "description" to description)
-                val res = legacyOrV1Api.createLead(data)
+                val res = api.createLead(data)
                 if (res.isSuccessful) refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create lead error", e) }
         }
@@ -7953,7 +7560,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf("name" to name, "email" to email, "phone" to phone)
-                val res = legacyOrV1Api.convertLeadToClient(leadId, data)
+                val res = api.convertLeadToClient(leadId, data)
                 if (res.isSuccessful) refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Convert lead error", e) }
         }
@@ -7963,7 +7570,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("title" to title)
-                val res = legacyOrV1Api.convertLeadToJob(leadId, data)
+                val res = api.convertLeadToJob(leadId, data)
                 if (res.isSuccessful) refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Convert lead to job error", e) }
         }
@@ -7973,7 +7580,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "job_id" to jobId, "comm_type" to commType, "subject" to subject, "message" to message, "direction" to direction)
-                legacyOrV1Api.logCommunication(data)
+                api.logCommunication(data)
                 if (clientId != null) loadClientDetail(clientId)
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Log comm error", e) }
         }
@@ -8132,89 +7739,9 @@ class SecretaryViewModel : ViewModel() {
      * Returns true if the command was handled (show disambiguation / execute / confirm),
      * false if we should fall through to the AI server.
      */
-    /** Maps clean backend resolved_intent (e.g. "crm.clients.create") to Android action code. */
-    private fun cleanIntentToActionCode(intent: String?, requiresConfirmation: Boolean): Pair<String?, String> {
-        val actionCode = when (intent) {
-            "crm.clients.create"      -> "add_client"
-            "crm.jobs.create"         -> "add_job"
-            "crm.tasks.create"        -> "add_task"
-            "crm.quotes.create"       -> "add_quote"
-            "crm.invoices.create"     -> "add_invoice"
-            "crm.work_reports.create" -> "add_work_report"
-            "crm.leads.create"        -> "add_lead"
-            "crm.contacts.create"     -> "add_contact"
-            "crm.communications.create" -> "add_communication"
-            "navigate.home"           -> "navigate_to_home"
-            "navigate.crm"            -> "navigate_to_crm"
-            "navigate.calendar"       -> "navigate_to_calendar"
-            "navigate.settings"       -> "navigate_to_settings"
-            "navigate.tools"          -> "navigate_to_tools"
-            "navigate.pricing"        -> "navigate_to_activitypricing"
-            "lang.cs"                 -> "lang_cs"
-            "lang.pl"                 -> "lang_pl"
-            "lang.en"                 -> "lang_en"
-            null                      -> null
-            else -> intent.replace(".", "_")
-        }
-        val riskLevel = when {
-            intent == null -> "low"
-            intent.startsWith("navigate.") || intent.startsWith("lang.") -> "low"
-            requiresConfirmation -> "medium"
-            else -> "low"
-        }
-        return actionCode to riskLevel
-    }
-
     private suspend fun tryVoiceResolveSuspend(text: String, screenCode: String): Boolean {
         val uid  = _uiState.value.currentUserId?.toInt() ?: 1
         val lang = _uiState.value.appLanguage.ifBlank { "cs" }
-
-        // ── Clean backend voice resolve ──────────────────────────────────
-        if (_uiState.value.isCleanBackend) {
-            return try {
-                val resp = api.cleanVoiceResolve(mapOf("utterance" to text, "client_id" to null))
-                if (!resp.isSuccessful) return false
-                val body = resp.body() ?: return false
-                val resolvedIntent = body["resolved_intent"]?.toString()
-                val confidence = (body["confidence"] as? Number)?.toFloat() ?: 0f
-                val requiresConfirmation = body["requires_confirmation"] as? Boolean ?: true
-                if (resolvedIntent == null && confidence == 0f) return false
-
-                val (actionCode, riskLevel) = cleanIntentToActionCode(resolvedIntent, requiresConfirmation)
-                val result = VoiceResolveResult(
-                    originalText = text,
-                    resolved = resolvedIntent != null,
-                    actionCode = actionCode,
-                    controlCode = null,
-                    confidence = confidence,
-                    resolutionMethod = "clean_backend",
-                    requiresClarification = resolvedIntent != null && requiresConfirmation && riskLevel != "low",
-                    clarificationQuestion = body["reason"]?.toString(),
-                    candidates = emptyList(),
-                    args = emptyMap(),
-                    riskLevel = riskLevel,
-                    error = null
-                )
-                Log.d("VoiceResolve", "Clean: intent=$resolvedIntent action=$actionCode risk=$riskLevel")
-                when {
-                    result.resolved && result.riskLevel == "low" -> {
-                        _uiState.value = _uiState.value.copy(status = Strings.waitingForCommand, pendingVoiceResolve = null)
-                        executeVoiceResolvedAction(result)
-                        true
-                    }
-                    result.resolved -> {
-                        _uiState.value = _uiState.value.copy(status = Strings.waitingForCommand, pendingVoiceResolve = result)
-                        val msg = Strings.voiceConfirmAction(result.clarificationQuestion
-                            ?: result.actionCode?.replace("_", " ") ?: "tuto akci")
-                        voiceManager?.speak(msg, expectReply = true)
-                        true
-                    }
-                    else -> false
-                }
-            } catch (e: Exception) { e.rethrowIfCancellation(); Log.w("VoiceResolve", "cleanVoiceResolve error: ${e.message}"); false }
-        }
-
-        // ── Legacy voice resolve ─────────────────────────────────────────
         return try {
             val resp = api.voiceResolve(
                 mapOf(
@@ -8331,17 +7858,7 @@ class SecretaryViewModel : ViewModel() {
     fun confirmVoiceResolvedAction() {
         val result = _uiState.value.pendingVoiceResolve ?: return
         _uiState.value = _uiState.value.copy(pendingVoiceResolve = null)
-        if (!result.resolved) return
-        // Notify clean backend before local execution
-        if (_uiState.value.isCleanBackend) {
-            viewModelScope.launch {
-                try {
-                    api.cleanVoiceExecute(mapOf("utterance" to result.originalText, "confirmed" to true))
-                    Log.d("VoiceResolve", "cleanVoiceExecute confirmed OK")
-                } catch (e: Exception) { e.rethrowIfCancellation(); Log.w("VoiceResolve", "cleanVoiceExecute error: ${e.message}") }
-            }
-        }
-        executeVoiceResolvedAction(result)
+        if (result.resolved) executeVoiceResolvedAction(result)
     }
 
     /** Called by UI to select a disambiguation candidate and proceed. */
@@ -8951,7 +8468,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(status = Strings.processing)
             try {
-                val res = legacyOrV1Api.getContactsForSorting(sortBy = sortBy, phonePrefix = phonePrefix)
+                val res = api.getContactsForSorting(sortBy = sortBy, phonePrefix = phonePrefix)
                 if (!res.isSuccessful) {
                     voiceManager?.speak(Strings.errorLoadingContacts, expectReply = false)
                     return@launch
@@ -9041,7 +8558,7 @@ class SecretaryViewModel : ViewModel() {
         if (norm.startsWith("smazat") || norm.startsWith("odstranit") || norm == "delete" || norm == "remove") {
             session.current?.existingId?.let { id ->
                 viewModelScope.launch {
-                    try { legacyOrV1Api.deleteSharedContact(id) } catch (_: Exception) {}
+                    try { api.deleteSharedContact(id) } catch (_: Exception) {}
                 }
             }
             val msg = "${session.current?.displayName} odstraněn."
@@ -9073,7 +8590,7 @@ class SecretaryViewModel : ViewModel() {
                 viewModelScope.launch {
                     try {
                         if (primary.existingId != null && secondary.existingId != null) {
-                            legacyOrV1Api.mergeSharedContacts(mapOf(
+                            api.mergeSharedContacts(mapOf(
                                 "primary_id" to primary.existingId,
                                 "secondary_id" to secondary.existingId
                             ))
@@ -9108,7 +8625,7 @@ class SecretaryViewModel : ViewModel() {
             val contact = session.current!!
             viewModelScope.launch {
                 try {
-                    legacyOrV1Api.assignContactSection(mapOf(
+                    api.assignContactSection(mapOf(
                         "display_name" to contact.displayName,
                         "phone" to contact.phone,
                         "section_code" to sectionCode,
@@ -9142,7 +8659,7 @@ class SecretaryViewModel : ViewModel() {
     fun checkContactDuplicates() {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.getContactDuplicates()
+                val res = api.getContactDuplicates()
                 if (res.isSuccessful) {
                     val body = res.body() ?: return@launch
                     @Suppress("UNCHECKED_CAST")
@@ -9171,7 +8688,7 @@ class SecretaryViewModel : ViewModel() {
     fun mergeContactsById(primaryId: Long, secondaryId: Long) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.mergeSharedContacts(mapOf("primary_id" to primaryId, "secondary_id" to secondaryId))
+                val res = api.mergeSharedContacts(mapOf("primary_id" to primaryId, "secondary_id" to secondaryId))
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
                         contactDuplicates = _uiState.value.contactDuplicates.filter {
@@ -9199,7 +8716,7 @@ class SecretaryViewModel : ViewModel() {
     private fun refreshSharedContacts() {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.getSharedContacts()
+                val res = api.getSharedContacts()
                 if (res.isSuccessful) _uiState.value = _uiState.value.copy(sharedContacts = res.body() ?: emptyList())
             } catch (_: Exception) {}
         }
@@ -10191,7 +9708,7 @@ class SecretaryViewModel : ViewModel() {
     fun updateDefaultRates(rates: Map<String, Any?>, onDone: ((Boolean, String?) -> Unit)? = null) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.updateDefaultRates(1, rates)
+                val res = api.updateDefaultRates(1, rates)
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(tenantRateTypes = res.body() ?: _uiState.value.tenantRateTypes)
                     onDone?.invoke(true, null)
@@ -10211,7 +9728,7 @@ class SecretaryViewModel : ViewModel() {
     fun addServiceRateType(rateType: String, description: String, defaultRate: Double, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.addServiceRateType(1, mapOf(
+                val res = api.addServiceRateType(1, mapOf(
                     "rate_type" to rateType,
                     "description" to description,
                     "rate" to defaultRate
@@ -10235,7 +9752,7 @@ class SecretaryViewModel : ViewModel() {
     fun deleteServiceRateType(rateType: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.deleteServiceRateType(1, rateType)
+                val res = api.deleteServiceRateType(1, rateType)
                 if (res.isSuccessful) {
                     loadTenantRateTypes()
                     onDone(true, null)
@@ -10255,7 +9772,7 @@ class SecretaryViewModel : ViewModel() {
     fun createInvoiceFromWorkReport(workReportId: Long, onResult: (Map<String, Any?>?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.createInvoiceFromWorkReport(mapOf("work_report_id" to workReportId))
+                val res = api.createInvoiceFromWorkReport(mapOf("work_report_id" to workReportId))
                 if (res.isSuccessful) onResult(res.body()) else onResult(null)
             } catch (_: Exception) { onResult(null) }
         }
@@ -10264,7 +9781,7 @@ class SecretaryViewModel : ViewModel() {
     fun batchInvoiceFromWorkReports(ids: List<Long>, onResult: (Map<String, Any?>?) -> Unit) {
         viewModelScope.launch {
             try {
-                val res = legacyOrV1Api.batchInvoiceFromWorkReports(mapOf("work_report_ids" to ids))
+                val res = api.batchInvoiceFromWorkReports(mapOf("work_report_ids" to ids))
                 if (res.isSuccessful) onResult(res.body()) else onResult(null)
             } catch (_: Exception) { onResult(null) }
         }
@@ -10357,7 +9874,6 @@ data class UiState(
     val recognitionLocale: String = Strings.getRecognitionLocale(),
     val status: String = Strings.ready, 
     val lastAiReply: String = Strings.waitingForYourCommand,
-    // Bootstrap / first install
     val bootstrapStatus: BootstrapStatusResponse? = null,
     val bootstrapChecked: Boolean = false,
     val bootstrapError: String? = null,
@@ -10367,7 +9883,6 @@ data class UiState(
     val firstInstallIndustriesLoading: Boolean = false,
     val firstInstallSubmitting: Boolean = false,
     val firstInstallError: String? = null,
-    val isCleanBackend: Boolean = false,
     val history: List<ChatMessage> = emptyList(),
     val pendingNavigationAddress: String? = null,
     val awaitingNavigationAddress: Boolean = false,

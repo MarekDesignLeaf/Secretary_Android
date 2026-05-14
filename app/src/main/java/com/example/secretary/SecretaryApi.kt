@@ -340,24 +340,24 @@ interface SecretaryApi {
     @POST("onboarding/company-setup")
     suspend fun companySetup(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
-    @GET("tenant/config/{tenantId}")
-    suspend fun getTenantConfig(@Path("tenantId") tenantId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
+    @GET("api/v1/company/operating-profile")
+    suspend fun getTenantConfig(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @PUT("tenant/config/{tenantId}/languages")
+    @PUT("api/v1/language/settings")
     suspend fun updateTenantLanguages(
-        @Path("tenantId") tenantId: Int,
+        @Header("Authorization") auth: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === SETTINGS: dedicated clean endpoints ===
-    @GET("version")
+    @GET("api/v1/version")
     suspend fun getServerVersion(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("tenant/profile")
-    suspend fun getTenantProfile(): Response<Map<String, @JvmSuppressWildcards Any?>>
+    @GET("api/v1/company/profile")
+    suspend fun getTenantProfile(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("tenant/languages")
-    suspend fun getTenantLanguages(): Response<Map<String, @JvmSuppressWildcards Any?>>
+    @GET("api/v1/language/settings")
+    suspend fun getTenantLanguages(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === SERVICE RATE TYPES ===
     @GET("tenant/default-rates/{tenantId}")
