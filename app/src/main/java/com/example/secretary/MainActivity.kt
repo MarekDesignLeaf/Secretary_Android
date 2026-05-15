@@ -5611,7 +5611,7 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
-                val res = api.updateAuthUser(auth, userId.toString(), mapOf("is_active" to true))
+                val res = api.resetUserPassword(auth, userId.toString())
                 if (res.isSuccessful) {
                     loadBackendUsers()
                     onDone(true, null)

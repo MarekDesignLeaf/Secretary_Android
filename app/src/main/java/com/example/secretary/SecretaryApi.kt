@@ -7,7 +7,7 @@ import retrofit2.http.*
 
 data class RegisterRequest(
     val email: String,
-    val password: String = "",
+    val password: String = "12345",
     val display_name: String,
     val role: String
 )
@@ -458,6 +458,12 @@ interface SecretaryApi {
 
     @DELETE("api/v1/users/{userId}")
     suspend fun deleteAuthUser(
+        @Header("Authorization") auth: String,
+        @Path("userId") userId: String
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("api/v1/users/{userId}/reset-password")
+    suspend fun resetUserPassword(
         @Header("Authorization") auth: String,
         @Path("userId") userId: String
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
