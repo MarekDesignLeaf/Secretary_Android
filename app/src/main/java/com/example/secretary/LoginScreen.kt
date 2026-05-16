@@ -90,7 +90,6 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
     var autoBiometricTriggered by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        viewModel.loadFirstLoginUsers()
     }
 
     LaunchedEffect(state.loginNotice) {
@@ -122,15 +121,6 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                 showManualLogin = true
             }
         }
-    }
-
-    fun choosePendingUser(user: FirstLoginUser) {
-        selectedPendingDisplayName = user.display_name.ifBlank { user.email }
-        email = user.email
-        password = "12345"
-        currentPassword = "12345"
-        showManualLogin = true
-        error = Strings.useTemporaryPasswordHint
     }
 
     fun saveBiometricChoice(enable: Boolean) {
@@ -338,25 +328,6 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                     }
                 } else {
                     Text(Strings.noSavedProfiles, color = Color.Gray, fontSize = 12.sp)
-                }
-
-                Spacer(Modifier.height(12.dp))
-                Text(Strings.firstLoginUsersLabel, modifier = Modifier.align(Alignment.Start), fontWeight = FontWeight.SemiBold)
-                Text(Strings.firstLoginUsersHint, modifier = Modifier.align(Alignment.Start), fontSize = 12.sp, color = Color.Gray)
-                Spacer(Modifier.height(8.dp))
-                if (state.firstLoginUsers.isNotEmpty()) {
-                    state.firstLoginUsers.forEach { user ->
-                        OutlinedButton(
-                            onClick = { choosePendingUser(user) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
-                                Text(user.display_name.ifBlank { user.email }, fontWeight = FontWeight.SemiBold)
-                                Text(user.email, fontSize = 12.sp, color = Color.Gray)
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
                 }
 
                 Spacer(Modifier.height(12.dp))

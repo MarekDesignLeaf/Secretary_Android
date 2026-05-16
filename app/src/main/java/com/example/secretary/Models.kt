@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import java.io.File
 
@@ -176,12 +176,6 @@ data class BackendUser(
     val permissions: Map<String, Boolean> = emptyMap(),
     val role_permissions: Map<String, Boolean> = emptyMap(),
     val user_permission_overrides: Map<String, Boolean> = emptyMap()
-)
-
-data class FirstLoginUser(
-    val id: Long = 0,
-    val display_name: String = "",
-    val email: String = ""
 )
 
 data class WorkflowActionDraft(

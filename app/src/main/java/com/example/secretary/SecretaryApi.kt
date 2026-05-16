@@ -443,8 +443,6 @@ interface SecretaryApi {
         @Body request: RegisterRequest
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("api/v1/auth/first-login-users")
-    suspend fun getFirstLoginUsers(@Query("tenant_id") tenantId: Int = 1): Response<List<FirstLoginUser>>
 
     @GET("api/v1/auth/roles")
     suspend fun getAuthRoles(): Response<List<BackendRole>>

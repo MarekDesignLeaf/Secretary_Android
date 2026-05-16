@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import android.Manifest
 import android.content.ComponentName
@@ -483,11 +483,11 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                                 country = country.trim(),
                                 timezone = timezone.trim(),
                                 currency = currency.trim(),
-                                internal_company_language = internalCompanyLanguage.trim(),
-                                default_customer_language = defaultCustomerLanguage.trim(),
+                                default_internal_language_code = internalCompanyLanguage.trim(),
+                                default_customer_language_code = defaultCustomerLanguage.trim(),
                                 workspace_mode = workspaceMode.trim(),
-                                industry_group = selectedGroupCode.trim(),
-                                industry_subtype = selectedSubtypeCode.trim(),
+                                primary_industry = selectedGroupCode.trim(),
+                                primary_subtype = selectedSubtypeCode.trim(),
                                 first_admin_display_name = adminDisplayName.trim(),
                                 first_admin_email = adminEmail.trim(),
                                 first_admin_password = adminPassword,
@@ -5063,6 +5063,10 @@ class SecretaryViewModel : ViewModel() {
                     )
                     if (status?.is_ready == true && !databaseUnavailable) {
                         autoLogin()
+                    } else if (firstInstallRequired && !databaseUnavailable) {
+                        // Backend is in clean-install mode — wipe all local auth caches immediately
+                        // so no old token, password or user can auto-login into the fresh DB
+                        settingsManager?.clearAllAuthForCleanInstall()
                     }
                 } else {
                     _uiState.value = _uiState.value.copy(
@@ -5198,7 +5202,6 @@ class SecretaryViewModel : ViewModel() {
                             settingsManager?.clearCurrentBackendUser()
                             _uiState.value = _uiState.value.copy(
                                 loggedIn = false,
-                                firstLoginUsers = emptyList(),
                                 currentUserId = null,
                                 currentUserDisplayName = null,
                                 currentUserEmail = null,
@@ -5228,7 +5231,6 @@ class SecretaryViewModel : ViewModel() {
                                 settingsManager?.clearCurrentBackendUser()
                                 _uiState.value = _uiState.value.copy(
                                     loggedIn = false,
-                                    firstLoginUsers = emptyList(),
                                     currentUserId = null,
                                     currentUserDisplayName = null,
                                     currentUserEmail = null,
@@ -5251,7 +5253,6 @@ class SecretaryViewModel : ViewModel() {
             settingsManager?.clearCurrentBackendUser()
             _uiState.value = _uiState.value.copy(
                 loggedIn = false,
-                firstLoginUsers = emptyList(),
                 currentUserId = null,
                 currentUserDisplayName = null,
                 currentUserEmail = null,
@@ -5260,7 +5261,6 @@ class SecretaryViewModel : ViewModel() {
                 mustChangePassword = false,
                 awaitingBiometricEnrollment = false
             )
-            loadFirstLoginUsers()
         }
     }
 
@@ -5274,7 +5274,6 @@ class SecretaryViewModel : ViewModel() {
                     settingsManager?.refreshToken = body?.get("refresh_token")?.toString()
                     applyCurrentUserData(body)
                     if (_uiState.value.mustChangePassword) {
-                        loadFirstLoginUsers()
                         _uiState.value = _uiState.value.copy(
                             loggedIn = false,
                             awaitingBiometricEnrollment = false,
@@ -5294,7 +5293,6 @@ class SecretaryViewModel : ViewModel() {
                     } else {
                         _uiState.value = _uiState.value.copy(
                             loggedIn = false,
-                            firstLoginUsers = _uiState.value.firstLoginUsers.filterNot { it.email.equals(email, ignoreCase = true) },
                             awaitingBiometricEnrollment = true,
                             loginNotice = null
                         )
@@ -5359,18 +5357,6 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(backendRoles = res.body() ?: emptyList())
                 }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend roles load error", e)
-            }
-        }
-    }
-
-    fun loadFirstLoginUsers() {
-        viewModelScope.launch {
-            try {
-                val res = api.getFirstLoginUsers()
-                if (res.isSuccessful) {
-                    _uiState.value = _uiState.value.copy(firstLoginUsers = res.body() ?: emptyList())
-                }
-            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "First login users load error", e)
             }
         }
     }
@@ -5819,7 +5805,6 @@ class SecretaryViewModel : ViewModel() {
             hierarchyIntegrityReport = null,
             hierarchyIntegrityLoading = false,
             hierarchyIntegrityError = null,
-            firstLoginUsers = emptyList(),
             backendUsersLoading = false,
             backendUsersError = null,
             calendarFeed = emptyList(),
@@ -5832,7 +5817,6 @@ class SecretaryViewModel : ViewModel() {
             awaitingBiometricEnrollment = false,
             loginNotice = null
         )
-        loadFirstLoginUsers()
     }
 
     suspend fun tryRefreshToken(): Boolean {
@@ -6477,9 +6461,6 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value = _uiState.value.copy(
                         mustChangePassword = false,
                         loggedIn = false,
-                        firstLoginUsers = _uiState.value.firstLoginUsers.filterNot {
-                            it.email.equals(_uiState.value.currentUserEmail ?: "", ignoreCase = true)
-                        },
                         awaitingBiometricEnrollment = true,
                         loginNotice = null
                     )
@@ -9944,7 +9925,6 @@ data class UiState(
     val contextEntityId: Long? = null,
     val contextType: String? = null,
     val connectionStatus: ConnectionStatus = ConnectionStatus.UNKNOWN,
-    val firstLoginUsers: List<FirstLoginUser> = emptyList(),
     val backendUsers: List<BackendUser> = emptyList(),
     val backendRoles: List<BackendRole> = emptyList(),
     val backendUsersLoading: Boolean = false,

@@ -302,6 +302,28 @@ class SettingsManager(context: Context) {
         currentUserDisplayName = ""
         // Do NOT clear loginEmail on logout so CalendarManager can still find the calendar
     }
+
+    /**
+     * Called when backend reports clean-install mode (bootstrap is_ready=false).
+     * Wipes ALL saved auth state so no old credentials can auto-login into the fresh DB.
+     */
+    fun clearAllAuthForCleanInstall() {
+        accessToken = null
+        refreshToken = null
+        currentBackendUserId = -1L
+        currentBackendUserRole = ""
+        currentUserDisplayName = ""
+        loginEmail = ""
+        // Clear legacy plaintext credentials
+        prefs.edit {
+            remove("saved_email")
+            remove("saved_pass")
+            // Clear biometric profiles — they belong to the old DB; users must re-enroll after onboarding
+            remove("biometric_profiles")
+            remove("last_biometric_email")
+        }
+    }
+
     fun getCurrentAppLanguage(): String {
         val userId = currentBackendUserId
         val lang = if (userId > 0L) {

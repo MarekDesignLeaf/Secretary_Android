@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -726,12 +726,6 @@ object Strings {
         "Wymagana zmiana hasła"
     )
     val biometricProfilesLabel get() = t("Saved profiles", "Uložené profily", "Zapisane profile")
-    val firstLoginUsersLabel get() = t("New users", "Noví uživatelé", "Nowi użytkownicy")
-    val firstLoginUsersHint get() = t(
-        "These users still use the temporary password 12345.",
-        "Tito uživatelé ještě používají dočasné heslo 12345.",
-        "Ci użytkownicy nadal używają hasła tymczasowego 12345."
-    )
     val chooseProfile get() = t("Choose profile", "Vyberte profil", "Wybierz profil")
     val signInAs get() = t("Sign in as", "Přihlásit jako", "Zaloguj jako")
     val useTemporaryPasswordHint get() = t(
