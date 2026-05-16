@@ -73,13 +73,18 @@ private val SUPPLEMENTARY_ITEMS = listOf(
 fun ActivityPricingScreen(viewModel: SecretaryViewModel, navController: NavHostController) {
     val state by viewModel.uiState.collectAsState()
 
-    // Navigation state: null = group list, groupId set = subtype list, both set = activity list
+    // directMode = true when we loaded the company's industry subtype automatically.
+    // In this mode we skip the group→subtype drill-down and show activities straight away.
+    var directMode by remember { mutableStateOf(false) }
+    var directSubtypeCode by remember { mutableStateOf<String?>(null) }
+
+    // Navigation state used only in fallback (no industry configured) mode
     var selectedGroup by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var selectedSubtype by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
-    // Industry groups (reuse existing onboarding endpoint)
+    // Industry groups — only loaded when no subtype is configured
     var groups by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var groupsLoading by remember { mutableStateOf(true) }
+    var groupsLoading by remember { mutableStateOf(false) }
     var subtypes by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var subtypesLoading by remember { mutableStateOf(false) }
 
@@ -93,13 +98,35 @@ fun ActivityPricingScreen(viewModel: SecretaryViewModel, navController: NavHostC
         errorMsg?.let { snackbarHostState.showSnackbar(it); errorMsg = null }
     }
 
+    // On open: try to resolve the company's industry subtype and jump straight to its activities.
+    // If no subtype is configured, fall back to the full group list.
     LaunchedEffect(Unit) {
-        try {
-            val res = viewModel.getApi().getIndustryGroups()
-            if (res.isSuccessful) groups = res.body() ?: emptyList()
-            else errorMsg = "Failed to load groups (${res.code()})"
-        } catch (e: Exception) { errorMsg = "Network error: ${e.message}" }
-        groupsLoading = false
+        // 1. Check if profile is already in state
+        var subtypeCode = state.tenantProfile
+            ?.get("industry_subtype")?.toString()?.takeIf { it.isNotBlank() }
+
+        // 2. If not cached, fetch from backend (OkHttp interceptor injects Bearer token)
+        if (subtypeCode == null) {
+            try {
+                val res = viewModel.getApi().getTenantProfile("")
+                subtypeCode = res.body()?.get("industry_subtype")?.toString()?.takeIf { it.isNotBlank() }
+            } catch (_: Exception) { }
+        }
+
+        if (subtypeCode != null) {
+            directMode = true
+            directSubtypeCode = subtypeCode
+            viewModel.loadActivityTemplates(subtypeCode = subtypeCode)
+        } else {
+            // Fallback: no industry set — show all industry groups
+            groupsLoading = true
+            try {
+                val res = viewModel.getApi().getIndustryGroups()
+                if (res.isSuccessful) groups = res.body() ?: emptyList()
+                else errorMsg = "Failed to load groups (${res.code()})"
+            } catch (e: Exception) { errorMsg = "Network error: ${e.message}" }
+            groupsLoading = false
+        }
     }
 
     LaunchedEffect(selectedGroup) {
@@ -123,21 +150,28 @@ fun ActivityPricingScreen(viewModel: SecretaryViewModel, navController: NavHostC
         }
     }
 
+    // Resolve which subtype code to use when reloading after save/reset
+    fun currentSubtypeCode(): String? =
+        if (directMode) directSubtypeCode else selectedSubtype?.str("code")
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
                     Text(when {
-                        selectedSubtype != null -> selectedSubtype!!.str("name").ifBlank { "Activities" }
-                        selectedGroup != null   -> selectedGroup!!.str("name").ifBlank { "Subtypes" }
-                        else -> "Activity Pricing"
+                        editingTemplate != null -> editingTemplate!!.str("name").ifBlank { "Edit" }
+                        directMode             -> "Moje činnosti"
+                        selectedSubtype != null -> selectedSubtype!!.str("name").ifBlank { "Činnosti" }
+                        selectedGroup != null   -> selectedGroup!!.str("name").ifBlank { "Podkategorie" }
+                        else -> "Ceník činností"
                     })
                 },
                 navigationIcon = {
                     IconButton(onClick = {
                         when {
                             editingTemplate != null -> editingTemplate = null
+                            directMode             -> navController.popBackStack()
                             selectedSubtype != null -> { selectedSubtype = null }
                             selectedGroup != null   -> { selectedGroup = null }
                             else -> navController.popBackStack()
@@ -161,26 +195,29 @@ fun ActivityPricingScreen(viewModel: SecretaryViewModel, navController: NavHostC
                         override = tenantOverride,
                         onSave = { data ->
                             viewModel.upsertActivityPricing(tmpl.long("id"), data) {
-                                // Reload with current subtype
-                                viewModel.loadActivityTemplates(subtypeCode = selectedSubtype?.str("code"))
+                                viewModel.loadActivityTemplates(subtypeCode = currentSubtypeCode())
                             }
                             editingTemplate = null
                         },
                         onReset = {
                             viewModel.resetActivityPricing(tmpl.long("id")) {
-                                viewModel.loadActivityTemplates(subtypeCode = selectedSubtype?.str("code"))
+                                viewModel.loadActivityTemplates(subtypeCode = currentSubtypeCode())
                             }
                             editingTemplate = null
                         },
                         onDismiss = { editingTemplate = null }
                     )
                 }
-                selectedSubtype != null -> {
+                directMode || selectedSubtype != null -> {
                     val templates = state.activityTemplates
                     val overrides = state.tenantActivityPricing
                     if (state.activityTemplatesLoading) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
+                        }
+                    } else if (templates.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Žádné činnosti nenalezeny.", color = Color.Gray)
                         }
                     } else {
                         LazyColumn(
@@ -190,7 +227,7 @@ fun ActivityPricingScreen(viewModel: SecretaryViewModel, navController: NavHostC
                         ) {
                             item {
                                 Text(
-                                    "${templates.size} activities",
+                                    "${templates.size} činností",
                                     fontSize = 12.sp,
                                     color = Color.Gray,
                                     modifier = Modifier.padding(bottom = 4.dp)

@@ -5607,6 +5607,34 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun wipeAllData(onDone: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val res = api.wipeAllData()
+                if (res.isSuccessful) {
+                    // Clear all local tokens and session state
+                    settingsManager?.accessToken = null
+                    settingsManager?.refreshToken = null
+                    settingsManager?.clearCurrentBackendUser()
+                    bootstrapCheckStarted = false
+                    _uiState.value = UiState()
+                    onDone(true, null)
+                } else {
+                    val rawError = res.errorBody()?.string()
+                    val msg = when (res.code()) {
+                        403 -> "Tovární reset není povolen na serveru (ALLOW_WIPE není nastaveno)."
+                        else -> rawError ?: "Reset selhal (${res.code()})"
+                    }
+                    onDone(false, msg)
+                }
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                Log.e("ViewModel", "Wipe all data error", e)
+                onDone(false, e.message ?: "Reset selhal")
+            }
+        }
+    }
+
     fun resetBackendUserPassword(userId: Long, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"

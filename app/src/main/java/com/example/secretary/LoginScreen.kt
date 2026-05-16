@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import android.util.Log
 import androidx.biometric.BiometricManager
@@ -46,8 +46,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -71,6 +69,9 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
     val settingsManager = remember { SettingsManager(context) }
 
     var biometricProfiles by remember { mutableStateOf(settingsManager.getBiometricProfiles()) }
+    var showWipeConfirm by remember { mutableStateOf(false) }
+    var wipeLoading by remember { mutableStateOf(false) }
+    var wipeError by remember { mutableStateOf<String?>(null) }
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var currentPassword by rememberSaveable { mutableStateOf("") }
@@ -83,19 +84,13 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
     var showConfirmPassword by rememberSaveable { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var showForgotPassword by rememberSaveable { mutableStateOf(false) }
-    var showResetPassword by rememberSaveable { mutableStateOf(false) }
     var showManualLogin by rememberSaveable { mutableStateOf(biometricProfiles.isEmpty()) }
     var showBiometricOptIn by remember { mutableStateOf(false) }
     var pendingBiometricPassword by remember { mutableStateOf("") }
     var autoBiometricTriggered by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Legacy first-login-users list is NOT used in clean backend mode.
-        // Clean backend authenticates only via POST /api/v1/auth/login.
-        if (!state.isCleanBackend) {
-            viewModel.loadFirstLoginUsers()
-        }
+        viewModel.loadFirstLoginUsers()
     }
 
     LaunchedEffect(state.loginNotice) {
@@ -153,6 +148,48 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
         showBiometricOptIn = false
         pendingBiometricPassword = ""
         viewModel.finalizeLoginAfterCredentialSetup()
+    }
+
+    if (showWipeConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!wipeLoading) showWipeConfirm = false },
+            title = { Text("Tovární reset") },
+            text = {
+                Column {
+                    Text("Tato akce smaže VŠECHNA data společnosti, uživatele a nastavení ze serveru. Aplikace se vrátí na úvodní instalaci.")
+                    if (wipeError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(wipeError!!, color = Color.Red, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        wipeLoading = true
+                        wipeError = null
+                        viewModel.wipeAllData { ok, msg ->
+                            wipeLoading = false
+                            if (ok) {
+                                showWipeConfirm = false
+                                viewModel.checkBootstrapStatus(force = true)
+                            } else {
+                                wipeError = msg ?: "Reset selhal"
+                            }
+                        }
+                    },
+                    enabled = !wipeLoading
+                ) {
+                    if (wipeLoading) CircularProgressIndicator(Modifier.size(16.dp), color = Color.White)
+                    else Text("Smazat vše")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeConfirm = false }, enabled = !wipeLoading) {
+                    Text("Zrušit")
+                }
+            }
+        )
     }
 
     if (showBiometricOptIn) {
@@ -392,25 +429,14 @@ fun LoginScreen(viewModel: SecretaryViewModel) {
                 Text(error!!, color = Color.Red, fontSize = 13.sp)
             }
 
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = { showForgotPassword = true }) {
-                Text("Forgot password?", fontSize = 13.sp)
-            }
-
             Spacer(Modifier.height(16.dp))
             Text(VersionInfo.COMPANY + " CRM", fontSize = 12.sp, color = Color.Gray)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = { showWipeConfirm = true }) {
+                Text("Tovární reset", fontSize = 11.sp, color = Color.Gray)
+            }
+            Spacer(Modifier.height(16.dp))
         }
-    }
-
-    if (showForgotPassword) {
-        ForgotPasswordDialog(
-            onDismiss = { showForgotPassword = false },
-            onTokenReceived = { showForgotPassword = false; showResetPassword = true }
-        )
-    }
-    if (showResetPassword) {
-        ResetPasswordDialog(onDismiss = { showResetPassword = false })
     }
 }
 
@@ -501,166 +527,4 @@ private fun tryBiometricLogin(
         .build()
 
     prompt.authenticate(promptInfo)
-}
-
-@Composable
-private fun ForgotPasswordDialog(
-    onDismiss: () -> Unit,
-    onTokenReceived: () -> Unit
-) {
-    val context = LocalContext.current
-    val api = remember {
-        val settingsManager = SettingsManager(context)
-        val url = settingsManager.apiUrl.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
-        val baseUrl = if (url.endsWith("/")) url else "$url/"
-        retrofit2.Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
-            .build()
-            .create(SecretaryApi::class.java)
-    }
-    var email by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var isError by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Forgot password") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Enter your email address and we will send a reset link.", fontSize = 13.sp)
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it; message = null },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    enabled = !loading
-                )
-                if (message != null) {
-                    Text(message!!, fontSize = 12.sp,
-                        color = if (isError) MaterialTheme.colorScheme.error else Color(0xFF388E3C))
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                enabled = !loading && email.isNotBlank(),
-                onClick = {
-                    loading = true; isError = false; message = null
-                    scope.launch {
-                        try {
-                            val res = api.requestPasswordReset(PasswordResetRequestBody(email.trim()))
-                            if (res.isSuccessful) {
-                                message = res.body()?.message ?: "Reset link sent."
-                                // If DEV token in message, open reset screen
-                                if (message?.contains("DEV MODE") == true) onTokenReceived()
-                            } else {
-                                isError = true; message = "Request failed (${res.code()})."
-                            }
-                        } catch (e: Exception) {
-                            isError = true; message = e.message ?: "Network error."
-                        } finally { loading = false }
-                    }
-                }
-            ) {
-                if (loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                else Text("Send reset link")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-@Composable
-private fun ResetPasswordDialog(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val api = remember {
-        val settingsManager = SettingsManager(context)
-        val url = settingsManager.apiUrl.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
-        val baseUrl = if (url.endsWith("/")) url else "$url/"
-        retrofit2.Retrofit.Builder()
-            .baseUrl(baseUrl)
-            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
-            .build()
-            .create(SecretaryApi::class.java)
-    }
-    var token by remember { mutableStateOf("") }
-    var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var isError by remember { mutableStateOf(false) }
-    var done by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Reset password") },
-        text = {
-            if (done) {
-                Text("Password reset successfully. You can now log in.", color = Color(0xFF388E3C))
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Paste the reset token from your email.", fontSize = 13.sp)
-                    OutlinedTextField(
-                        value = token, onValueChange = { token = it; message = null },
-                        label = { Text("Reset token") }, modifier = Modifier.fillMaxWidth(),
-                        singleLine = true, enabled = !loading
-                    )
-                    OutlinedTextField(
-                        value = newPassword, onValueChange = { newPassword = it; message = null },
-                        label = { Text("New password (min 12 chars)") }, modifier = Modifier.fillMaxWidth(),
-                        singleLine = true, enabled = !loading,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-                    OutlinedTextField(
-                        value = confirmPassword, onValueChange = { confirmPassword = it; message = null },
-                        label = { Text("Confirm new password") }, modifier = Modifier.fillMaxWidth(),
-                        singleLine = true, enabled = !loading,
-                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                    )
-                    if (message != null) {
-                        Text(message!!, fontSize = 12.sp,
-                            color = if (isError) MaterialTheme.colorScheme.error else Color(0xFF388E3C))
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            if (done) {
-                Button(onClick = onDismiss) { Text("Close") }
-            } else {
-                Button(
-                    enabled = !loading && token.isNotBlank() && newPassword.isNotBlank(),
-                    onClick = {
-                        when {
-                            newPassword.length < 12 -> { isError = true; message = "Password must be at least 12 characters." }
-                            newPassword != confirmPassword -> { isError = true; message = "Passwords do not match." }
-                            else -> {
-                                loading = true; isError = false; message = null
-                                scope.launch {
-                                    try {
-                                        val res = api.confirmPasswordReset(
-                                            PasswordResetConfirmBody(token = token.trim(), new_password = newPassword)
-                                        )
-                                        if (res.isSuccessful) { done = true }
-                                        else { isError = true; message = "Reset failed (${res.code()})." }
-                                    } catch (e: Exception) {
-                                        isError = true; message = e.message ?: "Network error."
-                                    } finally { loading = false }
-                                }
-                            }
-                        }
-                    }
-                ) {
-                    if (loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text("Reset password")
-                }
-            }
-        },
-        dismissButton = { if (!done) TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }

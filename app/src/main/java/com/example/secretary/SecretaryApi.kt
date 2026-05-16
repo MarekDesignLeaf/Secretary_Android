@@ -324,6 +324,9 @@ interface SecretaryApi {
     @POST("api/v1/bootstrap/first-install")
     suspend fun submitFirstInstall(@Body request: FirstInstallRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    @POST("api/v1/bootstrap/wipe")
+    suspend fun wipeAllData(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     @GET("api/v1/catalogue/industries")
     suspend fun getCatalogueIndustries(): Response<Any>
 
