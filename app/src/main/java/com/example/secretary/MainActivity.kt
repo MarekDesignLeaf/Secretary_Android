@@ -367,145 +367,273 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
     LaunchedEffect(Unit) { viewModel.loadFirstInstallIndustries() }
 
+    // Company
     var companyName by remember { mutableStateOf("") }
-    var companyLegalType by remember { mutableStateOf("") }
-    var country by remember { mutableStateOf("") }
-    var timezone by remember { mutableStateOf("") }
-    var currency by remember { mutableStateOf("") }
-    var internalCompanyLanguage by remember { mutableStateOf("") }
-    var defaultCustomerLanguage by remember { mutableStateOf("") }
-    var workspaceMode by remember { mutableStateOf("") }
+    var country by remember { mutableStateOf("GB") }
+    var currency by remember { mutableStateOf("GBP") }
+    var timezone by remember { mutableStateOf("Europe/London") }
+    // Languages
+    var internalLang by remember { mutableStateOf("en-GB") }
+    var customerLang by remember { mutableStateOf("en-GB") }
+    // Industry
     var selectedGroupCode by remember { mutableStateOf("") }
     var selectedSubtypeCode by remember { mutableStateOf("") }
-    var adminDisplayName by remember { mutableStateOf("") }
+    // Admin
+    var adminName by remember { mutableStateOf("") }
     var adminEmail by remember { mutableStateOf("") }
     var adminPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
-    var adminFirstName by remember { mutableStateOf("") }
-    var adminLastName by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var website by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<String?>(null) }
 
     val selectedGroup = state.firstInstallIndustries.firstOrNull { it.code == selectedGroupCode }
     val selectedSubtype = selectedGroup?.subtypes?.firstOrNull { it.code == selectedSubtypeCode }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
-        item {
-            Text("First installation setup", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text(
-                "Create the first company and administrator account before login.",
-                fontSize = 14.sp,
-                color = Color.Gray
+    val langOptions = listOf(
+        "en-GB" to "English (UK)",
+        "en-US" to "English (US)",
+        "cs-CZ" to "Čeština",
+        "pl-PL" to "Polski",
+        "de-DE" to "Deutsch",
+        "sk-SK" to "Slovenčina",
+        "fr-FR" to "Français",
+        "es-ES" to "Español",
+        "it-IT" to "Italiano"
+    )
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("První spuštění / First setup", style = MaterialTheme.typography.titleMedium) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         }
-        item { Text("Company", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
-        item { FirstInstallTextField(companyName, { companyName = it }, "Company name *") }
-        item { FirstInstallTextField(companyLegalType, { companyLegalType = it }, "Company legal type") }
-        item { FirstInstallTextField(country, { country = it }, "Country") }
-        item { FirstInstallTextField(timezone, { timezone = it }, "Timezone") }
-        item { FirstInstallTextField(currency, { currency = it }, "Currency") }
-        item { FirstInstallTextField(internalCompanyLanguage, { internalCompanyLanguage = it }, "Internal company language") }
-        item { FirstInstallTextField(defaultCustomerLanguage, { defaultCustomerLanguage = it }, "Default customer language") }
-        item { FirstInstallTextField(workspaceMode, { workspaceMode = it }, "Workspace mode") }
-
-        item { Text("Industry", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
-        item {
-            when {
-                state.firstInstallIndustriesLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Loading industries…", color = Color.Gray)
-                }
-                state.firstInstallIndustries.isEmpty() -> Text("No industries returned by backend.", color = Color(0xFFFF9800))
-                else -> FirstInstallDropdown(
-                    label = "Industry group",
-                    selectedLabel = selectedGroup?.name ?: "Select industry group",
-                    options = state.firstInstallIndustries.map { it.code to it.name },
-                    onSelect = { code -> selectedGroupCode = code; selectedSubtypeCode = "" }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+        ) {
+            // ── Company ──────────────────────────────────────────────
+            item {
+                Text(
+                    "Firma / Company",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                 )
             }
-        }
-        if (selectedGroup != null) {
             item {
-                if (selectedGroup.subtypes.isEmpty()) {
-                    Text("No subtypes returned for ${selectedGroup.name}.", color = Color.Gray)
-                } else {
+                OutlinedTextField(
+                    value = companyName, onValueChange = { companyName = it },
+                    label = { Text("Název firmy / Company name *") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true
+                )
+            }
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FirstInstallDropdown(
-                        label = "Industry subtype",
-                        selectedLabel = selectedSubtype?.name ?: "Select industry subtype",
-                        options = selectedGroup.subtypes.map { it.code to it.name },
-                        onSelect = { code -> selectedSubtypeCode = code }
+                        label = "Země / Country",
+                        selectedLabel = country,
+                        options = listOf("GB" to "GB – United Kingdom", "CZ" to "CZ – Czech Republic", "SK" to "SK – Slovakia", "PL" to "PL – Poland", "DE" to "DE – Germany", "US" to "US – United States"),
+                        onSelect = { country = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FirstInstallDropdown(
+                        label = "Měna / Currency",
+                        selectedLabel = currency,
+                        options = listOf("GBP" to "GBP £", "CZK" to "CZK Kč", "EUR" to "EUR €", "USD" to "USD \$", "PLN" to "PLN zł"),
+                        onSelect = { currency = it },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
-        }
 
-        item { Text("First administrator", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
-        item { FirstInstallTextField(adminDisplayName, { adminDisplayName = it }, "Display name *") }
-        item { FirstInstallTextField(adminEmail, { adminEmail = it }, "Email *") }
-        item { FirstInstallTextField(adminPassword, { adminPassword = it }, "Password *") }
-        item { FirstInstallTextField(confirmPassword, { confirmPassword = it }, "Confirm password *") }
-        item { FirstInstallTextField(adminFirstName, { adminFirstName = it }, "First name") }
-        item { FirstInstallTextField(adminLastName, { adminLastName = it }, "Last name") }
-        item { FirstInstallTextField(phone, { phone = it }, "Phone") }
-        item { FirstInstallTextField(website, { website = it }, "Website") }
-
-        item {
-            val errorText = localError ?: state.firstInstallError
-            if (!errorText.isNullOrBlank()) {
-                Text(errorText, color = Color.Red, fontSize = 13.sp)
+            // ── Languages ────────────────────────────────────────────
+            item {
+                Text(
+                    "Jazyky / Languages",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                )
             }
-        }
-        item {
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.firstInstallSubmitting,
-                onClick = {
-                    localError = when {
-                        companyName.isBlank() -> "Company name is required."
-                        adminDisplayName.isBlank() -> "First administrator display name is required."
-                        adminEmail.isBlank() -> "First administrator email is required."
-                        adminPassword.isBlank() -> "First administrator password is required."
-                        adminPassword.length < 12 -> "First administrator password must be at least 12 characters."
-                        confirmPassword != adminPassword -> "Password confirmation must match the first administrator password."
-                        else -> null
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FirstInstallDropdown(
+                        label = "Jazyk firmy / Internal",
+                        selectedLabel = langOptions.firstOrNull { it.first == internalLang }?.second ?: internalLang,
+                        options = langOptions,
+                        onSelect = { internalLang = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FirstInstallDropdown(
+                        label = "Jazyk zákazníků / Customer",
+                        selectedLabel = langOptions.firstOrNull { it.first == customerLang }?.second ?: customerLang,
+                        options = langOptions,
+                        onSelect = { customerLang = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            // ── Industry ─────────────────────────────────────────────
+            item {
+                Text(
+                    "Odvětví / Industry",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                )
+            }
+            item {
+                when {
+                    state.firstInstallIndustriesLoading -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Načítám odvětví…", style = MaterialTheme.typography.bodyMedium)
                     }
-                    if (localError == null) {
-                        viewModel.submitFirstInstall(
-                            FirstInstallRequest(
-                                company_name = companyName.trim(),
-                                company_legal_type = companyLegalType.trim(),
-                                country = country.trim(),
-                                timezone = timezone.trim(),
-                                currency = currency.trim(),
-                                default_internal_language_code = internalCompanyLanguage.trim(),
-                                default_customer_language_code = defaultCustomerLanguage.trim(),
-                                workspace_mode = workspaceMode.trim(),
-                                primary_industry = selectedGroupCode.trim(),
-                                primary_subtype = selectedSubtypeCode.trim(),
-                                first_admin_display_name = adminDisplayName.trim(),
-                                first_admin_email = adminEmail.trim(),
-                                first_admin_password = adminPassword,
-                                first_admin_first_name = adminFirstName.trim(),
-                                first_admin_last_name = adminLastName.trim(),
-                                phone = phone.trim(),
-                                website = website.trim()
-                            )
+                    state.firstInstallIndustries.isEmpty() -> Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Text(
+                            "Odvětví se nepodařilo načíst. Zkontroluj připojení k serveru.",
+                            modifier = Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer
                         )
                     }
+                    else -> {
+                        FirstInstallDropdown(
+                            label = "Skupina odvětví / Industry group",
+                            selectedLabel = selectedGroup?.name ?: "— vyberte odvětví —",
+                            options = state.firstInstallIndustries.map { it.code to it.name },
+                            onSelect = { code -> selectedGroupCode = code; selectedSubtypeCode = "" }
+                        )
+                        if (selectedGroup != null && selectedGroup.subtypes.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            FirstInstallDropdown(
+                                label = "Podtyp / Subtype (volitelné)",
+                                selectedLabel = selectedSubtype?.name ?: "— vyberte podtyp —",
+                                options = listOf("" to "— žádný podtyp —") + selectedGroup.subtypes.map { it.code to it.name },
+                                onSelect = { code -> selectedSubtypeCode = code }
+                            )
+                        }
+                    }
                 }
-            ) {
-                if (state.firstInstallSubmitting) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Creating first installation…")
-                } else {
-                    Text("Create company and first administrator")
+            }
+
+            // ── Admin account ────────────────────────────────────────
+            item {
+                Text(
+                    "Správce / Administrator",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                )
+            }
+            item {
+                OutlinedTextField(
+                    value = adminName, onValueChange = { adminName = it },
+                    label = { Text("Zobrazované jméno / Display name *") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true
+                )
+            }
+            item {
+                OutlinedTextField(
+                    value = adminEmail, onValueChange = { adminEmail = it },
+                    label = { Text("E-mail *") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true
+                )
+            }
+            item {
+                OutlinedTextField(
+                    value = adminPassword, onValueChange = { adminPassword = it },
+                    label = { Text("Heslo / Password * (min. 12 znaků)") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    visualTransformation = if (showPassword) androidx.compose.ui.text.input.VisualTransformation.None
+                        else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                        }
+                    }
+                )
+            }
+            item {
+                OutlinedTextField(
+                    value = confirmPassword, onValueChange = { confirmPassword = it },
+                    label = { Text("Potvrdit heslo / Confirm password *") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    isError = confirmPassword.isNotBlank() && confirmPassword != adminPassword
+                )
+            }
+
+            // ── Error + Submit ────────────────────────────────────────
+            item {
+                val errorText = localError ?: state.firstInstallError
+                if (!errorText.isNullOrBlank()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Text(errorText, modifier = Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 13.sp)
+                    }
+                }
+            }
+            item {
+                Button(
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    enabled = !state.firstInstallSubmitting,
+                    onClick = {
+                        localError = when {
+                            companyName.isBlank() -> "Zadejte název firmy."
+                            adminName.isBlank() -> "Zadejte zobrazované jméno správce."
+                            adminEmail.isBlank() -> "Zadejte e-mail správce."
+                            adminPassword.length < 12 -> "Heslo musí mít alespoň 12 znaků."
+                            confirmPassword != adminPassword -> "Hesla se neshodují."
+                            else -> null
+                        }
+                        if (localError == null) {
+                            viewModel.submitFirstInstall(
+                                FirstInstallRequest(
+                                    company_name = companyName.trim(),
+                                    company_legal_type = null,
+                                    country = country,
+                                    timezone = timezone,
+                                    currency = currency,
+                                    default_internal_language_code = internalLang,
+                                    default_customer_language_code = customerLang,
+                                    workspace_mode = "single_company",
+                                    primary_industry = selectedGroupCode.ifBlank { null },
+                                    primary_subtype = selectedSubtypeCode.ifBlank { null },
+                                    first_admin_display_name = adminName.trim(),
+                                    first_admin_email = adminEmail.trim(),
+                                    first_admin_password = adminPassword,
+                                    first_admin_first_name = null,
+                                    first_admin_last_name = null,
+                                    phone = null,
+                                    website = null
+                                )
+                            )
+                        }
+                    }
+                ) {
+                    if (state.firstInstallSubmitting) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Vytvářím…")
+                    } else {
+                        Text("Vytvořit firmu a správce")
+                    }
                 }
             }
         }
@@ -529,10 +657,15 @@ private fun FirstInstallDropdown(
     label: String,
     selectedLabel: String,
     options: List<Pair<String, String>>,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier
+    ) {
         OutlinedTextField(
             value = selectedLabel,
             onValueChange = {},
