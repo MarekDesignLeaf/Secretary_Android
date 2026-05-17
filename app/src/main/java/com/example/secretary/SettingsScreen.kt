@@ -922,13 +922,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                 Spacer(Modifier.width(6.dp))
                 Text(Strings.reload)
             }
-            Button(
-                onClick = {
-                    userFeedback = null
-                    showCreateBackendUser = true
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("+ ${Strings.createBackendUser}") }
+            // TODO: user creation disabled until system is stable
         }
         userFeedback?.let { (message, ok) ->
             Text(message, color = if (ok) Color(0xFF2E7D32) else Color.Red, fontSize = 12.sp)
