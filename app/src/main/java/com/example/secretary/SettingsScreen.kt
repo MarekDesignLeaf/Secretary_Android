@@ -250,7 +250,9 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     var customerLanguageFeedback by remember { mutableStateOf<String?>(null) }
     val currentLang = state.appLanguage.ifBlank { sm.getCurrentAppLanguage() }
     val langName = Strings.languageDisplayName(currentLang)
-    val canEditCustomerLanguage = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
+    val isAdminOrOwner = state.currentUserRole == "admin" || state.currentUserRole == "owner"
+        || state.currentUserPermissions["manage_users"] == true
+    val canEditCustomerLanguage = isAdminOrOwner
 
     // Use ONLY the dedicated /tenant/languages endpoint — no fallback
     val langsData = state.tenantLanguages
@@ -258,10 +260,15 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     @Suppress("UNCHECKED_CAST")
     val langsList = (langsData?.get("languages") as? List<*>)?.filterIsInstance<Map<String, Any?>>()
     val langsFound = langsData?.get("found") as? Boolean
-    val internalCodes = langsList?.filter { it["scope"] == "internal" }
-        ?.mapNotNull { it["code"]?.toString() }?.filter { it.isNotBlank() }?.distinct()
-    val customerCodes = langsList?.filter { it["scope"] == "customer" }
-        ?.mapNotNull { it["code"]?.toString() }?.filter { it.isNotBlank() }?.distinct()
+    // Server returns "language_scope" field; accept both "scope" and "language_scope" for safety
+    val internalCodes = langsList?.filter {
+            it["language_scope"]?.toString() == "internal" || it["scope"]?.toString() == "internal"
+        }?.mapNotNull { it["language_code"]?.toString() ?: it["code"]?.toString() }
+        ?.filter { it.isNotBlank() }?.distinct()
+    val customerCodes = langsList?.filter {
+            it["language_scope"]?.toString() == "customer" || it["scope"]?.toString() == "customer"
+        }?.mapNotNull { it["language_code"]?.toString() ?: it["code"]?.toString() }
+        ?.filter { it.isNotBlank() }?.distinct()
     val currentCustomerLang = state.tenantProfile?.get("default_customer_lang")?.toString()
         ?: langsData?.let {
             (it["internal_langs"] as? List<*>)?.firstOrNull()?.toString()
@@ -272,7 +279,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         var showInternalLangPicker by remember { mutableStateOf(false) }
         var internalLangFeedback by remember { mutableStateOf<String?>(null) }
         val supportedLangs = listOf("cs-CZ","en-GB","en-US","pl-PL","de-DE","fr-FR","es-ES","sk-SK","hu-HU","ro-RO","uk-UA","ru-RU")
-        val canEditInternal = state.currentUserPermissions["manage_users"] == true || state.currentUserRole == "admin"
+        val canEditInternal = isAdminOrOwner
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(Strings.systemLanguage, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
