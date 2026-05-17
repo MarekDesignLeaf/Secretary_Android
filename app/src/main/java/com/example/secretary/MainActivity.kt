@@ -5844,23 +5844,9 @@ class SecretaryViewModel : ViewModel() {
     fun getCalendarText(days: Int = 7): String = calendarManager?.getCalendarContext(days) ?: "Kalendář není dostupný"
 
     fun checkOnboardingStatus() {
-        viewModelScope.launch {
-            try {
-                val res = api.getOnboardingStatus(1)
-                if (res.isSuccessful) {
-                    val body = res.body()
-                    val complete = body?.get("is_complete") as? Boolean ?: false
-                    _uiState.value = _uiState.value.copy(onboardingComplete = complete)
-                } else {
-                    _uiState.value = _uiState.value.copy(onboardingComplete = false)
-                }
-            } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Onboarding check error", e)
-                _uiState.value = _uiState.value.copy(
-                    onboardingComplete = false,
-                    tenantConfigError = e.message ?: "Onboarding status check failed."
-                )
-            }
-        }
+        // In the clean system, onboarding is the first-install wizard (handled before login).
+        // Once logged in, the user is always past onboarding.
+        _uiState.value = _uiState.value.copy(onboardingComplete = true)
     }
 
     fun loadTenantConfig() {
