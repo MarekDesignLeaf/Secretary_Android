@@ -375,9 +375,8 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     // Languages
     var internalLang by remember { mutableStateOf("en-GB") }
     var customerLang by remember { mutableStateOf("en-GB") }
-    // Industry
-    var selectedGroupCode by remember { mutableStateOf("") }
-    var selectedSubtypeCode by remember { mutableStateOf("") }
+    // Industry — multi-select checkboxes (all codes checked = send all)
+    var selectedGroupCodes by remember { mutableStateOf(setOf<String>()) }
     // Admin
     var adminName by remember { mutableStateOf("") }
     var adminEmail by remember { mutableStateOf("") }
@@ -386,8 +385,8 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
     var showPassword by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<String?>(null) }
 
-    val selectedGroup = state.firstInstallIndustries.firstOrNull { it.code == selectedGroupCode }
-    val selectedSubtype = selectedGroup?.subtypes?.firstOrNull { it.code == selectedSubtypeCode }
+    val allGroupCodes = state.firstInstallIndustries.map { it.code }.toSet()
+    val allSelected = allGroupCodes.isNotEmpty() && selectedGroupCodes.containsAll(allGroupCodes)
 
     val langOptions = listOf(
         "en-GB" to "English (UK)",
@@ -495,7 +494,10 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             }
             item {
                 when {
-                    state.firstInstallIndustriesLoading -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
+                    state.firstInstallIndustriesLoading -> Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    ) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
                         Text("Načítám odvětví…", style = MaterialTheme.typography.bodyMedium)
@@ -511,20 +513,64 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                         )
                     }
                     else -> {
-                        FirstInstallDropdown(
-                            label = "Skupina odvětví / Industry group",
-                            selectedLabel = selectedGroup?.name ?: "— vyberte odvětví —",
-                            options = state.firstInstallIndustries.map { it.code to it.name },
-                            onSelect = { code -> selectedGroupCode = code; selectedSubtypeCode = "" }
-                        )
-                        if (selectedGroup != null && selectedGroup.subtypes.isNotEmpty()) {
-                            Spacer(Modifier.height(8.dp))
-                            FirstInstallDropdown(
-                                label = "Podtyp / Subtype (volitelné)",
-                                selectedLabel = selectedSubtype?.name ?: "— vyberte podtyp —",
-                                options = listOf("" to "— žádný podtyp —") + selectedGroup.subtypes.map { it.code to it.name },
-                                onSelect = { code -> selectedSubtypeCode = code }
-                            )
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                // ── Vybrat vše / Select all ──
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedGroupCodes = if (allSelected) emptySet() else allGroupCodes
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = allSelected,
+                                        onCheckedChange = {
+                                            selectedGroupCodes = if (allSelected) emptySet() else allGroupCodes
+                                        }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Vybrat vše / Select all",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                    )
+                                }
+                                HorizontalDivider()
+                                // ── Jednotlivá odvětví ──
+                                state.firstInstallIndustries.forEach { group ->
+                                    val checked = group.code in selectedGroupCodes
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedGroupCodes = if (checked)
+                                                    selectedGroupCodes - group.code
+                                                else
+                                                    selectedGroupCodes + group.code
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = checked,
+                                            onCheckedChange = {
+                                                selectedGroupCodes = if (checked)
+                                                    selectedGroupCodes - group.code
+                                                else
+                                                    selectedGroupCodes + group.code
+                                            }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(group.name, style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -604,7 +650,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                         }
                         if (localError == null) {
                             viewModel.submitFirstInstall(
-                                FirstInstallRequest(
+                                request = FirstInstallRequest(
                                     company_name = companyName.trim(),
                                     company_legal_type = null,
                                     country = country,
@@ -613,8 +659,9 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                                     default_internal_language_code = internalLang,
                                     default_customer_language_code = customerLang,
                                     workspace_mode = "single_company",
-                                    primary_industry = selectedGroupCode.ifBlank { null },
-                                    primary_subtype = selectedSubtypeCode.ifBlank { null },
+                                    selected_industries = selectedGroupCodes.toList(),
+                                    primary_industry = selectedGroupCodes.firstOrNull(),
+                                    primary_subtype = null,
                                     first_admin_display_name = adminName.trim(),
                                     first_admin_email = adminEmail.trim(),
                                     first_admin_password = adminPassword,
@@ -622,7 +669,8 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                                     first_admin_last_name = null,
                                     phone = null,
                                     website = null
-                                )
+                                ),
+                                internalLangCode = internalLang
                             )
                         }
                     }
@@ -5251,12 +5299,14 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun submitFirstInstall(request: FirstInstallRequest) {
+    fun submitFirstInstall(request: FirstInstallRequest, internalLangCode: String = "en-GB") {
         _uiState.value = _uiState.value.copy(firstInstallSubmitting = true, firstInstallError = null)
         viewModelScope.launch {
             try {
                 val res = api.submitFirstInstall(request)
                 if (res.isSuccessful) {
+                    // Apply chosen language immediately so the app opens in the right language
+                    applyAppLanguage(internalLangCode, persist = true)
                     _uiState.value = _uiState.value.copy(firstInstallSubmitting = false)
                     checkBootstrapStatus(force = true, afterFirstInstallSubmit = true)
                 } else {
