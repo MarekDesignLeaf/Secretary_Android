@@ -6138,8 +6138,12 @@ class SecretaryViewModel : ViewModel() {
                     _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
                 if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return@launch }
                 val res = api.updateTenantLanguages(auth, mapOf("default_internal_language_code" to lang))
-                if (res.isSuccessful) { loadSettings(); loadTenantConfig(); onDone(true, null) }
-                else { onDone(false, parseBackendAdminError(res.code(), res.errorBody()?.string(), Strings.save)) }
+                if (res.isSuccessful) {
+                    applyAppLanguage(lang, persist = true)
+                    loadSettings()
+                    loadTenantConfig()
+                    onDone(true, null)
+                } else { onDone(false, parseBackendAdminError(res.code(), res.errorBody()?.string(), Strings.save)) }
             } catch (e: Exception) { e.rethrowIfCancellation(); onDone(false, e.message ?: Strings.connectionError) }
         }
     }
