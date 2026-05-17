@@ -112,25 +112,25 @@ class VoiceManager(
 
     private fun applyTtsLanguage(): Boolean {
         // Use the app UI language for TTS output — independent of recognition language setting.
-        val ttsLang = when (Strings.fromCode(settings.getCurrentAppLanguage())) {
+        val preferredLang = when (Strings.fromCode(settings.getCurrentAppLanguage())) {
             Strings.Lang.CS -> "cs-CZ"
             Strings.Lang.PL -> "pl-PL"
             Strings.Lang.EN -> "en-GB"
         }
-        val locale = Locale.forLanguageTag(ttsLang)
-        val result = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-        Log.d(TAG, "TTS setLanguage($ttsLang) result=$result")
-        if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.w(TAG, "TTS language $ttsLang not available, falling back to en-GB")
-            val fallbackResult = tts?.setLanguage(Locale.forLanguageTag("en-GB"))
-            if (fallbackResult == TextToSpeech.LANG_MISSING_DATA || fallbackResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.e(TAG, "TTS fallback en-GB also unavailable")
-                return false
+        // Try preferred language first, then broad fallbacks
+        val candidates = listOf(preferredLang, "en-GB", "en-US", "en")
+        for (lang in candidates) {
+            val locale = if (lang == "en") Locale.ENGLISH else Locale.forLanguageTag(lang)
+            val result = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
+            Log.d(TAG, "TTS setLanguage($lang) result=$result")
+            if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.d(TAG, "TTS language set to $lang OK")
+                return true
             }
-        } else {
-            Log.d(TAG, "TTS language set to $ttsLang OK")
+            Log.w(TAG, "TTS language $lang not available, trying next fallback")
         }
-        return true
+        Log.e(TAG, "TTS: no supported language found on this device")
+        return false
     }
 
     fun refreshLanguage() {
@@ -777,7 +777,14 @@ class VoiceManager(
                 if (!applyTtsLanguage()) {
                     isTtsReady = false
                     ttsFailedPermanently = true
-                    onStatusChange(Strings.ttsOutputUnavailable)
+                    // Don't block voice recognition — just warn and let hotword loop start
+                    Log.w(TAG, "TTS language unavailable — voice input still works, output disabled")
+                    handler.post {
+                        if (!isDestroyed) {
+                            onStatusChange(Strings.ttsOutputUnavailable)
+                            startHotwordLoop()
+                        }
+                    }
                     return@TextToSpeech
                 }
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -827,11 +834,16 @@ class VoiceManager(
                     handler.post { speak(pending, pendingExpectReply, pendingStayIdle) }
                 }
             } else {
-                // FIX A2: TTS engine failed to initialise – mark permanently and notify UI
+                // TTS engine failed to initialise – mark permanently, notify UI, but still start hotword
                 Log.e(TAG, "TTS initialisation failed with status $status")
                 isTtsReady = false
                 ttsFailedPermanently = true
-                onStatusChange(Strings.ttsInitFailed(status))
+                handler.post {
+                    if (!isDestroyed) {
+                        onStatusChange(Strings.ttsInitFailed(status))
+                        startHotwordLoop()
+                    }
+                }
             }
         }, "com.google.android.tts")  // explicit Google TTS
     }
