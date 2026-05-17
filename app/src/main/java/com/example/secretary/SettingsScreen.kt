@@ -32,6 +32,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     val state by viewModel.uiState.collectAsState()
     val sm = viewModel.getSettingsManager() ?: return
     val canManageHierarchy = state.currentUserPermissions["manage_users"] == true ||
+        state.currentUserRole == "owner" ||
         state.currentUserRole == "admin" ||
         state.currentUserRole == "manager"
     LaunchedEffect(Unit) {

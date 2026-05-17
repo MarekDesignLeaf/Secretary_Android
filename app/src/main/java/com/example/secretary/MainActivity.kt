@@ -1570,6 +1570,7 @@ private fun taskHasPlanning(task: Task): Boolean =
 
 private fun canManageHierarchy(state: UiState): Boolean =
     state.currentUserPermissions["manage_users"] == true ||
+        state.currentUserRole.equals("owner", ignoreCase = true) ||
         state.currentUserRole.equals("admin", ignoreCase = true) ||
         state.currentUserRole.equals("manager", ignoreCase = true)
 
@@ -5689,6 +5690,7 @@ class SecretaryViewModel : ViewModel() {
     private fun shouldLoadHierarchyIntegrity(): Boolean {
         val state = _uiState.value
         return state.currentUserPermissions["manage_users"] == true ||
+            state.currentUserRole == "owner" ||
             state.currentUserRole == "admin" ||
             state.currentUserRole == "manager"
     }
@@ -6133,7 +6135,7 @@ class SecretaryViewModel : ViewModel() {
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
                 val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
-                    _uiState.value.currentUserRole == "admin"
+                    _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
                 if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return@launch }
                 val res = api.updateTenantLanguages(auth, mapOf("default_internal_language_code" to lang))
                 if (res.isSuccessful) { loadSettings(); loadTenantConfig(); onDone(true, null) }
@@ -6147,7 +6149,7 @@ class SecretaryViewModel : ViewModel() {
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
                 val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
-                    _uiState.value.currentUserRole == "admin"
+                    _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
                 if (!canManage) {
                     onDone(false, Strings.backendPermissionDenied())
                     return@launch
