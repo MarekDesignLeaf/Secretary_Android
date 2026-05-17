@@ -247,168 +247,145 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     val state by viewModel.uiState.collectAsState()
     var exp by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf<String?>(null) }
-    var showCustomerConfirm by remember { mutableStateOf<String?>(null) }
-    var customerLanguageFeedback by remember { mutableStateOf<String?>(null) }
-    val currentLang = state.appLanguage.ifBlank { sm.getCurrentAppLanguage() }
-    val langName = Strings.languageDisplayName(currentLang)
-    val isAdminOrOwner = state.currentUserRole == "admin" || state.currentUserRole == "owner"
+    // Current languages — read from state (set after login or first install)
+    val currentSystemLang = state.appLanguage.ifBlank { sm.getCurrentAppLanguage() }.ifBlank { "en-GB" }
+    val isAdminOrOwner = state.currentUserRole == "owner" || state.currentUserRole == "admin"
         || state.currentUserPermissions["manage_users"] == true
-    val canEditCustomerLanguage = isAdminOrOwner
 
-    // Use ONLY the dedicated /tenant/languages endpoint — no fallback
+    // Current customer language — from tenantProfile or tenantLanguages
     val langsData = state.tenantLanguages
-    val langsError = state.settingsLoadErrors["languages"]
     @Suppress("UNCHECKED_CAST")
     val langsList = (langsData?.get("languages") as? List<*>)?.filterIsInstance<Map<String, Any?>>()
-    val langsFound = langsData?.get("found") as? Boolean
-    // Server returns "language_scope" field; accept both "scope" and "language_scope" for safety
-    val internalCodes = langsList?.filter {
-            it["language_scope"]?.toString() == "internal" || it["scope"]?.toString() == "internal"
-        }?.mapNotNull { it["language_code"]?.toString() ?: it["code"]?.toString() }
-        ?.filter { it.isNotBlank() }?.distinct()
-    val customerCodes = langsList?.filter {
+    val currentCustomerLang = state.tenantProfile?.get("default_customer_lang")?.toString()?.ifBlank { null }
+        ?: langsList?.firstOrNull {
             it["language_scope"]?.toString() == "customer" || it["scope"]?.toString() == "customer"
-        }?.mapNotNull { it["language_code"]?.toString() ?: it["code"]?.toString() }
-        ?.filter { it.isNotBlank() }?.distinct()
-    val currentCustomerLang = state.tenantProfile?.get("default_customer_lang")?.toString()
-        ?: langsData?.let {
-            (it["internal_langs"] as? List<*>)?.firstOrNull()?.toString()
-        } ?: ""
+        }?.let { it["language_code"]?.toString() ?: it["code"]?.toString() }
+        ?: currentSystemLang  // fallback: same as system lang
 
-    SCard(Strings.language + ": $langName", Icons.Default.Star, exp, { exp = !exp }) {
-        // Internal language
-        var showInternalLangPicker by remember { mutableStateOf(false) }
-        var internalLangFeedback by remember { mutableStateOf<String?>(null) }
-        val supportedLangs = listOf("cs-CZ","en-GB","en-US","pl-PL","de-DE","fr-FR","es-ES","sk-SK","hu-HU","ro-RO","uk-UA","ru-RU")
-        val canEditInternal = isAdminOrOwner
+    val supportedLangs = listOf(
+        "cs-CZ" to "Čeština",
+        "en-GB" to "English (UK)",
+        "en-US" to "English (US)",
+        "pl-PL" to "Polski",
+        "de-DE" to "Deutsch",
+        "sk-SK" to "Slovenčina",
+        "fr-FR" to "Français",
+        "es-ES" to "Español",
+        "it-IT" to "Italiano",
+        "hu-HU" to "Magyar",
+        "ro-RO" to "Română",
+        "uk-UA" to "Українська",
+        "ru-RU" to "Русский"
+    )
 
+    var showSystemLangPicker by remember { mutableStateOf(false) }
+    var showCustomerLangPicker by remember { mutableStateOf(false) }
+    var systemLangFeedback by remember { mutableStateOf<String?>(null) }
+    var customerLangFeedback by remember { mutableStateOf<String?>(null) }
+
+    val systemLangLabel = supportedLangs.firstOrNull { it.first == currentSystemLang }?.second
+        ?: langDisplayName(currentSystemLang)
+    val customerLangLabel = supportedLangs.firstOrNull { it.first == currentCustomerLang }?.second
+        ?: langDisplayName(currentCustomerLang)
+
+    SCard("${Strings.language}: $systemLangLabel", Icons.Default.Star, exp, { exp = !exp }) {
+
+        // ── Jazyk systému ─────────────────────────────────────────────
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(Strings.systemLanguage, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            if (canEditInternal) {
-                TextButton(onClick = { showInternalLangPicker = true }) {
-                    Text(if (internalCodes.isNullOrEmpty()) "Nastavit" else "Změnit")
+            Column(Modifier.weight(1f)) {
+                Text("Jazyk systému", fontWeight = FontWeight.SemiBold)
+                Text(systemLangLabel, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                Text("Jazyk ve kterém pracuješ v aplikaci", fontSize = 11.sp, color = Color.Gray)
+            }
+            if (isAdminOrOwner) {
+                TextButton(onClick = { showSystemLangPicker = true; systemLangFeedback = null }) {
+                    Text("Změnit")
                 }
             }
         }
-        Text(Strings.systemLanguageHint, fontSize = 12.sp, color = Color.Gray)
-        when {
-            langsData == null && langsError == null -> Text("Načítám jazyky ze serveru…", fontSize = 12.sp, color = Color.Gray)
-            langsError != null -> Text("❌ ${langsError}", fontSize = 12.sp, color = Color.Red)
-            internalCodes.isNullOrEmpty() -> {
-                if (!canEditInternal)
-                    Text("⚠️ Interní jazyk není nastaven — kontaktujte admina", fontSize = 12.sp, color = Color(0xFFFF9800))
-            }
-            else -> {
-                internalCodes.forEach { code ->
-                    val label = langDisplayName(code)
-                    val selected = currentLang.lowercase().startsWith(code.take(2).lowercase()) || currentLang == code
-                    Row(Modifier.fillMaxWidth().clickable { if (!selected) showConfirm = code }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = selected, onClick = { if (!selected) showConfirm = code })
-                        Spacer(Modifier.width(8.dp))
-                        Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp)
-                    }
-                }
-            }
-        }
-        internalLangFeedback?.let { Text(it, fontSize = 12.sp, color = if (it.startsWith("✅")) Color(0xFF4CAF50) else Color.Red) }
-        if (showInternalLangPicker) {
-            AlertDialog(
-                onDismissRequest = { showInternalLangPicker = false },
-                title = { Text("Interní jazyk systému") },
-                text = {
-                    Column {
-                        supportedLangs.forEach { code ->
-                            val label = langDisplayName(code)
-                            val selected = internalCodes?.contains(code) == true
-                            Row(Modifier.fillMaxWidth().clickable {
-                                showInternalLangPicker = false
-                                viewModel.updateInternalLanguage(code) { ok, err ->
-                                    internalLangFeedback = if (ok) "✅ Interní jazyk nastaven: $label" else "❌ ${err}"
-                                }
-                            }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = selected, onClick = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(label, fontSize = 15.sp)
-                            }
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = { TextButton(onClick = { showInternalLangPicker = false }) { Text("Zrušit") } }
-            )
+        systemLangFeedback?.let {
+            Text(it, fontSize = 12.sp, color = if (it.startsWith("✅")) Color(0xFF4CAF50) else Color.Red)
         }
 
         Spacer(Modifier.height(8.dp))
         HorizontalDivider()
         Spacer(Modifier.height(8.dp))
 
-        // Customer language
-        Text(Strings.customerLanguage, fontWeight = FontWeight.SemiBold)
-        Text(
-            if (canEditCustomerLanguage) Strings.customerLanguageHint else Strings.adminOnlyLanguageHint,
-            fontSize = 12.sp,
-            color = Color.Gray
-        )
-        when {
-            langsData == null && langsError == null -> {
-                Text("Načítám zákaznické jazyky…", fontSize = 12.sp, color = Color.Gray)
+        // ── Jazyk zákazníka ───────────────────────────────────────────
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Jazyk zákazníka", fontWeight = FontWeight.SemiBold)
+                Text(customerLangLabel, fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+                Text("Výstupní jazyk komunikace se zákazníkem", fontSize = 11.sp, color = Color.Gray)
             }
-            customerCodes.isNullOrEmpty() && langsFound != false -> {
-                Text("⚠️ Žádné zákaznické jazyky nenalezeny", fontSize = 12.sp, color = Color(0xFFFF9800))
-            }
-            !customerCodes.isNullOrEmpty() -> {
-                customerCodes.forEach { code ->
-                    val label = langDisplayName(code)
-                    val selected = currentCustomerLang.lowercase().startsWith(code.take(2).lowercase()) || currentCustomerLang == code
-                    Row(
-                        Modifier.fillMaxWidth()
-                            .clickable(enabled = canEditCustomerLanguage) {
-                                if (!selected) { customerLanguageFeedback = null; showCustomerConfirm = code }
-                            }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selected,
-                            onClick = { if (canEditCustomerLanguage && !selected) { customerLanguageFeedback = null; showCustomerConfirm = code } },
-                            enabled = canEditCustomerLanguage
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp,
-                            color = if (canEditCustomerLanguage) Color.Unspecified else Color.Gray)
-                    }
+            if (isAdminOrOwner) {
+                TextButton(onClick = { showCustomerLangPicker = true; customerLangFeedback = null }) {
+                    Text("Změnit")
                 }
             }
-            else -> {}
         }
-        customerLanguageFeedback?.let { Text(it, fontSize = 12.sp, color = Color.Red) }
+        customerLangFeedback?.let {
+            Text(it, fontSize = 12.sp, color = if (it.startsWith("✅")) Color(0xFF4CAF50) else Color.Red)
+        }
     }
-    if (showConfirm != null) {
-        val newLangName = Strings.languageDisplayName(showConfirm!!)
+
+    // ── Picker: jazyk systému ─────────────────────────────────────────
+    if (showSystemLangPicker) {
         AlertDialog(
-            onDismissRequest = { showConfirm = null },
-            title = { Text(Strings.changeLanguage) },
-            text = { Text("${Strings.languageChangeConfirm} $newLangName?") },
-            confirmButton = { Button(onClick = { viewModel.changeLanguage(showConfirm!!); showConfirm = null }) { Text(Strings.confirm) } },
-            dismissButton = { TextButton(onClick = { showConfirm = null }) { Text(Strings.cancel) } }
+            onDismissRequest = { showSystemLangPicker = false },
+            title = { Text("Jazyk systému") },
+            text = {
+                Column {
+                    supportedLangs.forEach { (code, label) ->
+                        val selected = code == currentSystemLang
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                showSystemLangPicker = false
+                                viewModel.updateInternalLanguage(code) { ok, err ->
+                                    systemLangFeedback = if (ok) "✅ Jazyk systému nastaven: $label" else "❌ $err"
+                                }
+                            }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selected, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, fontSize = 15.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showSystemLangPicker = false }) { Text("Zrušit") } }
         )
     }
-    if (showCustomerConfirm != null) {
-        val newLangName = Strings.languageDisplayName(showCustomerConfirm!!)
+
+    // ── Picker: jazyk zákazníka ───────────────────────────────────────
+    if (showCustomerLangPicker) {
         AlertDialog(
-            onDismissRequest = { showCustomerConfirm = null },
-            title = { Text(Strings.customerLanguage) },
-            text = { Text("${Strings.languageChangeConfirm} $newLangName?") },
-            confirmButton = {
-                Button(onClick = {
-                    val selectedLang = showCustomerConfirm!!
-                    viewModel.updateCustomerLanguage(selectedLang) { ok, msg ->
-                        customerLanguageFeedback = if (ok) null else msg
+            onDismissRequest = { showCustomerLangPicker = false },
+            title = { Text("Jazyk zákazníka") },
+            text = {
+                Column {
+                    supportedLangs.forEach { (code, label) ->
+                        val selected = code == currentCustomerLang
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                showCustomerLangPicker = false
+                                viewModel.updateCustomerLanguage(code) { ok, err ->
+                                    customerLangFeedback = if (ok) "✅ Jazyk zákazníka nastaven: $label" else "❌ $err"
+                                }
+                            }.padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selected, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, fontSize = 15.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                        }
                     }
-                    showCustomerConfirm = null
-                }) { Text(Strings.confirm) }
+                }
             },
-            dismissButton = { TextButton(onClick = { showCustomerConfirm = null }) { Text(Strings.cancel) } }
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showCustomerLangPicker = false }) { Text("Zrušit") } }
         )
     }
 }
