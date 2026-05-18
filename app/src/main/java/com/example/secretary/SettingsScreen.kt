@@ -283,10 +283,13 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     var systemLangFeedback by remember { mutableStateOf<String?>(null) }
     var customerLangFeedback by remember { mutableStateOf<String?>(null) }
 
-    val systemLangLabel = supportedLangs.firstOrNull { it.first == currentSystemLang }?.second
-        ?: langDisplayName(currentSystemLang)
-    val customerLangLabel = supportedLangs.firstOrNull { it.first == currentCustomerLang }?.second
-        ?: langDisplayName(currentCustomerLang)
+    // Match "cs" against "cs-CZ", "en" against "en-GB"/"en-US" etc.
+    fun langPrefix(code: String) = code.lowercase().substringBefore("-")
+    fun findLabel(code: String) = supportedLangs.firstOrNull {
+        it.first.equals(code, ignoreCase = true) || langPrefix(it.first) == langPrefix(code)
+    }?.second ?: langDisplayName(code)
+    val systemLangLabel = findLabel(currentSystemLang)
+    val customerLangLabel = findLabel(currentCustomerLang)
 
     SCard("${Strings.language}: $systemLangLabel", Icons.Default.Star, exp, { exp = !exp }) {
 
@@ -337,7 +340,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
             text = {
                 Column {
                     supportedLangs.forEach { (code, label) ->
-                        val selected = code == currentSystemLang
+                        val selected = code.equals(currentSystemLang, ignoreCase = true)
+                            || langPrefix(code) == langPrefix(currentSystemLang)
                         Row(
                             Modifier.fillMaxWidth().clickable {
                                 showSystemLangPicker = false
@@ -367,7 +371,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
             text = {
                 Column {
                     supportedLangs.forEach { (code, label) ->
-                        val selected = code == currentCustomerLang
+                        val selected = code.equals(currentCustomerLang, ignoreCase = true)
+                            || langPrefix(code) == langPrefix(currentCustomerLang)
                         Row(
                             Modifier.fillMaxWidth().clickable {
                                 showCustomerLangPicker = false
