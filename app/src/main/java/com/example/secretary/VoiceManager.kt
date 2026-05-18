@@ -117,19 +117,32 @@ class VoiceManager(
             Strings.Lang.PL -> "pl-PL"
             Strings.Lang.EN -> "en-GB"
         }
-        // Try preferred language first, then broad fallbacks
+        // NOTE: LANG_MISSING_DATA means engine lacks downloaded data for this locale but will
+        // still speak using a fallback voice — treat as acceptable, NOT as failure.
+        // Only LANG_NOT_SUPPORTED is a hard no.
         val candidates = listOf(preferredLang, "en-GB", "en-US", "en")
         for (lang in candidates) {
             val locale = if (lang == "en") Locale.ENGLISH else Locale.forLanguageTag(lang)
             val result = tts?.setLanguage(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
             Log.d(TAG, "TTS setLanguage($lang) result=$result")
-            if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.d(TAG, "TTS language set to $lang OK")
+            if (result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                if (result == TextToSpeech.LANG_MISSING_DATA) {
+                    Log.w(TAG, "TTS $lang: LANG_MISSING_DATA — engine will use fallback voice")
+                } else {
+                    Log.d(TAG, "TTS language set to $lang OK (result=$result)")
+                }
                 return true
             }
-            Log.w(TAG, "TTS language $lang not available, trying next fallback")
+            Log.w(TAG, "TTS language $lang explicitly not supported, trying next")
         }
-        Log.e(TAG, "TTS: no supported language found on this device")
+        // Last resort: device default locale
+        val defaultLocale = Locale.getDefault()
+        val defaultResult = tts?.setLanguage(defaultLocale) ?: TextToSpeech.LANG_NOT_SUPPORTED
+        if (defaultResult != TextToSpeech.LANG_NOT_SUPPORTED) {
+            Log.w(TAG, "TTS using device default locale $defaultLocale (result=$defaultResult)")
+            return true
+        }
+        Log.e(TAG, "TTS: absolutely no language supported on this device — TTS disabled")
         return false
     }
 
