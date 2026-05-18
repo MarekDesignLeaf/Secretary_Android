@@ -334,10 +334,10 @@ interface SecretaryApi {
     @GET("onboarding/status/{tenantId}")
     suspend fun getOnboardingStatus(@Path("tenantId") tenantId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("onboarding/industry-groups")
+    @GET("api/v1/activities/groups")
     suspend fun getIndustryGroups(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
-    @GET("onboarding/industry-subtypes/{groupId}")
+    @GET("api/v1/activities/subtypes/{groupId}")
     suspend fun getIndustrySubtypes(@Path("groupId") groupId: Long): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @POST("onboarding/company-setup")
@@ -345,6 +345,12 @@ interface SecretaryApi {
 
     @GET("api/v1/company/operating-profile")
     suspend fun getTenantConfig(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @PUT("api/v1/company/industry")
+    suspend fun updateCompanyIndustry(
+        @Header("Authorization") auth: String,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @PUT("api/v1/language/settings")
     suspend fun updateTenantLanguages(

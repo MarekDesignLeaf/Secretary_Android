@@ -7126,6 +7126,28 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun updateCompanyIndustry(industryGroup: String?, industrySubtype: String?, onDone: (Boolean, String?) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
+            try {
+                val res = api.updateCompanyIndustry(auth, mapOf(
+                    "industry_group" to industryGroup,
+                    "industry_subtype" to industrySubtype
+                ))
+                if (res.isSuccessful) {
+                    loadTenantConfig()
+                    onDone(true, null)
+                } else {
+                    onDone(false, "HTTP ${res.code()}: ${res.message()}")
+                }
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                onDone(false, e.message ?: "Network error")
+                Log.e("ViewModel", "updateCompanyIndustry error", e)
+            }
+        }
+    }
+
     fun loadSystemSettings() {
         viewModelScope.launch {
             try {

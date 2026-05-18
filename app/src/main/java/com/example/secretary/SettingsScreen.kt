@@ -1306,8 +1306,11 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
 @Composable private fun CompanyProfileSection(viewModel: SecretaryViewModel, sm: SettingsManager) {
     val state by viewModel.uiState.collectAsState()
     val profile = state.tenantProfile
+    val tenantConfig = state.tenantConfig   // TenantOperatingProfile — has industry_group / industry_subtype
     val err = state.settingsLoadErrors["profile"]
     var exp by remember { mutableStateOf(false) }
+    var showIndustryDialog by remember { mutableStateOf(false) }
+
     SCard(Strings.companyProfile, Icons.Default.AccountCircle, exp, { exp = !exp }) {
         when {
             profile == null && err == null -> {
@@ -1331,6 +1334,35 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                     profile["currency"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Měna", it) }
                     profile["location"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Lokace", it) }
                     profile["industry"]?.toString()?.takeIf { it.isNotBlank() }?.let { ARow("Obor", it) }
+
+                    // Industry from TenantOperatingProfile (tenantConfig) — editable
+                    val currentGroup = tenantConfig?.get("industry_group")?.toString()?.takeIf { it.isNotBlank() }
+                    val currentSubtype = tenantConfig?.get("industry_subtype")?.toString()?.takeIf { it.isNotBlank() }
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Odvětví firmy", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            if (currentGroup != null || currentSubtype != null) {
+                                Text(
+                                    buildString {
+                                        if (currentGroup != null) append(currentGroup)
+                                        if (currentSubtype != null) append(" › $currentSubtype")
+                                    },
+                                    fontSize = 12.sp, color = Color.Gray
+                                )
+                            } else {
+                                Text("Není nastaveno", fontSize = 12.sp, color = Color(0xFFFF9800))
+                            }
+                        }
+                        TextButton(onClick = { showIndustryDialog = true }) {
+                            Text("Změnit", fontSize = 12.sp)
+                        }
+                    }
+
                     Spacer(Modifier.height(4.dp))
                     // From tenant_operating_profile
                     profile["workspace_mode"]?.toString()?.let {
@@ -1367,6 +1399,120 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
             }
         }
     }
+
+    if (showIndustryDialog) {
+        IndustryPickerDialog(
+            viewModel = viewModel,
+            currentGroup = state.tenantConfig?.get("industry_group")?.toString()?.takeIf { it.isNotBlank() },
+            currentSubtype = state.tenantConfig?.get("industry_subtype")?.toString()?.takeIf { it.isNotBlank() },
+            onDismiss = { showIndustryDialog = false },
+            onSave = { group, subtype ->
+                viewModel.updateCompanyIndustry(group, subtype) { ok, _ ->
+                    if (ok) showIndustryDialog = false
+                }
+            }
+        )
+    }
+}
+
+@Composable private fun IndustryPickerDialog(
+    viewModel: SecretaryViewModel,
+    currentGroup: String?,
+    currentSubtype: String?,
+    onDismiss: () -> Unit,
+    onSave: (String?, String?) -> Unit
+) {
+    // groups: List<Map> with id (Long), code (String), name (String)
+    var groups by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var subtypes by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var selectedGroupCode by remember { mutableStateOf(currentGroup) }
+    var selectedSubtypeCode by remember { mutableStateOf(currentSubtype) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    // Load groups on first open
+    LaunchedEffect(Unit) {
+        try {
+            val res = viewModel.getApi().getIndustryGroups()
+            if (res.isSuccessful) {
+                groups = res.body() ?: emptyList()
+                error = null
+            } else {
+                error = "HTTP ${res.code()}"
+            }
+        } catch (e: Exception) {
+            error = e.message ?: "Network error"
+        }
+        loading = false
+    }
+
+    // Load subtypes whenever group selection changes
+    val selectedGroupId = groups.firstOrNull {
+        it["code"]?.toString() == selectedGroupCode
+    }?.let { (it["id"] as? Number)?.toLong() }
+
+    LaunchedEffect(selectedGroupId) {
+        val gId = selectedGroupId ?: return@LaunchedEffect
+        try {
+            val res = viewModel.getApi().getIndustrySubtypes(gId)
+            if (res.isSuccessful) {
+                subtypes = res.body() ?: emptyList()
+                // Reset subtype selection if it no longer belongs to the new group
+                if (subtypes.none { it["code"]?.toString() == selectedSubtypeCode }) {
+                    selectedSubtypeCode = subtypes.firstOrNull()?.get("code")?.toString()
+                }
+            }
+        } catch (_: Exception) { subtypes = emptyList() }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Změnit odvětví firmy", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (loading) {
+                    CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                } else if (error != null) {
+                    Text("❌ $error", color = Color.Red, fontSize = 13.sp)
+                } else {
+                    Text("Odvětví", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    groups.forEach { g ->
+                        val code = g["code"]?.toString() ?: return@forEach
+                        val name = g["name"]?.toString() ?: code
+                        Row(
+                            Modifier.fillMaxWidth().clickable { selectedGroupCode = code },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selectedGroupCode == code, onClick = { selectedGroupCode = code })
+                            Text(name, fontSize = 13.sp)
+                        }
+                    }
+                    if (subtypes.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("Typ", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        subtypes.forEach { s ->
+                            val code = s["code"]?.toString() ?: return@forEach
+                            val name = s["name"]?.toString() ?: code
+                            Row(
+                                Modifier.fillMaxWidth().clickable { selectedSubtypeCode = code },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = selectedSubtypeCode == code, onClick = { selectedSubtypeCode = code })
+                                Text(name, fontSize = 13.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(selectedGroupCode, selectedSubtypeCode) },
+                enabled = !loading && error == null && selectedGroupCode != null
+            ) { Text("Uložit") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } }
+    )
 }
 
 // ============================================================
