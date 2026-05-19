@@ -6139,6 +6139,19 @@ class SecretaryViewModel : ViewModel() {
                 if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return@launch }
                 val res = api.updateTenantLanguages(auth, mapOf("default_internal_language_code" to lang))
                 if (res.isSuccessful) {
+                    // Also persist preferred_language_code on the user profile so login
+                    // no longer resets the language back to the previous value
+                    val uid = _uiState.value.currentUserId ?: -1L
+                    if (uid > 0L) {
+                        try {
+                            val bcp47 = when (lang.lowercase().substringBefore("-")) {
+                                "cs" -> "cs-CZ"; "pl" -> "pl-PL"; "de" -> "de-DE"
+                                "sk" -> "sk-SK"; "fr" -> "fr-FR"; "es" -> "es-ES"
+                                else -> "en-GB"
+                            }
+                            api.updateAuthUser(auth, uid.toString(), mapOf("preferred_language_code" to bcp47))
+                        } catch (_: Exception) { /* non-fatal */ }
+                    }
                     applyAppLanguage(lang, persist = true)
                     loadSettings()
                     loadTenantConfig()
