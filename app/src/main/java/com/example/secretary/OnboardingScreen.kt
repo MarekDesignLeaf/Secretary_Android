@@ -38,8 +38,8 @@ fun OnboardingScreen(viewModel: SecretaryViewModel, onComplete: () -> Unit) {
     var selectedIndustries by remember { mutableStateOf<List<IndustryEntry>>(emptyList()) }
     var internalLangMode by remember { mutableStateOf("single") }
     var customerLangMode by remember { mutableStateOf("single") }
-    var defaultInternalLang by remember { mutableStateOf("en") }
-    var defaultCustomerLang by remember { mutableStateOf("en") }
+    var defaultInternalLang by remember { mutableStateOf("cs") }
+    var defaultCustomerLang by remember { mutableStateOf("cs") }
     var workspaceMode by remember { mutableStateOf("solo") }
 
     // Data from server
