@@ -59,3 +59,14 @@ def create_first_install(
         return repository.create_first_install(payload, activity_defaults=activity_defaults)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Version endpoint (also exported as version_router for backward compat)
+# ---------------------------------------------------------------------------
+version_router = APIRouter(tags=["version"])
+
+
+@version_router.get("/version")
+def server_version():
+    return {"version": "0.1.0", "backend": "secretary_clean"}
