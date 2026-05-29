@@ -1,3 +1,0 @@
-To https://github.com/MarekDesignLeaf/Secretary_Server.git
-   901fd27..84ad410  main -> main
-PUSH_OK 

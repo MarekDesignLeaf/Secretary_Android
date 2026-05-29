@@ -13,7 +13,7 @@ data class RegisterRequest(
 )
 
 interface SecretaryApi {
-    // === AI PROCESS ===
+    // === AI PROCESS (voice fallback + session) ===
     @POST("process")
     suspend fun processMessage(@Body request: MessageRequest): Response<AssistantResponse>
 
@@ -36,7 +36,7 @@ interface SecretaryApi {
     @DELETE("assistant/memory/{id}")
     suspend fun deleteAssistantMemory(@Path("id") id: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    // === PLANTS ===
+    // === PLANT / NATURE (plugin-provided — ViewModel still references these) ===
     @Multipart
     @POST("plants/identify")
     suspend fun identifyPlant(
@@ -80,6 +80,9 @@ interface SecretaryApi {
         @Query("recognition_type") recognitionType: String? = null,
         @Query("language") language: String? = null,
     ): Response<List<RecognitionHistoryEntry>>
+
+    @GET("system/settings")
+    suspend fun getSettings(): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @GET("admin/activity-log")
     suspend fun getAdminActivityLog(
@@ -311,9 +314,6 @@ interface SecretaryApi {
     @GET("crm/export/csv")
     suspend fun exportCsv(): Response<okhttp3.ResponseBody>
 
-    @GET("system/settings")
-    suspend fun getSettings(): Response<Map<String, @JvmSuppressWildcards Any>>
-
     @GET("health")
     suspend fun healthCheck(): Response<Map<String, @JvmSuppressWildcards Any>>
 
@@ -330,18 +330,11 @@ interface SecretaryApi {
     @GET("api/v1/catalogue/industries")
     suspend fun getCatalogueIndustries(): Response<Any>
 
-    // === ONBOARDING ===
-    @GET("onboarding/status/{tenantId}")
-    suspend fun getOnboardingStatus(@Path("tenantId") tenantId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
-
     @GET("api/v1/activities/groups")
     suspend fun getIndustryGroups(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @GET("api/v1/activities/subtypes/{groupId}")
     suspend fun getIndustrySubtypes(@Path("groupId") groupId: Long): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
-
-    @POST("onboarding/company-setup")
-    suspend fun companySetup(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @GET("api/v1/company/operating-profile")
     suspend fun getTenantConfig(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -525,145 +518,6 @@ interface SecretaryApi {
 
     @POST("crm/invoices/batch-from-work-reports")
     suspend fun batchInvoiceFromWorkReports(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    // === IMPORT SYSTEM ===
-    @GET("import/sessions")
-    suspend fun listImportSessions(
-        @Header("Authorization") auth: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Query("status") status: String? = null,
-        @Query("target_table") targetTable: String? = null,
-        @Query("limit") limit: Int = 50,
-        @Query("offset") offset: Int = 0
-    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
-
-    @POST("import/sessions")
-    suspend fun createImportSession(
-        @Header("Authorization") auth: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Body body: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @GET("import/sessions/{sessionId}")
-    suspend fun getImportSession(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @Multipart
-    @POST("import/sessions/{sessionId}/upload")
-    suspend fun uploadImportFile(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Part file: MultipartBody.Part
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @PUT("import/sessions/{sessionId}/mappings")
-    suspend fun saveImportMappings(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Body body: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @POST("import/sessions/{sessionId}/validate")
-    suspend fun validateImport(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @GET("import/sessions/{sessionId}/preview")
-    suspend fun getImportPreview(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Query("page") page: Int = 1,
-        @Query("page_size") pageSize: Int = 50,
-        @Query("filter_status") filterStatus: String? = null
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @POST("import/sessions/{sessionId}/approve")
-    suspend fun approveImport(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Body body: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @POST("import/sessions/{sessionId}/apply")
-    suspend fun applyImport(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Body body: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @POST("import/sessions/{sessionId}/rollback")
-    suspend fun rollbackImport(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Body body: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @GET("import/sessions/{sessionId}/audit")
-    suspend fun getImportAudit(
-        @Header("Authorization") auth: String,
-        @Path("sessionId") sessionId: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Query("limit") limit: Int = 100
-    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
-
-    // === TOOL PACKAGES ===
-
-    @GET("tools/packages")
-    suspend fun listToolPackages(
-        @Header("Authorization") auth: String,
-        @Query("tenant_id") tenantId: Int = 1,
-        @Query("install_status") installStatus: String? = null
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @GET("tools/{toolId}/slots")
-    suspend fun getToolSlots(
-        @Header("Authorization") auth: String,
-        @Path("toolId") toolId: String,
-        @Query("tenant_id") tenantId: Int = 1
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @Multipart
-    @POST("tools/install")
-    suspend fun installToolPackage(
-        @Header("Authorization") auth: String,
-        @Part file: MultipartBody.Part,
-        @Part("tenant_id") tenantId: RequestBody,
-        @Part("slot_values") slotValues: RequestBody? = null,
-        @Part("skip_test") skipTest: RequestBody? = null
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @PUT("tools/{toolId}/config/{slotName}")
-    suspend fun updateToolConfigSlot(
-        @Header("Authorization") auth: String,
-        @Path("toolId") toolId: String,
-        @Path("slotName") slotName: String,
-        @Body data: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @POST("tools/{toolId}/test-connection")
-    suspend fun testToolConnection(
-        @Header("Authorization") auth: String,
-        @Path("toolId") toolId: String,
-        @Body data: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @HTTP(method = "DELETE", path = "tools/{toolId}", hasBody = true)
-    suspend fun uninstallTool(
-        @Header("Authorization") auth: String,
-        @Path("toolId") toolId: String,
-        @Body data: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @GET("tools/hub-tiles")
     suspend fun getToolHubTiles(

@@ -274,15 +274,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                             CircularProgressIndicator()
                         }
                         false -> LoginScreen(vm)
-                        true -> when (state.onboardingComplete) {
-                            null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
-                            false -> OnboardingScreen(vm) {}
-                            true -> {
-                                LaunchedEffect(Unit) { vm.loadTenantConfig() }
-                                MainAppScaffold(vm, navController)
-                            }
+                        true -> {
+                            LaunchedEffect(Unit) { vm.loadTenantConfig() }
+                            MainAppScaffold(vm, navController)
                         }
                     }
                 }
@@ -741,15 +735,6 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
     val state by viewModel.uiState.collectAsState()
     var showAddClientDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.pendingPlantCaptureRequestId, currentRoute) {
-        if (state.pendingPlantCaptureRequestId != null && currentRoute != Screen.Tools.route) {
-            navController.navigate(Screen.Tools.route) {
-                popUpTo(navController.graph.startDestinationId)
-                launchSingleTop = true
-            }
-        }
-    }
-
     // Notify voice resolver whenever the user switches screens
     LaunchedEffect(currentRoute) {
         val screenCode = when (currentRoute) {
@@ -892,50 +877,7 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
 
 @Composable
 fun ToolsScreen(viewModel: SecretaryViewModel) {
-    val state by viewModel.uiState.collectAsState()
-    var selectedToolMode by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(state.pendingPlantCaptureRequestId) {
-        if (state.pendingPlantCaptureRequestId != null) {
-            selectedToolMode = state.plantCaptureMode
-        }
-    }
-
-    if (selectedToolMode == null) {
-        ToolsHubScreen(viewModel = viewModel) { mode ->
-            if (mode != "import" && mode != "packages") viewModel.setPlantCaptureMode(mode)
-            selectedToolMode = mode
-        }
-    } else if (selectedToolMode == "import") {
-        ImportScreen(viewModel = viewModel, onBack = { selectedToolMode = null })
-    } else if (selectedToolMode == "packages") {
-        ToolPackagesScreen(viewModel = viewModel, onBack = { selectedToolMode = null })
-    } else {
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = { selectedToolMode = null }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.back)
-                    Spacer(Modifier.width(4.dp))
-                    Text(Strings.back)
-                }
-                Text(
-                    toolModeTitle(state.plantCaptureMode),
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.End,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            PlantRecognitionTab(
-                state = state,
-                viewModel = viewModel,
-                showModeSwitcher = false,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
+    ToolsHubScreen(viewModel = viewModel) { _ -> }
 }
 
 @Composable
@@ -944,28 +886,6 @@ private fun ToolsHubScreen(viewModel: SecretaryViewModel, onOpenMode: (String) -
 
     // Fetch dynamic tiles from DB on first display
     LaunchedEffect(Unit) { viewModel.loadToolHubTiles() }
-
-    // Built-in system tiles (always shown at bottom)
-    val builtInTiles = listOf(
-        Triple(
-            "import",
-            Strings.t("Data import", "Import dat", "Import danych"),
-            Strings.t(
-                "Import contacts, clients or other data from CSV, Excel or JSON",
-                "Importuj kontakty, klienty nebo jiná data z CSV, Excel nebo JSON",
-                "Importuj kontakty, klientów lub inne dane z CSV, Excel lub JSON"
-            )
-        ),
-        Triple(
-            "packages",
-            Strings.t("Tool packages", "Balíčky nástrojů", "Pakiety narzędzi"),
-            Strings.t(
-                "Install, configure and manage tool extension packages",
-                "Instaluj, konfiguruj a spravuj rozšiřující balíčky nástrojů",
-                "Instaluj, konfiguruj i zarządzaj pakietami rozszerzeń narzędzi"
-            )
-        )
-    )
 
     // DB-sourced tiles from installed plugins, localised per app language
     val lang = Strings.getLangCode()
@@ -982,8 +902,6 @@ private fun ToolsHubScreen(viewModel: SecretaryViewModel, onOpenMode: (String) -
         }
         Triple(tile.tile_key, title, hint)
     }
-
-    val allTiles = pluginTiles + builtInTiles
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -1005,7 +923,7 @@ private fun ToolsHubScreen(viewModel: SecretaryViewModel, onOpenMode: (String) -
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
-        items(allTiles) { (mode, title, description) ->
+        items(pluginTiles) { (mode, title, description) ->
             Button(
                 onClick = { onOpenMode(mode) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
@@ -1019,12 +937,6 @@ private fun ToolsHubScreen(viewModel: SecretaryViewModel, onOpenMode: (String) -
             }
         }
     }
-}
-
-private fun toolModeTitle(mode: String): String = when (mode) {
-    "health" -> Strings.plantHealthTitle
-    "mushroom" -> Strings.mushroomRecognitionTitle
-    else -> Strings.plantRecognitionTitle
 }
 
 @Composable
@@ -3456,19 +3368,9 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
             ?: clientHierarchyIssues(detail, state)
     }
     var showEditDialog by remember { mutableStateOf(false) }
-    var showServiceRatesDialog by remember { mutableStateOf(false) }
     if (showEditDialog) {
         ClientEditDialog(client = c, onDismiss = { showEditDialog = false },
             onSave = { data -> viewModel.updateClient(c.id, data); showEditDialog = false })
-    }
-    if (showServiceRatesDialog) {
-        ClientServiceRatesDialog(
-            client = c,
-            detail = detail,
-            viewModel = viewModel,
-            rateTypes = state.tenantRateTypes,
-            onDismiss = { showServiceRatesDialog = false }
-        )
     }
     LazyColumn {
         // === ACTION BUTTONS ===
@@ -3542,26 +3444,6 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
                             fontSize = 12.sp
                         )
                     }
-                }
-            }
-        }
-        item {
-            Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(Strings.individualServiceRates, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                        AssistChip(
-                            onClick = { showServiceRatesDialog = true },
-                            label = { Text(Strings.edit, fontSize = 12.sp) }
-                        )
-                    }
-                    Text(
-                        if (detail.has_individual_service_rates) Strings.individualServiceRatesActive else Strings.individualServiceRatesNotSet,
-                        fontSize = 12.sp,
-                        color = Color.Gray
-                    )
-                    Text(Strings.individualServiceRatesHint, fontSize = 12.sp, color = Color.Gray)
-                    ClientServiceRatesSummary(detail, rateTypes = state.tenantRateTypes)
                 }
             }
         }
@@ -6028,11 +5910,8 @@ class SecretaryViewModel : ViewModel() {
     fun getApi() = api
     fun getCalendarText(days: Int = 7): String = calendarManager?.getCalendarContext(days) ?: "Kalendář není dostupný"
 
-    fun checkOnboardingStatus() {
-        // In the clean system, onboarding is the first-install wizard (handled before login).
-        // Once logged in, the user is always past onboarding.
-        _uiState.value = _uiState.value.copy(onboardingComplete = true)
-    }
+    /** No-op: onboarding handled by first-install wizard before login. */
+    fun checkOnboardingStatus() {}
 
     fun loadTenantConfig() {
         viewModelScope.launch {
@@ -6182,51 +6061,6 @@ class SecretaryViewModel : ViewModel() {
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Customer language update error", e)
                 onDone(false, e.message ?: Strings.connectionError)
             }
-        }
-    }
-
-    fun submitOnboarding(
-        companyName: String, legalType: String,
-        industries: List<IndustryEntry>,
-        internalLangMode: String, customerLangMode: String,
-        defaultInternalLang: String, defaultCustomerLang: String,
-        workspaceMode: String,
-        onSuccess: () -> Unit, onError: (String) -> Unit
-    ) {
-        viewModelScope.launch {
-            try {
-                val languages = mutableListOf<Map<String, Any?>>()
-                languages.add(mapOf("code" to defaultInternalLang, "scope" to "internal", "is_default" to true))
-                languages.add(mapOf("code" to defaultCustomerLang, "scope" to "customer", "is_default" to true))
-                languages.add(mapOf("code" to defaultInternalLang, "scope" to "voice_input", "is_default" to true))
-                languages.add(mapOf("code" to defaultCustomerLang, "scope" to "voice_output", "is_default" to true))
-                if (internalLangMode == "multi") {
-                    for (code in listOf("en","cs","pl")) {
-                        if (code != defaultInternalLang) languages.add(mapOf("code" to code, "scope" to "internal", "is_default" to false))
-                    }
-                }
-                if (customerLangMode == "multi") {
-                    for (code in listOf("en","cs","pl")) {
-                        if (code != defaultCustomerLang) languages.add(mapOf("code" to code, "scope" to "customer", "is_default" to false))
-                    }
-                }
-                val industriesPayload = industries.map { entry ->
-                    mapOf("industry_group_id" to entry.groupId, "industry_subtype_id" to entry.subtypeId)
-                }
-                val data = mapOf<String, Any?>(
-                    "tenant_id" to 1, "company_name" to companyName, "legal_type" to legalType,
-                    "industries" to industriesPayload,
-                    "internal_language_mode" to internalLangMode, "customer_language_mode" to customerLangMode,
-                    "default_internal_language_code" to defaultInternalLang,
-                    "default_customer_language_code" to defaultCustomerLang,
-                    "workspace_mode" to workspaceMode, "languages" to languages
-                )
-                val res = api.companySetup(data)
-                if (res.isSuccessful) {
-                    _uiState.value = _uiState.value.copy(onboardingComplete = true)
-                    onSuccess()
-                } else { onError("Server: ${res.code()} ${res.message()}") }
-            } catch (e: Exception) { e.rethrowIfCancellation(); onError(e.message ?: "Chyba") }
         }
     }
 
@@ -6891,51 +6725,6 @@ class SecretaryViewModel : ViewModel() {
             selectedMushroomRecognition = null
         )
         voiceManager?.speak(reply, expectReply = false, stayIdle = true)
-    }
-
-    fun setPlantCaptureMode(mode: String) {
-        _uiState.value = _uiState.value.copy(
-            plantCaptureMode = mode,
-            selectedPlantRecognition = null,
-            selectedPlantDisease = null,
-            selectedMushroomRecognition = null,
-            plantRecognitionError = null,
-            plantDiseaseError = null,
-            mushroomRecognitionError = null,
-            plantRecognitionLoading = false,
-            plantDiseaseLoading = false,
-            mushroomRecognitionLoading = false
-        )
-    }
-
-    fun consumePendingPlantCaptureRequest(resumeHotword: Boolean = true) {
-        val shouldResumeHotword = _uiState.value.isPlantVoiceCaptureActive
-        if (_uiState.value.pendingPlantCaptureRequestId != null) {
-            _uiState.value = _uiState.value.copy(pendingPlantCaptureRequestId = null)
-        }
-        if (resumeHotword && shouldResumeHotword) {
-            voiceManager?.startHotwordLoop()
-        }
-    }
-
-    fun clearPlantRecognitionResult() {
-        val shouldResumeHotword = _uiState.value.isPlantVoiceCaptureActive
-        _uiState.value = _uiState.value.copy(
-            selectedPlantRecognition = null,
-            selectedPlantDisease = null,
-            selectedMushroomRecognition = null,
-            plantRecognitionError = null,
-            plantDiseaseError = null,
-            mushroomRecognitionError = null,
-            plantRecognitionLoading = false,
-            plantDiseaseLoading = false,
-            mushroomRecognitionLoading = false,
-            isPlantVoiceCaptureActive = false,
-            pendingPlantCaptureRequestId = null
-        )
-        if (shouldResumeHotword) {
-            voiceManager?.startHotwordLoop()
-        }
     }
 
     fun loadNatureHistory() {
