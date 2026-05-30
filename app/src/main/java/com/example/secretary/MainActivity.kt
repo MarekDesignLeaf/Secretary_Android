@@ -5975,6 +5975,10 @@ class SecretaryViewModel : ViewModel() {
                         // Map clean field names to legacy names the UI reads
                         put("default_customer_lang", it["default_customer_language_code"] ?: it["default_currency"])
                         put("name", it["legal_name"] ?: it["trading_name"])
+                        put("company_name", it["legal_name"] ?: it["trading_name"])
+                        put("currency", it["default_currency"])
+                        put("location", it["default_country"])
+                        put("industry", it["industry_group"] ?: it["industry_subtype"])
                     }}
                 } else errors["profile"] = "HTTP ${res.code()}"
             } catch (e: Exception) {
