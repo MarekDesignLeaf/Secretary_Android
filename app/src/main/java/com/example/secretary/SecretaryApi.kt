@@ -539,6 +539,12 @@ interface SecretaryApi {
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    /** Phase A5: execute a voice command as a REAL backend action (calendar/task/client). */
+    @POST("api/v1/voice/execute")
+    suspend fun voiceExecute(
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === BACKUP / UNINSTALL ===
 
     /** Create a pre-uninstall backup. Admin gets full scope; others get personal scope. */

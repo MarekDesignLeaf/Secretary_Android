@@ -7918,121 +7918,39 @@ class SecretaryViewModel : ViewModel() {
 
     // ================================================================
 
+    // ════════════════════════════════════════════════════════════════════
+    // ACTION ENGINE — primary voice/text command path.
+    //
+    // Secretary is a business operating system, not a chatbot. Every command
+    // flows: text -> POST /api/v1/voice/execute -> backend action -> DB ->
+    // confirmation. The backend is the single source of intent + business
+    // logic. The app does NOT resolve intent locally and does NOT open forms
+    // as a substitute for executing an action.
+    //
+    // Only these non-Action-Engine paths survive, and only because they are
+    // genuine ongoing states or real device actions, not chatbot glue:
+    //   - an active work-report voice session (multi-turn dialog)
+    //   - other ongoing flows (contact sorting, navigation address, alias training)
+    //   - explicit chat mode (user asked to talk to the AI) -> /process
+    //   - hard device actions (call / whatsapp / navigation)
+    // ════════════════════════════════════════════════════════════════════
     fun onVoiceInput(text: String) {
         val lower = text.lowercase().trim()
         val normalized = normalizeVoiceCommand(text)
         Log.d("VoiceInput", "Processing: '$text' (norm: '$normalized')")
 
-        // 1. QUICK EXIT / DIALOG END
-        if (isDialogEndPhrase(lower)) {
-            if (_uiState.value.isDialogMode) {
-                _uiState.value = _uiState.value.copy(
-                    dialogSessionHistory = _uiState.value.dialogSessionHistory + ChatMessage("user", text)
-                )
-            }
-            exitDialogMode(text)
-            return
-        }
-
-        // 2. TOOL TRIGGERS (PLANTS/MUSHROOMS)
-        if (Strings.matchesPlantHealthCommand(text)) {
-            requestPlantCaptureFromVoice("health")
-            return
-        }
-        if (Strings.matchesMushroomRecognitionCommand(text)) {
-            requestPlantCaptureFromVoice("mushroom")
-            return
-        }
-        if (Strings.matchesPlantRecognitionCommand(text)) {
-            requestPlantCaptureFromVoice("identify")
-            return
-        }
-
-        // 3. SPECIAL MODES (CONTACT SORTING, WORK REPORT SESSION)
-        if (_uiState.value.contactSortingSession != null) {
-            handleContactSortingVoiceInput(text)
-            return
-        }
+        // ── A. ONGOING MULTI-TURN STATES (must continue, not re-route) ──────────
+        // Work-report voice session: keep feeding the session.
         if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
             processVoiceSessionInput(applyVoiceAliasesToFreeText(text))
             return
         }
-
-        // 4. NAVIGATION COMMANDS (LOCALLY HANDLED)
-        Strings.matchesNavigationCommand(text)?.let { target ->
-            val route = when (target) {
-                "home" -> Screen.Home.route
-                "crm", "clients", "jobs", "tasks", "leads", "quotes", "invoices", "reports", "contacts", "communications" -> Screen.Crm.route
-                "calendar" -> Screen.Calendar.route
-                "tools" -> Screen.Tools.route
-                "settings" -> Screen.Settings.route
-                "activitypricing", "activitypricingscreen" -> Screen.ActivityPricing.route
-                else -> null
-            }
-            if (route != null) {
-                _uiState.value = _uiState.value.copy(
-                    pendingAppNavigation = target,
-                    status = Strings.waitingForCommand,
-                    lastAiReply = "Otevírám $target.",
-                    history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", "Otevírám $target.")).takeLast(30)
-                )
-                voiceManager?.speak("Otevírám.", expectReply = false)
-                return
-            }
-        }
-
-        // 5. ACTION COMMANDS (LOCALLY HANDLED)
-        val action = when {
-            normalized.contains("nov") && (normalized.contains("klient") || normalized.contains("client") || normalized.contains("klien")) -> "add_client"
-            normalized.contains("nov") && (normalized.contains("ukol") || normalized.contains("task") || normalized.contains("zadan")) -> "add_task"
-            normalized.contains("nov") && (normalized.contains("zakazk") || normalized.contains("job") || normalized.contains("zleceni")) -> "add_job"
-            normalized.contains("nov") && (normalized.contains("vykaz") || normalized.contains("report") || normalized.contains("raport")) -> "add_work_report"
-            normalized.contains("nov") && (normalized.contains("lead") || normalized.contains("poptav") || normalized.contains("potencjal")) -> "add_lead"
-            normalized.contains("nov") && (normalized.contains("nabid") || normalized.contains("quote") || normalized.contains("ofert")) -> "add_quote"
-            normalized.contains("nov") && (normalized.contains("faktur") || normalized.contains("invoice")) -> "add_invoice"
-            normalized.contains("nov") && (normalized.contains("kontakt") || normalized.contains("contact")) -> "add_contact"
-            normalized.contains("histor") && (normalized.contains("ukaz") || normalized.contains("zobraz") || normalized.contains("show") || normalized.contains("pokaz")) -> "show_admin_logs"
-            normalized.contains("histor") && (normalized.contains("smaz") || normalized.contains("vymaz") || normalized.contains("clear") || normalized.contains("wyczysc")) -> "clear_history"
-            normalized.contains("mluv") && (normalized.contains("cesky") || normalized.contains("czech")) || normalized.contains("jezyk czeski") -> "lang_cs"
-            normalized.contains("mow") && (normalized.contains("polsku") || normalized.contains("polish")) || normalized.contains("jezyk polski") -> "lang_pl"
-            normalized.contains("mluv") && (normalized.contains("anglicky") || normalized.contains("english")) || normalized.contains("jezyk angielski") -> "lang_en"
-            normalized.contains("pomoc") || normalized.contains("umis") || normalized.contains("help") || normalized.contains("what can you") -> "help"
-            else -> null
-        }
-        if (action != null) {
-            when (action) {
-                "help" -> {
-                    val helpMsg = "Umím otevírat okna, vytvářet záznamy nebo navigovat. Ptejte se na cokoliv."
-                    _uiState.value = _uiState.value.copy(lastAiReply = helpMsg)
-                    voiceManager?.speak(helpMsg, expectReply = true)
-                }
-                "lang_cs" -> { changeLanguage("cs"); voiceManager?.speak("Rozumím, mluvím česky.") }
-                "lang_pl" -> { changeLanguage("pl"); voiceManager?.speak("Rozumiem, mówię po polsku.") }
-                "lang_en" -> { changeLanguage("en"); voiceManager?.speak("Understood, I'm speaking English.") }
-                "clear_history" -> {
-                    clearHistory()
-                    val msg = "Historie smazána."
-                    _uiState.value = _uiState.value.copy(lastAiReply = msg)
-                    voiceManager?.speak(msg)
-                }
-                "show_admin_logs" -> {
-                    _uiState.value = _uiState.value.copy(pendingAppNavigation = "settings")
-                    voiceManager?.speak("Otevírám historii.")
-                }
-                else -> {
-                    _uiState.value = _uiState.value.copy(
-                        pendingAppAction = action,
-                        status = Strings.waitingForCommand,
-                        lastAiReply = "Otevírám formulář.",
-                        history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", "Otevírám formulář.")).takeLast(30)
-                    )
-                    voiceManager?.speak("V pořádku.", expectReply = false)
-                }
-            }
+        // Contact sorting session.
+        if (_uiState.value.contactSortingSession != null) {
+            handleContactSortingVoiceInput(text)
             return
         }
-
-        // 6. ONGOING FLOWS (NAVIGATION ADDRESS, TRAINING, SORTING QUESTIONS)
+        // Navigation-address follow-up.
         if (_uiState.value.awaitingNavigationAddress) {
             if (isVoiceCancelCommand(normalized)) {
                 _uiState.value = _uiState.value.copy(awaitingNavigationAddress = false, status = Strings.waitingForCommand)
@@ -8042,24 +7960,32 @@ class SecretaryViewModel : ViewModel() {
             }
             return
         }
+        // Alias training follow-up.
         if (_uiState.value.voiceAliasTraining != null) {
             processVoiceAliasTrainingInput(text, normalized)
             return
         }
-        if (_uiState.value.isDialogMode && _uiState.value.contactSortingSession == null && _uiState.value.lastAiReply == Strings.contactSortingAskMethod) {
-            // Sorting question handle...
-            val n = normalizeVoiceCommand(text)
-            if (n.contains("abeced") || n.contains("jmeno")) startContactSortingSession("name")
-            else if (n.contains("cislo") || n.contains("predvolb")) startContactSortingSession("phone_prefix", "+44")
-            else voiceManager?.speak(Strings.contactSortingAskMethod, expectReply = true)
+
+        // ── B. EXPLICIT CHAT MODE (the only place /process is the main path) ────
+        // Enter chat mode: "mluv se mnou", "chat mode", "zeptej se ai".
+        if (Strings.matchesChatModeCommand(normalized)) {
+            enterDialogMode()
+            return
+        }
+        // While chat mode is active, an end-phrase exits it; everything else is chat.
+        if (_uiState.value.isDialogMode) {
+            if (isDialogEndPhrase(lower)) {
+                _uiState.value = _uiState.value.copy(
+                    dialogSessionHistory = _uiState.value.dialogSessionHistory + ChatMessage("user", text)
+                )
+                exitDialogMode(text)
+                return
+            }
+            runChatModeTurn(text)
             return
         }
 
-        // 7. ALIAS LEARNING / FORGETTING
-        parseVoiceAliasLearning(text)?.let { learnVoiceAlias(it.alias, it.target, text); return }
-        parseVoiceAliasForget(text)?.let { forgetVoiceAlias(it, text); return }
-
-        // 8. BUILT-IN HARD ACTION TRIGGERS (CALL, WHATSAPP, NAV)
+        // ── C. HARD DEVICE ACTIONS (real phone actions, not chatbot glue) ───────
         if (handleMergeVoiceCommand(text)) return
         parseVoiceAddressReadTarget(text)?.let { readVoiceAddressTarget(it, text); return }
         parseVoiceNavigationAddress(text)?.let { addr ->
@@ -8071,35 +7997,95 @@ class SecretaryViewModel : ViewModel() {
         }
         parseVoiceCallTarget(text)?.let { startVoiceCallTarget(it, text); return }
         parseVoiceWhatsAppCommand(text)?.let { startVoiceWhatsApp(it, text); return }
-        if (matchesStartWorkReportCommand(normalized)) { startWorkReportSession(); return }
 
-        // 9. LOGOUT
+        // ── D. LOGOUT ───────────────────────────────────────────────────────────
         if (Strings.matchesLogoutCommand(lower)) {
             voiceManager?.speak(Strings.loggingOutMessage())
             viewModelScope.launch { kotlinx.coroutines.delay(2000); logout() }
             return
         }
 
-        // 10+11. VOICE RESOLVE + AI SERVER FALLBACK (both run in the same coroutine)
+        // ── E. ACTION ENGINE (PRIMARY PATH) ─────────────────────────────────────
+        // Everything else goes to the backend to be resolved AND executed.
+        _uiState.value = _uiState.value.copy(
+            isListening = false,
+            status = Strings.processing,
+            history = (_uiState.value.history + ChatMessage("user", text)).takeLast(30)
+        )
+        viewModelScope.launch { runActionEngine(text) }
+    }
+
+    /** ACTION ENGINE: send the utterance to POST /api/v1/voice/execute, then
+     *  perform/confirm whatever business action the backend resolved. The backend
+     *  owns intent detection and business logic; the app only executes the result. */
+    private suspend fun runActionEngine(text: String) {
+        try {
+            val resp = api.voiceExecute(mapOf("utterance" to text, "confirmed" to true))
+            if (!resp.isSuccessful) {
+                Log.w("VoiceExecute", "HTTP ${resp.code()}")
+                val msg = Strings.serverError(resp.code())
+                _uiState.value = _uiState.value.copy(status = msg)
+                voiceManager?.speak(Strings.cantReachServer, expectReply = false)
+                return
+            }
+            val body = resp.body()
+            if (body == null) {
+                voiceManager?.speak(Strings.cantReachServer, expectReply = false)
+                return
+            }
+            val intent = body["resolved_intent"]?.toString()
+            val message = body["message"]?.toString() ?: ""
+            val executed = body["executed"] == true
+            Log.d("VoiceExecute", "intent=$intent executed=$executed msg=$message")
+
+            // work_report.start → hand off to the multi-turn work-report session
+            if (intent == "work_report.start") {
+                startWorkReportSession()
+                return
+            }
+
+            if (intent == null || intent == "null" || intent.isBlank()) {
+                // Backend recognised no business intent. Secretary is an action
+                // engine, not a chatbot: we do NOT silently fall back to /process
+                // and we do NOT open a form. We say we didn't understand.
+                val msg = Strings.voiceNotUnderstood
+                _uiState.value = _uiState.value.copy(lastAiReply = msg, status = Strings.waitingForCommand)
+                voiceManager?.speak(msg, expectReply = false)
+                return
+            }
+
+            // Recognised business action → report the backend's confirmation.
+            _uiState.value = _uiState.value.copy(
+                lastAiReply = message,
+                status = Strings.waitingForCommand,
+                history = (_uiState.value.history + ChatMessage("assistant", message)).takeLast(30)
+            )
+            voiceManager?.speak(message, expectReply = false)
+            // Refresh CRM/calendar lists so a newly created entity shows in the UI.
+            refreshCrmDataKeepTasks()
+        } catch (e: Exception) {
+            e.rethrowIfCancellation()
+            Log.w("VoiceExecute", "error: ${e.message}")
+            _uiState.value = _uiState.value.copy(status = Strings.connectionError)
+            voiceManager?.speak(Strings.cantReachServer, expectReply = false)
+        }
+    }
+
+    /** EXPLICIT CHAT MODE turn: this is the ONLY path that uses /process, and only
+     *  after the user explicitly asked to talk to the AI. */
+    private fun runChatModeTurn(text: String) {
         val currentState = _uiState.value
         val correctedText = applyVoiceAliasesToFreeText(text)
         val newUserMessage = ChatMessage("user", correctedText)
         val updatedHistory = (currentState.history + newUserMessage).takeLast(30)
-        
-        if (currentState.isDialogMode) {
-            _uiState.value = currentState.copy(dialogSessionHistory = currentState.dialogSessionHistory + newUserMessage)
-        }
-        
-        _uiState.value = currentState.copy(isListening = false, status = Strings.processing, history = updatedHistory)
+        _uiState.value = currentState.copy(
+            isListening = false,
+            status = Strings.processing,
+            history = updatedHistory,
+            dialogSessionHistory = currentState.dialogSessionHistory + newUserMessage
+        )
         viewModelScope.launch {
             try {
-                // 10. VOICE RESOLVE — try AI control bridge first (screen-aware resolver)
-                // Use "global" as fallback screen code if context not yet set (cold start)
-                val screenCode = _uiState.value.currentScreenCode ?: "global"
-                val handled = tryVoiceResolveSuspend(text, screenCode)
-                if (handled) return@launch
-
-                // 11. AI SERVER FALLBACK
                 val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
                 val res = api.processMessage(MessageRequest(
                     text = correctedText, history = updatedHistory,
@@ -8117,13 +8103,9 @@ class SecretaryViewModel : ViewModel() {
                             lastAiReply = assistantReply,
                             status = if (response.is_question) "${Strings.listening}..." else Strings.waitingForCommand,
                             history = _uiState.value.history + newAssistantMessage,
-                            dialogSessionHistory = if (_uiState.value.isDialogMode) (_uiState.value.dialogSessionHistory + newAssistantMessage).takeLast(100) else _uiState.value.dialogSessionHistory
+                            dialogSessionHistory = (_uiState.value.dialogSessionHistory + newAssistantMessage).takeLast(100)
                         )
-                        handleAction(response)
-                        if (response.action_type !in setOf("LIST_CALENDAR_EVENTS", "START_WORK_REPORT", "CALL_CONTACT", "SEND_WHATSAPP", "START_NAVIGATION", "OPEN_NAVIGATION", "NAVIGATE")) {
-                            voiceManager?.speak(assistantReply, expectReply = response.is_question || _uiState.value.isDialogMode)
-                        }
-                        refreshCrmDataKeepTasks()
+                        voiceManager?.speak(assistantReply, expectReply = true)
                     }
                 } else {
                     _uiState.value = _uiState.value.copy(status = Strings.serverError(res.code()))

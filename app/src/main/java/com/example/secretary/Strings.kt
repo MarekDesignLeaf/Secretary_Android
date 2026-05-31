@@ -1031,6 +1031,11 @@ object Strings {
     val listening get() = t("Listening", "Poslouchám", "Słucham")
     val waitingForCommand get() = t("Waiting for command...", "Čekám na povel...", "Czekam na polecenie...")
     val processing get() = t("Processing...", "Zpracovávám...", "Przetwarzam...")
+    val voiceNotUnderstood get() = t(
+        "I didn't catch a command. Try: create a meeting, add a task, new client.",
+        "Nerozuměl jsem příkazu. Zkuste: vytvoř schůzku, přidej úkol, nový klient.",
+        "Nie zrozumiałem polecenia. Spróbuj: utwórz spotkanie, dodaj zadanie, nowy klient."
+    )
     val history get() = t("HISTORY", "HISTORIE", "HISTORIA")
     val backgroundActive get() = t("Background active", "Na pozadí aktivní", "Aktywne w tle")
     val backgroundInactive get() = t("Background inactive", "Na pozadí neaktivní", "Nieaktywne w tle")
@@ -1348,6 +1353,16 @@ object Strings {
         return normalized == "logout" || normalized == "log out" ||
             normalized.contains("odhlasit") || normalized.contains("odhlásit") ||
             normalized.contains("wyloguj")
+    }
+
+    /** Explicit request to switch into free-form AI chat mode. This is the ONLY
+     *  trigger that routes voice to the /process chat endpoint. */
+    fun matchesChatModeCommand(text: String): Boolean {
+        val n = normalizeCommandText(text)
+        return n.contains("mluv se mnou") || n.contains("chat mode") || n.contains("chatmode") ||
+            n.contains("zeptej se ai") || n.contains("zeptat se ai") || n.contains("rezim chatu") ||
+            n.contains("povidej si") || n.contains("talk to me") || n.contains("ask the ai") ||
+            n.contains("ask ai") || n.contains("porozmawiaj")
     }
 
     fun matchesNavigationCommand(text: String): String? {
