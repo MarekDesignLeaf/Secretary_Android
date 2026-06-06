@@ -74,6 +74,10 @@ class VoiceManager(
     private val MAX_CONSECUTIVE_ERRORS = 5
     private var commandNoMatchRetries = 0
     private val MAX_COMMAND_NO_MATCH_RETRIES = 0
+    // Dialog follow-up: stay listening through several silent gaps so the user
+    // can answer a question without repeating the hotword (~5 retries ≈ patient wait).
+    private var dialogNoMatchRetries = 0
+    private val MAX_DIALOG_NO_MATCH_RETRIES = 5
     // Set when recognizer returns ERROR_LANGUAGE_NOT_SUPPORTED (12) or ERROR_LANGUAGE_UNAVAILABLE (13)
     // Forces resolvePreferredRecognitionService() to skip AiAi on the next attempt.
     private var languageNotSupportedFallback = false
@@ -275,7 +279,9 @@ class VoiceManager(
         consecutiveErrors = 0
         commandNoMatchRetries = 0
         onStatusChange("${Strings.listening}...")
-        handler.postDelayed({ ensureRecognizerAndListen() }, 400)
+        // A5.2 dialog: short delay so the recognizer starts almost immediately after
+        // the question finishes, instead of clipping the start of the user answer.
+        handler.postDelayed({ ensureRecognizerAndListen() }, 150)
     }
 
     fun startDialogMode() {
@@ -286,7 +292,7 @@ class VoiceManager(
         consecutiveErrors = 0
         commandNoMatchRetries = 0
         onStatusChange("Dialog...")
-        handler.postDelayed({ ensureRecognizerAndListen() }, 300)
+        handler.postDelayed({ ensureRecognizerAndListen() }, 150)
     }
 
     fun isInDialogMode(): Boolean = mode == ListenMode.DIALOG
@@ -457,6 +463,7 @@ class VoiceManager(
                 }
                 hotwordMatchedInSession = false
                 Log.d(TAG, "Calling startListening on recognizer")
+                muteRecognizerBeep()
                 recognizer?.startListening(createRecognizerIntent())
                 isRecognizerActive = true
                 lastRecognizerStartAt = SystemClock.elapsedRealtime()
@@ -488,12 +495,16 @@ class VoiceManager(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS
                 )
             } else {
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
                 putExtra("android.speech.extra.DICTATION_MODE", false)
-                val silence = settings.silenceLength
+                // Command mode: give the recognizer time to capture the WHOLE phrase,
+                // not just the last word. Without a minimum length it can finalize on
+                // the first word + short pause (root cause of "ukol"/"schuzku" only).
+                val silence = maxOf(settings.silenceLength, 1500L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4_000L)
                 putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence + 1000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence + 1500L)
             }
         }
     }
@@ -604,6 +615,24 @@ class VoiceManager(
             if (mode == ListenMode.COMMAND &&
                 (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
             ) {
+                // DIALOG MODE: Secretary asked a question and is waiting for the answer
+                // (expectReplyAfterSpeak). Stay patient — keep listening instead of
+                // dropping back to hotword, so the user never has to say "hej" again
+                // mid-conversation. Allow several silent retries before giving up.
+                if (expectReplyAfterSpeak) {
+                    if (dialogNoMatchRetries < MAX_DIALOG_NO_MATCH_RETRIES) {
+                        dialogNoMatchRetries++
+                        Log.d(TAG, "Dialog: no answer yet, keep listening (retry $dialogNoMatchRetries)")
+                        scheduleRestart(250L)
+                        return
+                    }
+                    // Too many silent retries — end the wait gracefully.
+                    Log.d(TAG, "Dialog: gave up waiting for answer; returning to hotword")
+                    expectReplyAfterSpeak = false
+                    dialogNoMatchRetries = 0
+                    startHotwordLoop()
+                    return
+                }
                 if (commandNoMatchRetries >= MAX_COMMAND_NO_MATCH_RETRIES) {
                     Log.d(TAG, "No command captured; returning to hotword mode")
                     startHotwordLoop()
@@ -612,6 +641,7 @@ class VoiceManager(
                 commandNoMatchRetries++
             } else if (mode == ListenMode.COMMAND) {
                 commandNoMatchRetries = 0
+                dialogNoMatchRetries = 0
             }
             if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY || error == SpeechRecognizer.ERROR_CLIENT || error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED) {
                 try { recognizer?.cancel() } catch (_: Exception) { }
@@ -652,7 +682,20 @@ class VoiceManager(
                         Log.d(TAG, "Command candidates: ${candidates.joinToString(" | ")}")
                     }
                     val text = candidates.firstOrNull()?.let(::normalizeRecognizedText).orEmpty()
-                    if (text.isNotBlank()) onResult(text) else startHotwordLoop()
+                    if (text.isNotBlank()) {
+                        // User spoke — dialog answer received, clear the patient-wait flag.
+                        expectReplyAfterSpeak = false
+                        dialogNoMatchRetries = 0
+                        onResult(text)
+                    } else if (expectReplyAfterSpeak && dialogNoMatchRetries < MAX_DIALOG_NO_MATCH_RETRIES) {
+                        // Still waiting for an answer — keep listening, no hotword needed.
+                        dialogNoMatchRetries++
+                        scheduleRestart(250L)
+                    } else {
+                        expectReplyAfterSpeak = false
+                        dialogNoMatchRetries = 0
+                        startHotwordLoop()
+                    }
                 }
                 else -> {}
             }
@@ -682,6 +725,21 @@ class VoiceManager(
         override fun onEvent(eventType: Int, params: Bundle?) {}
     }
 
+    /** Briefly mutes the notification/system streams so the OS SpeechRecognizer
+     *  start "beep" (which Samsung plays even with SUPPRESS_BEEP) is silenced,
+     *  then restores volumes shortly after the recognizer has started. */
+    private fun muteRecognizerBeep() {
+        try {
+            val am = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+            val streams = intArrayOf(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.STREAM_SYSTEM)
+            for (s in streams) am.adjustStreamVolume(s, android.media.AudioManager.ADJUST_MUTE, 0)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try { for (s in streams) am.adjustStreamVolume(s, android.media.AudioManager.ADJUST_UNMUTE, 0) }
+                catch (_: Exception) {}
+            }, 700)
+        } catch (e: Exception) { Log.w(TAG, "muteRecognizerBeep failed: ${e.message}") }
+    }
+
     private fun triggerHotword() {
         wakeWordEngine?.stop()
         cancelRecognizer()
@@ -692,12 +750,10 @@ class VoiceManager(
     // ── Barge-in implementation ──────────────────────────────────────────────
 
     private fun startBargeInDetector() {
-        if (bargeInDetector != null) return  // already running
-        bargeInDetector = BargeInDetector(
-            onBargeIn = { interruptTts() }
-        )
-        bargeInDetector?.start()
-        Log.d(TAG, "BargeInDetector started for session=${'$'}voiceSessionId")
+        // DISABLED: BargeInDetector picked up the device's own TTS output from the
+        // speaker as a "barge-in", instantly cutting off "Poslouchám" and breaking
+        // the command flow. Disabled until proper acoustic echo cancellation exists.
+        return
     }
 
     private fun stopBargeInDetector() {

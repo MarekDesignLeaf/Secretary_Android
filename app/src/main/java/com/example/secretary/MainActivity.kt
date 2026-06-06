@@ -314,7 +314,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             onResult = { text -> viewModel.onVoiceInput(text) },
             onReady = { viewModel.setListening(true) },
             onRecognizerError = { viewModel.setListening(false) },
-            onHotwordDetected = { viewModel.enterDialogMode() },
+            onHotwordDetected = { viewModel.onHotwordListening() },
             onStatusChange = { status -> viewModel.setStatus(status) }
         )
         service.voiceManager?.let { vm ->
@@ -839,6 +839,9 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
                     viewModel.loadAssistantMemory()
                 }
                 SettingsScreen(viewModel, navController)
+            }
+            composable(Screen.Help.route) {
+                HelpScreen(viewModel, navController)
             }
             composable(
                 route = Screen.ClientDetail.route,
@@ -4966,6 +4969,8 @@ class SecretaryViewModel : ViewModel() {
     private var mailManager: MailManager? = null
     private var settingsManager: SettingsManager? = null
     private var recentVoiceContact: RecentVoiceContact? = null
+    // Phase A5.2: backend-owned pending voice action awaiting follow-up answer.
+    private var pendingVoiceActionId: String? = null
     private val recentVoiceContactTtlMs = 5 * 60 * 1000L
 
     private data class RecentVoiceContact(
@@ -6299,6 +6304,16 @@ class SecretaryViewModel : ViewModel() {
         return dialogEndPhrases.any { phrase ->
             norm == phrase || norm.startsWith("$phrase ") || norm.endsWith(" $phrase")
         }
+    }
+
+    /** Hotword detected: just enter command-listening state. The command that
+     *  follows goes through onVoiceInput → Action Engine (NOT chat mode). Chat mode
+     *  is only entered when the user explicitly says "mluv se mnou" / "chat mode". */
+    fun onHotwordListening() {
+        _uiState.value = _uiState.value.copy(
+            isListening = true,
+            status = Strings.listening
+        )
     }
 
     fun enterDialogMode() {
@@ -7939,9 +7954,20 @@ class SecretaryViewModel : ViewModel() {
         val normalized = normalizeVoiceCommand(text)
         Log.d("VoiceInput", "Processing: '$text' (norm: '$normalized')")
 
+        // ── A5.2 PENDING ACTION GUARD ───────────────────────────────────────────
+        // If a backend pending action is awaiting a follow-up answer, this utterance
+        // is its continuation. Do NOT re-route to navigation / new intent / chat;
+        // send it straight to the Action Engine (which forwards pending_action_id).
+        if (pendingVoiceActionId != null) {
+            Log.d("VoiceInput", "Continuing PENDING action ${pendingVoiceActionId}")
+            viewModelScope.launch { runActionEngine(text) }
+            return
+        }
+
         // ── A. ONGOING MULTI-TURN STATES (must continue, not re-route) ──────────
         // Work-report voice session: keep feeding the session.
         if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
+            Log.d("VoiceInput", "Routed to WORK SESSION (section A)")
             processVoiceSessionInput(applyVoiceAliasesToFreeText(text))
             return
         }
@@ -7966,6 +7992,27 @@ class SecretaryViewModel : ViewModel() {
             return
         }
 
+        // ── A6. VOICE-CREATED COMMAND ALIASES ───────────────────────────────────
+        // "vytvor alias X na prikaz Y" / "kdyz reknu X udelej Y" -> stored as a
+        // command alias (targetType="command"). Later "X" is rewritten to "Y"
+        // before reaching the Action Engine. Also handle forgetting an alias.
+        parseVoiceCommandAliasLearning(text)?.let { (phrase, command) ->
+            settingsManager?.upsertVoiceAlias(phrase, command, "command")
+            invalidateAliasCache()
+            val msg = Strings.voiceAliasCommandSaved(phrase, command)
+            _uiState.value = _uiState.value.copy(lastAiReply = msg)
+            voiceManager?.speak(msg, expectReply = false)
+            return
+        }
+        parseVoiceAliasForget(text)?.let { phrase ->
+            val removed = settingsManager?.removeVoiceAlias(phrase) ?: false
+            invalidateAliasCache()
+            val msg = if (removed) Strings.voiceAliasForgotten(phrase) else Strings.voiceAliasNotFound(phrase)
+            _uiState.value = _uiState.value.copy(lastAiReply = msg)
+            voiceManager?.speak(msg, expectReply = false)
+            return
+        }
+
         // ── B. EXPLICIT CHAT MODE (the only place /process is the main path) ────
         // Enter chat mode: "mluv se mnou", "chat mode", "zeptej se ai".
         if (Strings.matchesChatModeCommand(normalized)) {
@@ -7974,6 +8021,7 @@ class SecretaryViewModel : ViewModel() {
         }
         // While chat mode is active, an end-phrase exits it; everything else is chat.
         if (_uiState.value.isDialogMode) {
+            Log.d("VoiceInput", "Routed to DIALOG MODE (chat) - isDialogMode=true")
             if (isDialogEndPhrase(lower)) {
                 _uiState.value = _uiState.value.copy(
                     dialogSessionHistory = _uiState.value.dialogSessionHistory + ChatMessage("user", text)
@@ -8005,7 +8053,8 @@ class SecretaryViewModel : ViewModel() {
             return
         }
 
-        // ── E. ACTION ENGINE (PRIMARY PATH) ─────────────────────────────────────
+        Log.d("VoiceInput", "Reached ACTION ENGINE (section E) for: '$text'")
+        // ── E. ACTION ENGINE (PRIMARY PATH) ─────────────────────────────────
         // Everything else goes to the backend to be resolved AND executed.
         _uiState.value = _uiState.value.copy(
             isListening = false,
@@ -8020,7 +8069,11 @@ class SecretaryViewModel : ViewModel() {
      *  owns intent detection and business logic; the app only executes the result. */
     private suspend fun runActionEngine(text: String) {
         try {
-            val resp = api.voiceExecute(mapOf("utterance" to text, "confirmed" to true))
+            val reqBody = HashMap<String, Any?>()
+            reqBody["utterance"] = text
+            reqBody["confirmed"] = true
+            pendingVoiceActionId?.let { reqBody["pending_action_id"] = it }
+            val resp = api.voiceExecute(reqBody)
             if (!resp.isSuccessful) {
                 Log.w("VoiceExecute", "HTTP ${resp.code()}")
                 val msg = Strings.serverError(resp.code())
@@ -8036,7 +8089,28 @@ class SecretaryViewModel : ViewModel() {
             val intent = body["resolved_intent"]?.toString()
             val message = body["message"]?.toString() ?: ""
             val executed = body["executed"] == true
-            Log.d("VoiceExecute", "intent=$intent executed=$executed msg=$message")
+            val status = body["status"]?.toString() ?: "executed"
+            val pendingId = body["pending_action_id"]?.toString()
+            val question = body["question"]?.toString()
+            Log.d("VoiceExecute", "intent=$intent status=$status executed=$executed pid=$pendingId msg=$message")
+
+            // A5.2: backend needs more info -> ask the follow-up question and keep
+            // the pending action id; the NEXT utterance continues this action.
+            if (status == "needs_more_info" && pendingId != null) {
+                pendingVoiceActionId = pendingId
+                val q = question ?: message
+                _uiState.value = _uiState.value.copy(
+                    lastAiReply = q,
+                    status = Strings.listening,
+                    history = (_uiState.value.history + ChatMessage("assistant", q)).takeLast(30)
+                )
+                // expectReply = true -> recognizer listens again for the answer.
+                voiceManager?.speak(q, expectReply = true)
+                return
+            }
+
+            // Action finished (executed / cancelled / error) -> clear pending.
+            pendingVoiceActionId = null
 
             // work_report.start → hand off to the multi-turn work-report session
             if (intent == "work_report.start") {
@@ -9155,6 +9229,40 @@ class SecretaryViewModel : ViewModel() {
         return result
     }
 
+    /** Parse a spoken request to create a COMMAND alias (Phase A6).
+     *  Returns (phrase, command) where saying `phrase` later runs `command`. */
+    private fun parseVoiceCommandAliasLearning(text: String): Pair<String, String>? {
+        // Robust parse of "create a command alias" requests. Works on the ORIGINAL
+        // text (keeps diacritics) using diacritics-tolerant character classes, and
+        // requires a STRONG separator so phrases/commands that themselves contain
+        // common words ("na", "je") are not mis-split.
+        val t = text.trim()
+        // Character classes tolerate both diacritic and ASCII spellings.
+        val rxs = listOf(
+            // "vytvoř alias <PHRASE> na příkaz <COMMAND>"
+            Regex("^(?:vytvo[rř]|p[rř]idej|nov[yý])\\s+alias\\s+(.+?)\\s+na\\s+p[rř][ií]kaz\\s+(.+)$", RegexOption.IGNORE_CASE),
+            // "když řeknu <PHRASE> udělej/spusť/tak <COMMAND>"
+            Regex("^kdy[zž]\\s+[rř]eknu\\s+(.+?)\\s+(?:ud[eě]lej|spus[tť]|tak)\\s+(.+)$", RegexOption.IGNORE_CASE),
+            // "příkaz <PHRASE> znamená <COMMAND>"
+            Regex("^p[rř][ií]kaz\\s+(.+?)\\s+znamen[aá]\\s+(.+)$", RegexOption.IGNORE_CASE),
+            // "alias příkazu <PHRASE> je <COMMAND>"
+            Regex("^alias\\s+p[rř][ií]kazu\\s+(.+?)\\s+je\\s+(.+)$", RegexOption.IGNORE_CASE),
+            // "vytvoř alias <PHRASE> na <COMMAND>"  (weakest, last)
+            Regex("^(?:vytvo[rř]|p[rř]idej)\\s+alias\\s+(.+?)\\s+na\\s+(.+)$", RegexOption.IGNORE_CASE)
+        )
+        for (rx in rxs) {
+            val m = rx.find(t) ?: continue
+            val phrase = m.groupValues[1].trim()
+            val command = m.groupValues[2].trim()
+            // Guard: phrase and command must be meaningful and different.
+            if (phrase.length >= 2 && command.length >= 2 &&
+                !phrase.equals(command, ignoreCase = true)) {
+                return phrase to command
+            }
+        }
+        return null
+    }
+
     private fun parseVoiceAliasLearning(text: String): VoiceAliasCommand? {
         val normalized = normalizeVoiceCommand(text)
         val patterns = listOf(
@@ -9798,6 +9906,24 @@ class SecretaryViewModel : ViewModel() {
         loadNatureHistory()
     }
     fun resetSettings() { settingsManager?.resetAll(); setStatus(Strings.settingsRestored) }
+
+    /** Fetch user/permission-filtered help from the backend (single source of truth).
+     *  Returns the "sections" list, or null on failure. HelpScreen renders this. */
+    suspend fun fetchVoiceHelp(): List<Map<String, Any?>>? {
+        return try {
+            val res = api.getVoiceHelp()
+            if (res.isSuccessful) {
+                @Suppress("UNCHECKED_CAST")
+                (res.body()?.get("sections") as? List<Map<String, Any?>>)
+            } else {
+                Log.w("VoiceHelp", "HTTP ${res.code()}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.w("VoiceHelp", "fetch failed: ${e.message}")
+            null
+        }
+    }
     fun exportCrmData() { viewModelScope.launch { setStatus(Strings.exportUnavailable) } }
     fun triggerManualImport() {
         val path = settingsManager?.importFilePath ?: ""

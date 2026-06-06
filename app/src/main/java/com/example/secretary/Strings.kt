@@ -42,6 +42,20 @@ object Strings {
     val calendar get() = t("Calendar", "Kalendář", "Kalendarz")
     val tools get() = t("Tools", "Nástroje", "Narzędzia")
     val settings get() = t("Settings", "Nastavení", "Ustawienia")
+    val helpTitle get() = t("Help", "Nápověda", "Pomoc")
+    val commandAliasesTitle get() = t("Command aliases", "Aliasy příkazů", "Aliasy poleceń")
+    val commandAliasesHint get() = t("Map your own phrase to a command. Saying the phrase runs the command.", "Namapuj vlastní frázi na příkaz. Když řekneš frázi, provede se příkaz.", "Przypisz własną frazę do polecenia.")
+    val commandAliasesEmpty get() = t("No command aliases yet.", "Zatím žádné aliasy příkazů.", "Brak aliasów poleceń.")
+    val commandAliasAddTitle get() = t("Add alias", "Přidat alias", "Dodaj alias")
+    val commandAliasPhraseLabel get() = t("Your phrase", "Tvoje fráze", "Twoja fraza")
+    val commandAliasPhrasePh get() = t("e.g. site visit", "např. domluv návštěvu", "np. wizyta")
+    val commandAliasCommandLabel get() = t("Command to run", "Příkaz k provedení", "Polecenie")
+    val commandAliasCommandPh get() = t("e.g. add meeting", "např. přidej schůzku", "np. dodaj spotkanie")
+    val commandAliasAddButton get() = t("Add alias", "Přidat alias", "Dodaj alias")
+    val loading get() = t("Loading…", "Načítám…", "Ładowanie…")
+    val helpIntro get() = t("Voice and screen commands by area. Say \"help\" or \"help calendar\".", "Hlasové a obrazovkové příkazy podle oblastí. Řekni „help“ nebo „nápověda kalendář“.", "Polecenia głosowe i ekranowe według obszarów.")
+    val helpLive get() = t("Available now", "Dostupné teď", "Dostępne teraz")
+    val helpPlanned get() = t("Coming soon", "Připravuje se", "Wkrótce")
 
     // === DASHBOARD ===
     val urgentTasks get() = t("Urgent tasks", "Urgentní úkoly", "Pilne zadania")
@@ -439,6 +453,11 @@ object Strings {
         "Saved voice alias '$alias' for $target.",
         "Uložila jsem hlasový alias '$alias' pro $target.",
         "Zapisałam alias głosowy '$alias' dla $target."
+    )
+    fun voiceAliasCommandSaved(phrase: String, command: String): String = t(
+        "Done. Saying '$phrase' will now run: $command.",
+        "Hotovo. Když řekneš '$phrase', provedu: $command.",
+        "Gotowe. Gdy powiesz '$phrase', wykonam: $command."
     )
     val voiceAliasTrainingCancelled get() = t(
         "Voice alias training cancelled.",

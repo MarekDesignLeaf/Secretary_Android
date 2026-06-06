@@ -41,12 +41,25 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 16.dp)) {
         item { Text(Strings.settings, fontSize = 26.sp, fontWeight = FontWeight.Bold) }
+        item {
+            Card(
+                Modifier.fillMaxWidth().clickable { navController?.navigate(Screen.Help.route) }
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(Strings.helpTitle, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = null)
+                }
+            }
+        }
         item { RuntimeDataStatusSection(viewModel, sm) }
         item { CompanyProfileSection(viewModel, sm) }
         item { RatesSection(viewModel, navController) }
         item { LanguageSection(sm, viewModel) }
         item { ThemeSection(sm) }
         item { VoiceSection(sm) }
+        item { CommandAliasSection(sm) }
         item { AssistantMemorySection(viewModel) }
         item { ServerSection(sm, viewModel, state) }
         item { CrmSection(sm) }
@@ -448,6 +461,52 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         SSlider(Strings.voicePitch, pitch, 0.5f..2.0f, 5, "%.1fx".format(pitch), { pitch = it }) { sm.ttsPitch = pitch }
         var sil by remember { mutableFloatStateOf(sm.silenceLength.toFloat()) }
         SSlider(Strings.silenceLengthLabel, sil, 1500f..10000f, 7, "%.1fs".format(sil / 1000), { sil = it }) { sm.silenceLength = sil.toLong() }
+    }
+}
+
+@Composable private fun CommandAliasSection(sm: SettingsManager) {
+    var exp by remember { mutableStateOf(false) }
+    var aliases by remember { mutableStateOf(sm.getVoiceAliases().filter { it.targetType == "command" }) }
+    var newPhrase by remember { mutableStateOf("") }
+    var newCommand by remember { mutableStateOf("") }
+    fun refresh() { aliases = sm.getVoiceAliases().filter { it.targetType == "command" } }
+    SCard(Strings.commandAliasesTitle, Icons.Default.Build, exp, { exp = !exp }) {
+        Text(Strings.commandAliasesHint, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        if (aliases.isEmpty()) {
+            Text(Strings.commandAliasesEmpty, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            aliases.forEach { a ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("\u201c${a.alias}\u201d", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("\u2192 ${a.target}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { sm.removeVoiceAlias(a.alias); refresh() }) {
+                        Icon(Icons.Default.Delete, contentDescription = Strings.delete, tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+                HorizontalDivider()
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(Strings.commandAliasAddTitle, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Spacer(Modifier.height(6.dp))
+        SField(Strings.commandAliasPhraseLabel, newPhrase, { newPhrase = it }, Strings.commandAliasPhrasePh)
+        Spacer(Modifier.height(6.dp))
+        SField(Strings.commandAliasCommandLabel, newCommand, { newCommand = it }, Strings.commandAliasCommandPh)
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = {
+                val p = newPhrase.trim(); val c = newCommand.trim()
+                if (p.length >= 2 && c.length >= 2 && !p.equals(c, ignoreCase = true)) {
+                    sm.upsertVoiceAlias(p, c, "command")
+                    newPhrase = ""; newCommand = ""; refresh()
+                }
+            },
+            enabled = newPhrase.trim().length >= 2 && newCommand.trim().length >= 2,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(Strings.commandAliasAddButton) }
     }
 }
 

@@ -545,6 +545,10 @@ interface SecretaryApi {
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    /** Help content filtered by the user's permissions, in their language. */
+    @GET("api/v1/voice/help")
+    suspend fun getVoiceHelp(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === BACKUP / UNINSTALL ===
 
     /** Create a pre-uninstall backup. Admin gets full scope; others get personal scope. */
