@@ -970,6 +970,8 @@ object Strings {
     val scheduledTasksLabel get() = t("Scheduled tasks", "Naplánované úkoly", "Zaplanowane zadania")
     val sharedPlanningLabel get() = t("Shared planning", "Sdílené plánování", "Plan współdzielony")
     val calendarWeekLabel get() = t("Week", "Týden", "Tydzień")
+    val calendarViewWeek get() = t("Week", "Týden", "Tydzień")
+    val calendarViewMonth get() = t("Month", "Měsíc", "Miesiąc")
     val calendarMonthLabel get() = t("Month", "Měsíc", "Miesiąc")
     val calendarEventsLabel get() = t("Calendar events", "Události z kalendáře", "Wydarzenia z kalendarza")
     val noCalendarEntries get() = t("No planned items yet", "Zatím nejsou žádné plánované položky", "Brak zaplanowanych pozycji")

@@ -942,6 +942,7 @@ private fun ToolsHubScreen(viewModel: SecretaryViewModel, onOpenMode: (String) -
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(viewModel: SecretaryViewModel) {
     val state by viewModel.uiState.collectAsState()
@@ -949,6 +950,8 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
     val today = remember { Calendar.getInstance() }
     var visibleMonth by remember { mutableStateOf(calendarMonthStart(today)) }
     var selectedDate by remember { mutableStateOf(formatCalendarDayKey(today)) }
+    // "week" or "month" view, like Google Calendar.
+    var calViewMode by remember { mutableStateOf("month") }
     LaunchedEffect(Unit) {
         viewModel.loadCalendarFeed()
         val ctx = viewModel.getCalendarText(7)
@@ -992,18 +995,30 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
             )
         }
         item {
-            Text(Strings.calendarWeekLabel, fontWeight = FontWeight.SemiBold)
+            // View switch: Week / Month (like Google Calendar)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = calViewMode == "week",
+                    onClick = { calViewMode = "week" },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
+                ) { Text(Strings.calendarViewWeek) }
+                SegmentedButton(
+                    selected = calViewMode == "month",
+                    onClick = { calViewMode = "month" },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                ) { Text(Strings.calendarViewMonth) }
+            }
         }
-        item {
-            CalendarWeekRow(weekDays = selectedWeek) { selectedDate = it.dateKey }
-        }
-        item {
-            Text(Strings.calendarMonthLabel, fontWeight = FontWeight.SemiBold)
-        }
-        item {
-            CalendarMonthGrid(days = monthDays) { day ->
-                selectedDate = day.dateKey
-                visibleMonth = calendarMonthStart(day.calendar)
+        if (calViewMode == "week") {
+            item {
+                CalendarWeekRow(weekDays = selectedWeek) { selectedDate = it.dateKey }
+            }
+        } else {
+            item {
+                CalendarMonthGrid(days = monthDays) { day ->
+                    selectedDate = day.dateKey
+                    visibleMonth = calendarMonthStart(day.calendar)
+                }
             }
         }
         item {
