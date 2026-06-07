@@ -193,24 +193,54 @@ class VoiceManager(
     )
 
     private fun normalizeRecognizedText(text: String): String {
-        val corrected = normalize(text)
+        // Keep diacritics in the OUTPUT. We only normalize for *matching* token
+        // corrections and aliases, but rebuild from the original (accented) tokens
+        // when no correction applies — so "schůzku" stays "schůzku", not "schuzku".
+        val corrections = spokenTokenCorrections()
+        val rebuilt = text.trim()
             .split(" ")
             .filter { it.isNotBlank() }
-            .joinToString(" ") { token -> spokenTokenCorrections()[token] ?: token }
-        return applyVoiceAliases(corrected).trim()
+            .joinToString(" ") { token ->
+                // match correction on the diacritics-stripped token, but if there's
+                // no correction, keep the ORIGINAL token with its diacritics.
+                corrections[normalize(token)] ?: token
+            }
+        return applyVoiceAliasesKeepingDiacritics(rebuilt).trim()
     }
 
-    private fun applyVoiceAliases(text: String): String {
-        var corrected = text
+    /** Apply aliases while preserving diacritics. If an alias phrase matches
+     *  (compared without diacritics), replace ONLY that phrase with the alias
+     *  target and keep the rest of the sentence (with its accents) intact. */
+    private fun applyVoiceAliasesKeepingDiacritics(text: String): String {
+        var result = text
         settings.getVoiceAliases()
             .sortedByDescending { normalize(it.alias).length }
             .forEach { alias ->
                 val aliasNorm = normalize(alias.alias)
-                val targetNorm = normalize(alias.target)
-                if (aliasNorm.length < 2 || targetNorm.length < 2 || aliasNorm == targetNorm) return@forEach
-                corrected = corrected.replace(Regex("\\b${Regex.escape(aliasNorm)}\\b"), targetNorm)
+                val target = alias.target.trim()
+                if (aliasNorm.length < 2 || target.length < 2) return@forEach
+                if (aliasNorm == normalize(target)) return@forEach
+                // Build a diacritics-insensitive regex for the alias phrase: each
+                // letter matches itself OR its accented variants are handled by
+                // comparing on normalized words. Simpler: split into words and scan.
+                val aliasWords = aliasNorm.split(" ")
+                val words = result.split(" ")
+                val out = ArrayList<String>()
+                var k = 0
+                while (k < words.size) {
+                    val windowNorm = words.subList(k, minOf(k + aliasWords.size, words.size))
+                        .joinToString(" ") { normalize(it) }
+                    if (windowNorm == aliasNorm) {
+                        out.add(target)
+                        k += aliasWords.size
+                    } else {
+                        out.add(words[k])
+                        k += 1
+                    }
+                }
+                result = out.joinToString(" ")
             }
-        return corrected
+        return result
     }
 
     private fun recognitionCandidates(results: Bundle?): List<String> {
