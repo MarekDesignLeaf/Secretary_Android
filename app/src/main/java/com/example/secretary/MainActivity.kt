@@ -9949,7 +9949,7 @@ class SecretaryViewModel : ViewModel() {
     } catch (e: Exception) { Log.w("GCal", "calendars: ${e.message}"); null }
 
     suspend fun gcalSelectCalendar(id: String): Boolean = try {
-        api.gcalSelectCalendar(mapOf("calendar_id" to id)).isSuccessful
+        api.gcalSelectCalendar(mapOf("google_calendar_id" to id)).isSuccessful
     } catch (e: Exception) { Log.w("GCal", "select: ${e.message}"); false }
 
     suspend fun gcalSync(): Boolean = try {
