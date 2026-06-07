@@ -19,12 +19,12 @@ import androidx.compose.material.icons.filled.Close
 @Composable
 fun HelpScreen(viewModel: SecretaryViewModel, navController: NavHostController) {
     val scroll = rememberScrollState()
-    var expanded by remember { mutableStateOf<String?>(null) }
-    var sections by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
+    var expandedModule by remember { mutableStateOf<String?>(null) }
+    var modules by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        sections = viewModel.fetchVoiceHelp()
+        modules = viewModel.fetchCommandTree()
         loading = false
     }
 
@@ -45,53 +45,52 @@ fun HelpScreen(viewModel: SecretaryViewModel, navController: NavHostController) 
         ) {
             Text(Strings.helpIntro, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(16.dp))
-
             when {
-                loading -> {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Text(Strings.loading)
+                loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp)); Text(Strings.loading)
+                }
+                modules.isNullOrEmpty() -> Text(Strings.cantReachServer, color = MaterialTheme.colorScheme.error)
+                else -> modules!!.forEach { module ->
+                    val mkey = module["key"]?.toString() ?: ""
+                    val mtitle = module["title"]?.toString() ?: mkey
+                    val branches = (module["branches"] as? List<Map<String, Any?>>) ?: emptyList()
+                    val liveTotal = branches.sumOf { br ->
+                        ((br["commands"] as? List<Map<String, Any?>>) ?: emptyList()).count { it["live"] == true }
                     }
-                }
-                sections.isNullOrEmpty() -> {
-                    Text(Strings.cantReachServer, color = MaterialTheme.colorScheme.error)
-                }
-                else -> {
-                    sections!!.forEach { section ->
-                        val key = section["key"]?.toString() ?: ""
-                        val title = section["title"]?.toString() ?: key
-                        val commands = (section["commands"] as? List<Map<String, Any?>>) ?: emptyList()
-                        Card(
-                            Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                                .clickable { expanded = if (expanded == key) null else key }
-                        ) {
-                            Column(Modifier.padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        title,
-                                        style = MaterialTheme.typography.titleMedium,
+                    Card(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                            .clickable { expandedModule = if (expandedModule == mkey) null else mkey }
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(mtitle, style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                if (liveTotal > 0) AssistChip(onClick = {}, label = { Text("$liveTotal ${Strings.helpLive}") })
+                            }
+                            if (expandedModule == mkey) {
+                                Spacer(Modifier.height(10.dp))
+                                branches.forEach { br ->
+                                    val btitle = br["title"]?.toString() ?: ""
+                                    val cmds = (br["commands"] as? List<Map<String, Any?>>) ?: emptyList()
+                                    // Branch header (shown even if empty - reserved for future growth)
+                                    Text(btitle, style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    val liveCount = commands.count { it["live"] == true }
-                                    if (liveCount > 0) {
-                                        AssistChip(onClick = {}, label = { Text("$liveCount ${Strings.helpLive}") })
-                                    }
-                                }
-                                if (expanded == key) {
-                                    Spacer(Modifier.height(10.dp))
-                                    commands.forEach { cmd ->
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
+                                    if (cmds.isEmpty()) {
+                                        Text(Strings.helpBranchEmpty, style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 12.dp))
+                                    } else cmds.forEach { cmd ->
                                         val phrase = cmd["phrase"]?.toString() ?: ""
                                         val live = cmd["live"] == true
-                                        Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+                                        Row(Modifier.padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
+                                            verticalAlignment = Alignment.Top) {
                                             Text(if (live) "\u2713 " else "\u2022 ")
-                                            Text(
-                                                phrase,
-                                                style = MaterialTheme.typography.bodyMedium,
+                                            Text(phrase, style = MaterialTheme.typography.bodyMedium,
                                                 color = if (live) MaterialTheme.colorScheme.onSurface
-                                                        else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                                        else MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
                                 }

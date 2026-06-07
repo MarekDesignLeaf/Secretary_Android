@@ -9929,6 +9929,17 @@ class SecretaryViewModel : ViewModel() {
 
     /** Fetch user/permission-filtered help from the backend (single source of truth).
      *  Returns the "sections" list, or null on failure. HelpScreen renders this. */
+    /** Fetch the hierarchical command tree (modules -> branches -> commands). */
+    suspend fun fetchCommandTree(): List<Map<String, Any?>>? {
+        return try {
+            val res = api.getCommandTree()
+            if (res.isSuccessful) {
+                @Suppress("UNCHECKED_CAST")
+                (res.body()?.get("modules") as? List<Map<String, Any?>>)
+            } else { Log.w("CmdTree", "HTTP ${res.code()}"); null }
+        } catch (e: Exception) { Log.w("CmdTree", "fetch failed: ${e.message}"); null }
+    }
+
     suspend fun fetchVoiceHelp(): List<Map<String, Any?>>? {
         return try {
             val res = api.getVoiceHelp()

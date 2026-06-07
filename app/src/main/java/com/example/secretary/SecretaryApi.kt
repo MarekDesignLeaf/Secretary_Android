@@ -549,6 +549,10 @@ interface SecretaryApi {
     @GET("api/v1/voice/help")
     suspend fun getVoiceHelp(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    /** Hierarchical command tree (module > branch > command), permission-filtered. */
+    @GET("api/v1/voice/command-tree")
+    suspend fun getCommandTree(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === GOOGLE CALENDAR (server-side OAuth; Android is control-only) ===
     /** Adaptive alias learning: map an unknown phrase to a command. */
     @POST("api/v1/voice/learn-alias")

@@ -72,6 +72,7 @@ object Strings {
     val loading get() = t("Loading…", "Načítám…", "Ładowanie…")
     val helpIntro get() = t("Voice and screen commands by area. Say \"help\" or \"help calendar\".", "Hlasové a obrazovkové příkazy podle oblastí. Řekni „help“ nebo „nápověda kalendář“.", "Polecenia głosowe i ekranowe według obszarów.")
     val helpLive get() = t("Available now", "Dostupné teď", "Dostępne teraz")
+    val helpBranchEmpty get() = t("(reserved for future commands)", "(připraveno pro budoucí příkazy)", "(zarezerwowane)")
     val helpPlanned get() = t("Coming soon", "Připravuje se", "Wkrótce")
 
     // === DASHBOARD ===
