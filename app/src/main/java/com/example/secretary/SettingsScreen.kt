@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.sp
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 @Composable
 fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostController? = null) {
@@ -60,6 +62,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         item { ThemeSection(sm) }
         item { VoiceSection(sm) }
         item { CommandAliasSection(sm) }
+        item { GoogleCalendarSection(viewModel) }
         item { AssistantMemorySection(viewModel) }
         item { ServerSection(sm, viewModel, state) }
         item { CrmSection(sm) }
@@ -507,6 +510,88 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
             enabled = newPhrase.trim().length >= 2 && newCommand.trim().length >= 2,
             modifier = Modifier.fillMaxWidth()
         ) { Text(Strings.commandAliasAddButton) }
+    }
+}
+
+@Composable private fun GoogleCalendarSection(viewModel: SecretaryViewModel) {
+    var exp by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var loading by remember { mutableStateOf(false) }
+    var connected by remember { mutableStateOf<Boolean?>(null) }
+    var accountEmail by remember { mutableStateOf<String?>(null) }
+    var calendars by remember { mutableStateOf<List<Map<String, Any?>>?>(null) }
+    var selectedCal by remember { mutableStateOf<String?>(null) }
+    var statusMsg by remember { mutableStateOf<String?>(null) }
+
+    fun reload() {
+        scope.launch {
+            loading = true
+            val s = viewModel.gcalStatus()
+            connected = (s?.get("connected") == true)
+            accountEmail = s?.get("google_account_email")?.toString()
+            selectedCal = s?.get("google_calendar_id")?.toString()
+            if (connected == true) calendars = viewModel.gcalCalendars()
+            loading = false
+        }
+    }
+    LaunchedEffect(exp) { if (exp && connected == null) reload() }
+
+    SCard(Strings.gcalTitle, Icons.Default.DateRange, exp, { exp = !exp }) {
+        when {
+            loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp)); Text(Strings.loading)
+            }
+            connected == true -> {
+                Text("${Strings.gcalConnected}${accountEmail?.let { ": $it" } ?: ""}",
+                    fontSize = 14.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                if (!calendars.isNullOrEmpty()) {
+                    Text(Strings.gcalChooseCalendar, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    calendars!!.forEach { cal ->
+                        val id = cal["id"]?.toString() ?: ""
+                        val name = cal["summary"]?.toString() ?: id
+                        Row(Modifier.fillMaxWidth().clickable {
+                                scope.launch { if (viewModel.gcalSelectCalendar(id)) { selectedCal = id; statusMsg = Strings.gcalSaved } }
+                            }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = (selectedCal == id), onClick = {
+                                scope.launch { if (viewModel.gcalSelectCalendar(id)) { selectedCal = id; statusMsg = Strings.gcalSaved } }
+                            })
+                            Text(name, fontSize = 14.sp)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row {
+                    Button(onClick = { scope.launch { loading = true; statusMsg = if (viewModel.gcalSync()) Strings.gcalSyncDone else Strings.gcalSyncFailed; loading = false } }) {
+                        Text(Strings.gcalSyncNow)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { scope.launch { if (viewModel.gcalDisconnect()) { connected = false; calendars = null; accountEmail = null } } }) {
+                        Text(Strings.gcalDisconnect)
+                    }
+                }
+            }
+            else -> {
+                Text(Strings.gcalNotConnected, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = {
+                    scope.launch {
+                        val url = viewModel.gcalConnectUrl()
+                        if (url != null) {
+                            ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                            statusMsg = Strings.gcalAfterConnect
+                        } else statusMsg = Strings.cantReachServer
+                    }
+                }) { Text(Strings.gcalConnect) }
+            }
+        }
+        statusMsg?.let { Spacer(Modifier.height(8.dp)); Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }
+        if (connected == true || connected == false) {
+            Spacer(Modifier.height(6.dp))
+            TextButton(onClick = { reload() }) { Text(Strings.gcalRefresh) }
+        }
     }
 }
 

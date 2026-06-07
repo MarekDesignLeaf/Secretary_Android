@@ -9924,6 +9924,37 @@ class SecretaryViewModel : ViewModel() {
             null
         }
     }
+
+    // === GOOGLE CALENDAR (control-only; server holds OAuth tokens) ===
+    suspend fun gcalStatus(): Map<String, Any?>? = try {
+        val r = api.gcalStatus(); if (r.isSuccessful) r.body() else null
+    } catch (e: Exception) { Log.w("GCal", "status: ${e.message}"); null }
+
+    /** Returns the Google authorization URL to open in a browser, or null. */
+    suspend fun gcalConnectUrl(): String? = try {
+        val r = api.gcalConnectStart()
+        if (r.isSuccessful) r.body()?.get("authorization_url")?.toString() else null
+    } catch (e: Exception) { Log.w("GCal", "connect: ${e.message}"); null }
+
+    suspend fun gcalDisconnect(): Boolean = try {
+        api.gcalDisconnect().isSuccessful
+    } catch (e: Exception) { Log.w("GCal", "disconnect: ${e.message}"); false }
+
+    suspend fun gcalCalendars(): List<Map<String, Any?>>? = try {
+        val r = api.gcalCalendars()
+        if (r.isSuccessful) {
+            @Suppress("UNCHECKED_CAST")
+            (r.body()?.get("calendars") as? List<Map<String, Any?>>)
+        } else null
+    } catch (e: Exception) { Log.w("GCal", "calendars: ${e.message}"); null }
+
+    suspend fun gcalSelectCalendar(id: String): Boolean = try {
+        api.gcalSelectCalendar(mapOf("calendar_id" to id)).isSuccessful
+    } catch (e: Exception) { Log.w("GCal", "select: ${e.message}"); false }
+
+    suspend fun gcalSync(): Boolean = try {
+        api.gcalSync().isSuccessful
+    } catch (e: Exception) { Log.w("GCal", "sync: ${e.message}"); false }
     fun exportCrmData() { viewModelScope.launch { setStatus(Strings.exportUnavailable) } }
     fun triggerManualImport() {
         val path = settingsManager?.importFilePath ?: ""

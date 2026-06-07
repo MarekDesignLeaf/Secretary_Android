@@ -549,6 +549,27 @@ interface SecretaryApi {
     @GET("api/v1/voice/help")
     suspend fun getVoiceHelp(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    // === GOOGLE CALENDAR (server-side OAuth; Android is control-only) ===
+    @GET("api/v1/calendar/google/status")
+    suspend fun gcalStatus(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("api/v1/calendar/google/connect/start")
+    suspend fun gcalConnectStart(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("api/v1/calendar/google/disconnect")
+    suspend fun gcalDisconnect(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @GET("api/v1/calendar/google/calendars")
+    suspend fun gcalCalendars(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @PUT("api/v1/calendar/google/selected-calendar")
+    suspend fun gcalSelectCalendar(
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
+    @POST("api/v1/calendar/google/sync")
+    suspend fun gcalSync(): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     // === BACKUP / UNINSTALL ===
 
     /** Create a pre-uninstall backup. Admin gets full scope; others get personal scope. */
