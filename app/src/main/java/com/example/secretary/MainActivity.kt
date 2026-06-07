@@ -4971,6 +4971,9 @@ class SecretaryViewModel : ViewModel() {
     private var recentVoiceContact: RecentVoiceContact? = null
     // Phase A5.2: backend-owned pending voice action awaiting follow-up answer.
     private var pendingVoiceActionId: String? = null
+    // Adaptive alias learning: when set, the next utterance is the user's answer
+    // to "what command should I map this unknown phrase to?".
+    private var pendingAliasPhrase: String? = null
     private val recentVoiceContactTtlMs = 5 * 60 * 1000L
 
     private data class RecentVoiceContact(
@@ -7964,6 +7967,17 @@ class SecretaryViewModel : ViewModel() {
             return
         }
 
+        // ── ADAPTIVE ALIAS-LEARNING GUARD ───────────────────────────────────────
+        // If we asked "what command should this phrase map to?", this utterance is
+        // the answer. Backend decides target intent + ACTIVE/PENDING; "omyl"/
+        // "neplatny prikaz"/"zrus" cancels.
+        if (pendingAliasPhrase != null) {
+            val phrase = pendingAliasPhrase!!
+            pendingAliasPhrase = null
+            viewModelScope.launch { resolveAliasLearning(phrase, text) }
+            return
+        }
+
         // ── A. ONGOING MULTI-TURN STATES (must continue, not re-route) ──────────
         // Work-report voice session: keep feeding the session.
         if (_uiState.value.isVoiceSessionActive && _uiState.value.voiceSessionId != null) {
@@ -8119,12 +8133,18 @@ class SecretaryViewModel : ViewModel() {
             }
 
             if (intent == null || intent == "null" || intent.isBlank()) {
-                // Backend recognised no business intent. Secretary is an action
-                // engine, not a chatbot: we do NOT silently fall back to /process
-                // and we do NOT open a form. We say we didn't understand.
-                val msg = Strings.voiceNotUnderstood
-                _uiState.value = _uiState.value.copy(lastAiReply = msg, status = Strings.waitingForCommand)
-                voiceManager?.speak(msg, expectReply = false)
+                // Backend recognised no business intent. Instead of just saying
+                // "I didn't understand", start ADAPTIVE ALIAS LEARNING: ask the
+                // user what command this phrase should map to. Their next answer
+                // is handled by the alias-learning branch at the top of onVoiceInput.
+                pendingAliasPhrase = text
+                val q = Strings.aliasLearnAsk(text)
+                _uiState.value = _uiState.value.copy(
+                    lastAiReply = q,
+                    status = Strings.listening,
+                    history = (_uiState.value.history + ChatMessage("assistant", q)).takeLast(30)
+                )
+                voiceManager?.speak(q, expectReply = true)
                 return
             }
 
@@ -9922,6 +9942,51 @@ class SecretaryViewModel : ViewModel() {
         } catch (e: Exception) {
             Log.w("VoiceHelp", "fetch failed: ${e.message}")
             null
+        }
+    }
+
+    /** Adaptive alias learning. Sends unknown phrase + user's answer to backend,
+     *  which decides target intent + ACTIVE/PENDING status. Returns the result map. */
+    suspend fun learnAlias(phrase: String, answer: String): Map<String, Any?>? = try {
+        val r = api.learnAlias(mapOf("phrase" to phrase, "answer" to answer))
+        if (r.isSuccessful) r.body() else null
+    } catch (e: Exception) { Log.w("AliasLearn", "learn failed: ${e.message}"); null }
+
+    /** Handle the user's answer to "what command should this phrase map to?".
+     *  Backend decides intent + ACTIVE/PENDING; we persist the alias locally so
+     *  applyVoiceAliasesToFreeText rewrites the phrase next time. */
+    private suspend fun resolveAliasLearning(phrase: String, answer: String) {
+        val res = learnAlias(phrase, answer)
+        if (res == null) {
+            voiceManager?.speak(Strings.cantReachServer, expectReply = false)
+            return
+        }
+        val status = res["status"]?.toString()
+        val msg = res["message"]?.toString() ?: ""
+        when (status) {
+            "saved" -> {
+                val intent = res["target_intent"]?.toString() ?: ""
+                // Persist alias: phrase -> the spoken command form. We store the
+                // user's ANSWER as the target text so applyVoiceAliasesToFreeText
+                // rewrites the phrase to a command the parser already understands.
+                settingsManager?.upsertVoiceAlias(phrase, answer.trim(), "command")
+                invalidateAliasCache()
+                _uiState.value = _uiState.value.copy(
+                    lastAiReply = msg,
+                    history = (_uiState.value.history + ChatMessage("assistant", msg)).takeLast(30)
+                )
+                voiceManager?.speak(msg, expectReply = false)
+            }
+            "cancelled" -> {
+                _uiState.value = _uiState.value.copy(lastAiReply = msg)
+                voiceManager?.speak(msg, expectReply = false)
+            }
+            else -> {
+                // unknown_target: ask again, keep learning state so the next answer retries.
+                pendingAliasPhrase = phrase
+                _uiState.value = _uiState.value.copy(lastAiReply = msg)
+                voiceManager?.speak(msg, expectReply = true)
+            }
         }
     }
 

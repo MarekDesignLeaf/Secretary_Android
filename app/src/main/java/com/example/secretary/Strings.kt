@@ -52,6 +52,11 @@ object Strings {
     val commandAliasCommandLabel get() = t("Command to run", "Příkaz k provedení", "Polecenie")
     val commandAliasCommandPh get() = t("e.g. add meeting", "např. přidej schůzku", "np. dodaj spotkanie")
     val commandAliasAddButton get() = t("Add alias", "Přidat alias", "Dodaj alias")
+    fun aliasLearnAsk(phrase: String): String = t(
+        "I don't know \"$phrase\". What command should I map it to? Say the command, or say mistake.",
+        "Této větě nerozumím: „$phrase“. K jakému příkazu to mám přiřadit? Řekni příkaz, nebo řekni omyl.",
+        "Nie znam „$phrase”. Do jakiego polecenia przypisać? Powiedz polecenie lub powiedz pomyłka."
+    )
     val gcalTitle get() = t("Google Calendar", "Google Kalendář", "Kalendarz Google")
     val gcalConnected get() = t("Connected", "Připojeno", "Połączono")
     val gcalNotConnected get() = t("Not connected. Connect to sync meetings with Google Calendar.", "Nepřipojeno. Připoj pro synchronizaci schůzek s Google Kalendářem.", "Niepołączono.")

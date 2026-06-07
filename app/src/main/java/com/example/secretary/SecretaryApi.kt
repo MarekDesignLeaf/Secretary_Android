@@ -550,6 +550,12 @@ interface SecretaryApi {
     suspend fun getVoiceHelp(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === GOOGLE CALENDAR (server-side OAuth; Android is control-only) ===
+    /** Adaptive alias learning: map an unknown phrase to a command. */
+    @POST("api/v1/voice/learn-alias")
+    suspend fun learnAlias(
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     @GET("api/v1/calendar/google/status")
     suspend fun gcalStatus(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
