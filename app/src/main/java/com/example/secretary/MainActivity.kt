@@ -6990,8 +6990,9 @@ class SecretaryViewModel : ViewModel() {
     fun loadSystemSettings() {
         viewModelScope.launch {
             try {
-                val res = api.getSettings()
-                if (res.isSuccessful) _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED, systemSettings = res.body() ?: emptyMap(), status = Strings.connected)
+                // /api/v1/version is the canonical connectivity probe (exists, no auth).
+                val res = api.getServerVersion()
+                if (res.isSuccessful) _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.CONNECTED, systemSettings = res.body()?.mapValues { it.value ?: "" } ?: emptyMap(), status = Strings.connected)
                 else _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = Strings.serverUnavailable)
             } catch (e: Exception) { e.rethrowIfCancellation(); _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.DISCONNECTED, status = Strings.disconnected) }
         }
@@ -7022,11 +7023,14 @@ class SecretaryViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(connectionStatus = ConnectionStatus.TESTING, status = Strings.testing)
             try {
-                val res = api.getSettings()
+                // Test connectivity via /api/v1/version: it exists, needs no auth,
+                // and returns server + DB health. (The old system/settings endpoint
+                // does not exist on the server and always 404'd -> false "disconnected".)
+                val res = api.getServerVersion()
                 if (res.isSuccessful) {
                     _uiState.value = _uiState.value.copy(
                         connectionStatus = ConnectionStatus.CONNECTED,
-                        systemSettings = res.body() ?: emptyMap(),
+                        systemSettings = res.body()?.mapValues { it.value ?: "" } ?: emptyMap(),
                         status = Strings.connected
                     )
                 } else {
