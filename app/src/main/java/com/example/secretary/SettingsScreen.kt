@@ -1087,7 +1087,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                             editBackendUser = user
                         },
                         colors = CardDefaults.cardColors(
-                            containerColor = if (user.status == "active") MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
+                            containerColor = if (user.isActive) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
                         )
                     ) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1097,7 +1097,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                                 Text(user.display_name.ifBlank { user.email }, fontWeight = FontWeight.SemiBold)
                                 Text(user.email, fontSize = 12.sp, color = Color.Gray)
                                 Text(
-                                    "${roleLabel} • ${Strings.localizeStatus(user.status)}",
+                                    "${roleLabel} • ${Strings.localizeStatus(if (user.isActive) "active" else "inactive")}",
                                     fontSize = 12.sp,
                                     color = Color.Gray
                                 )
@@ -1135,7 +1135,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     var phone by remember(user.id) { mutableStateOf(user.phone.orEmpty()) }
     val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "worker", "assistant", "viewer").map { BackendRole(role_name = it) }
     var role by remember(user.id) { mutableStateOf(user.role_name ?: roleOptions.firstOrNull()?.role_name ?: "worker") }
-    var status by remember(user.id) { mutableStateOf(if (user.status == "inactive") "inactive" else "active") }
+    var status by remember(user.id) { mutableStateOf(if (!user.isActive) "inactive" else "active") }
     var roleExpanded by remember { mutableStateOf(false) }
     var statusExpanded by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
@@ -1146,7 +1146,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         if (fromRoles.isNotEmpty()) {
             fromRoles.sortedWith(compareBy<BackendPermission> { it.module_name }.thenBy { it.permission_code })
         } else {
-            user.permissions.keys.sorted().map { BackendPermission(permission_code = it, name = it) }
+            user.permissions.sorted().map { BackendPermission(permission_code = it, name = it) }
         }
     }
     fun permissionsForRole(roleName: String): Map<String, Boolean> {
@@ -1165,7 +1165,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     var permissionValues by remember(user.id) {
         mutableStateOf(
             if (user.permissions.isNotEmpty()) {
-                permissionCatalog.associate { it.permission_code to (user.permissions[it.permission_code] ?: false) }
+                permissionCatalog.associate { it.permission_code to (it.permission_code in user.permissions) }
             } else {
                 permissionsForRole(role)
             }

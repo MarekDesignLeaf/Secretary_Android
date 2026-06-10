@@ -1,5 +1,7 @@
 package com.example.secretary
 
+import com.google.gson.annotations.SerializedName
+
 import java.io.File
 
 data class ChatMessage(
@@ -165,22 +167,25 @@ data class BackendRole(
 )
 
 data class BackendUser(
-    val id: Long = 0,
+    val id: String = "",
     val display_name: String = "",
     val email: String = "",
     val phone: String? = null,
-    val status: String = "active",
-    val role_name: String? = null,
+    @SerializedName("is_active") val isActive: Boolean = true,
+    // Server returns "role" (e.g. "owner"); keep role_name as an alias for existing UI code.
+    @SerializedName("role") val role_name: String? = null,
     val must_change_password: Boolean = false,
     val created_at: String? = null,
-    val permissions: Map<String, Boolean> = emptyMap(),
+    // Server returns permissions as a flat list of permission keys.
+    val permissions: List<String> = emptyList(),
+    // Kept for UI compatibility; server does not send these two, so they default empty.
     val role_permissions: Map<String, Boolean> = emptyMap(),
     val user_permission_overrides: Map<String, Boolean> = emptyMap()
 )
 
 data class WorkflowActionDraft(
     val title: String = "",
-    val assignedUserId: Long? = null,
+    val assignedUserId: String? = null,
     val assignedTo: String? = null,
     val plannedStartAt: String? = null,
     val deadline: String? = null,
@@ -192,7 +197,7 @@ data class ClientCreationDraft(
     val name: String = "",
     val email: String = "",
     val phone: String = "",
-    val ownerUserId: Long? = null,
+    val ownerUserId: String? = null,
     val firstAction: WorkflowActionDraft = WorkflowActionDraft()
 )
 
@@ -200,7 +205,7 @@ data class JobCreationDraft(
     val title: String = "",
     val clientId: Long? = null,
     val clientName: String? = null,
-    val assignedUserId: Long? = null,
+    val assignedUserId: String? = null,
     val assignedTo: String? = null,
     val startDate: String? = null,
     val firstAction: WorkflowActionDraft = WorkflowActionDraft()
@@ -213,7 +218,7 @@ data class TaskCreationDraft(
     val clientId: Long? = null,
     val clientName: String? = null,
     val jobId: Long? = null,
-    val assignedUserId: Long? = null,
+    val assignedUserId: String? = null,
     val assignedTo: String? = null,
     val plannedStartAt: String? = null,
     val deadline: String? = null,
@@ -245,7 +250,7 @@ data class Client(
     val billing_country: String? = "GB",
     val status: String? = "active",
     val is_commercial: Boolean = false,
-    val owner_user_id: Long? = null,
+    val owner_user_id: String? = null,
     val next_action_task_id: String? = null,
     val hierarchy_status: String? = null,
     val created_at: String? = null,
@@ -450,7 +455,7 @@ data class RecognitionHistoryEntry(
     val longitude: Double? = null,
     val accuracy_meters: Double? = null,
     val location_source: String? = null,
-    val owner_user_id: Long? = null,
+    val owner_user_id: String? = null,
     val owner_display_name: String = "",
     val owner_email: String = "",
     val photos: List<RecognitionHistoryPhoto> = emptyList(),
@@ -484,8 +489,8 @@ data class HierarchyEntityIssue(
     val display_name: String? = null,
     val job_title: String? = null,
     val client_id: Long? = null,
-    val owner_user_id: Long? = null,
-    val assigned_user_id: Long? = null,
+    val owner_user_id: String? = null,
+    val assigned_user_id: String? = null,
     val next_action_task_id: String? = null,
     val issues: List<String> = emptyList(),
     val entity_type: String? = null
@@ -496,7 +501,7 @@ data class HierarchyTaskIssue(
     val title: String = "",
     val client_id: Long? = null,
     val job_id: Long? = null,
-    val assigned_user_id: Long? = null,
+    val assigned_user_id: String? = null,
     val status: String? = null,
     val issues: List<String> = emptyList()
 )
@@ -564,7 +569,7 @@ data class Job(
     val start_date_planned: String? = null,
     val planned_start_at: String? = null,
     val planned_end_at: String? = null,
-    val assigned_user_id: Long? = null,
+    val assigned_user_id: String? = null,
     val assigned_to: String? = null,
     val next_action_task_id: String? = null,
     val hierarchy_status: String? = null,
@@ -682,7 +687,7 @@ data class Task(
     val estimatedMinutes: Int? = null,
     val actualMinutes: Int? = null,
     val createdBy: String? = null,
-    val assignedUserId: Long? = null,
+    val assignedUserId: String? = null,
     val assignedTo: String? = null,
     val planningNote: String? = null,
     val reminderForAssigneeOnly: Boolean = true,
@@ -713,7 +718,7 @@ data class CalendarFeedEntry(
     val title: String = "",
     val client_name: String? = null,
     val job_title: String? = null,
-    val assigned_user_id: Long? = null,
+    val assigned_user_id: String? = null,
     val assigned_to: String? = null,
     val is_assigned_to_current: Boolean = false,
     val display_mode: String = "shared",

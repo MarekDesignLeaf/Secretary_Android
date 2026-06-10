@@ -1481,7 +1481,7 @@ private fun calendarWeekdayShort(calendar: Calendar): String =
 
 
 private fun activeHierarchyUsers(users: List<BackendUser>): List<BackendUser> =
-    users.filter { it.status.equals("active", ignoreCase = true) }
+    users.filter { it.isActive }
 
 private fun cleanUserDisplayName(value: String?): String =
     value.orEmpty()
@@ -1492,7 +1492,7 @@ private fun cleanUserDisplayName(value: String?): String =
 private fun hierarchyUserLabel(user: BackendUser): String =
     cleanUserDisplayName(user.display_name).ifBlank { user.email }.ifBlank { "User ${user.id}" }
 
-private fun findHierarchyUser(users: List<BackendUser>, userId: Long?): BackendUser? =
+private fun findHierarchyUser(users: List<BackendUser>, userId: String?): BackendUser? =
     users.firstOrNull { it.id == userId }
 
 private fun taskHasPlanning(task: Task): Boolean =
@@ -1513,7 +1513,7 @@ private fun clientHierarchyIssues(detail: ClientDetail, state: UiState): List<St
     val owner = state.backendUsers.firstOrNull { it.id == client.owner_user_id }
     val nextActionId = client.next_action_task_id
     val nextActionTask = state.tasks.firstOrNull { it.id == nextActionId }
-    if (client.owner_user_id == null || owner == null || !owner.status.equals("active", ignoreCase = true)) {
+    if (client.owner_user_id == null || owner == null || !owner.isActive) {
         issues += "missing_or_inactive_owner"
     }
     if (nextActionId.isNullOrBlank()) {
@@ -1538,7 +1538,7 @@ private fun jobHierarchyIssues(detail: JobDetail, state: UiState): List<String> 
     val owner = state.backendUsers.firstOrNull { it.id == job.assigned_user_id }
     val nextActionId = job.next_action_task_id
     val nextActionTask = state.tasks.firstOrNull { it.id == nextActionId }
-    if (job.assigned_user_id == null || owner == null || !owner.status.equals("active", ignoreCase = true)) {
+    if (job.assigned_user_id == null || owner == null || !owner.isActive) {
         issues += "missing_or_inactive_owner"
     }
     if (nextActionId.isNullOrBlank()) {
@@ -1562,7 +1562,7 @@ private fun jobHierarchyIssues(detail: JobDetail, state: UiState): List<String> 
 private fun BackendUserDropdown(
     label: String,
     users: List<BackendUser>,
-    selectedUserId: Long?,
+    selectedUserId: String?,
     onSelect: (BackendUser) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1624,9 +1624,9 @@ fun AddClientDialog(
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
-    var ownerUserId by remember { mutableStateOf<Long?>(activeUsers.firstOrNull()?.id) }
+    var ownerUserId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var actionTitle by remember { mutableStateOf("") }
-    var actionAssigneeId by remember { mutableStateOf<Long?>(activeUsers.firstOrNull()?.id) }
+    var actionAssigneeId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var actionPlannedStart by remember { mutableStateOf("") }
     var actionDeadline by remember { mutableStateOf("") }
     var actionPriority by remember { mutableStateOf("bezna") }
@@ -1782,7 +1782,7 @@ fun AddTaskDialog(
     var planningNote by remember { mutableStateOf("") }
     var selectedClientId by remember { mutableStateOf<Long?>(initialClientId) }
     var selectedClientName by remember { mutableStateOf<String?>(initialClientName) }
-    var selectedAssigneeId by remember { mutableStateOf<Long?>(activeUsers.firstOrNull()?.id) }
+    var selectedAssigneeId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var setAsNextAction by remember { mutableStateOf(false) }
     var typeExpanded by remember { mutableStateOf(false) }
     var prioExpanded by remember { mutableStateOf(false) }
@@ -3853,9 +3853,9 @@ fun AddJobDialog(
     var startDate by remember { mutableStateOf("") }
     var selectedClientId by remember { mutableStateOf<Long?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
-    var assignedUserId by remember { mutableStateOf<Long?>(activeUsers.firstOrNull()?.id) }
+    var assignedUserId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var firstActionTitle by remember { mutableStateOf("") }
-    var firstActionAssigneeId by remember { mutableStateOf<Long?>(activeUsers.firstOrNull()?.id) }
+    var firstActionAssigneeId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var firstActionPlannedStart by remember { mutableStateOf("") }
     var firstActionDeadline by remember { mutableStateOf("") }
     var firstActionPriority by remember { mutableStateOf("bezna") }
@@ -4280,7 +4280,7 @@ fun TaskCompletionDialog(
     var useExisting by remember { mutableStateOf(replacementCandidates.isNotEmpty()) }
     var selectedExistingTaskId by remember { mutableStateOf<String?>(replacementCandidates.firstOrNull()?.id) }
     var title by remember { mutableStateOf("") }
-    var assignedUserId by remember { mutableStateOf<Long?>(activeUsers.firstOrNull()?.id) }
+    var assignedUserId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var plannedStartAt by remember { mutableStateOf("") }
     var deadline by remember { mutableStateOf("") }
     var priority by remember { mutableStateOf("bezna") }
@@ -5443,7 +5443,15 @@ class SecretaryViewModel : ViewModel() {
             try {
                 val res = api.getAuthRoles()
                 if (res.isSuccessful) {
-                    _uiState.value = _uiState.value.copy(backendRoles = res.body() ?: emptyList())
+                    // Server returns a map {role_name: [permission_codes]}; convert to List<BackendRole>.
+                    val roleMap = res.body() ?: emptyMap()
+                    val roles = roleMap.map { (roleName, perms) ->
+                        BackendRole(
+                            role_name = roleName,
+                            permissions = perms.associateWith { true }
+                        )
+                    }
+                    _uiState.value = _uiState.value.copy(backendRoles = roles)
                 }
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Backend roles load error", e)
             }
@@ -5481,7 +5489,7 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun updateBackendUser(
-        userId: Long,
+        userId: String,
         displayName: String,
         phone: String?,
         role: String,
@@ -5711,7 +5719,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun resetBackendUserPassword(userId: Long, onDone: (Boolean, String?) -> Unit) {
+    fun resetBackendUserPassword(userId: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
@@ -5729,7 +5737,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun deleteBackendUser(userId: Long, onDone: (Boolean, String?) -> Unit) {
+    fun deleteBackendUser(userId: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
@@ -5913,7 +5921,8 @@ class SecretaryViewModel : ViewModel() {
         val rt = settingsManager?.refreshToken ?: return false
         return withContext(Dispatchers.IO) {
             try {
-                val url = (settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL) + "auth/refresh"
+                val rawBase = (settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL).trimEnd('/')
+                val url = "$rawBase/api/v1/auth/refresh"
                 val body = """{"refresh_token":"$rt"}""".toRequestBody("application/json; charset=utf-8".toMediaType())
                 val request = okhttp3.Request.Builder().url(url).post(body).build()
                 val response = OkHttpClient().newCall(request).execute()
@@ -6885,7 +6894,7 @@ class SecretaryViewModel : ViewModel() {
                         plannedDate = m["planned_date"]?.toString(),
                         plannedStartAt = m["planned_start_at"]?.toString(),
                         plannedEndAt = m["planned_end_at"]?.toString(),
-                        assignedUserId = (m["assigned_user_id"] as? Number)?.toLong(),
+                        assignedUserId = m["assigned_user_id"]?.toString(),
                         assignedTo = m["assigned_to"]?.toString(),
                         planningNote = m["planning_note"]?.toString(),
                         reminderForAssigneeOnly = m["reminder_for_assignee_only"] as? Boolean ?: true,
@@ -7584,7 +7593,7 @@ class SecretaryViewModel : ViewModel() {
                                 plannedDate = data["planned_date"]?.toString() ?: t.plannedDate,
                                 plannedStartAt = data["planned_start_at"]?.toString() ?: t.plannedStartAt,
                                 plannedEndAt = data["planned_end_at"]?.toString() ?: t.plannedEndAt,
-                                assignedUserId = (data["assigned_user_id"] as? Number)?.toLong() ?: t.assignedUserId,
+                                assignedUserId = data["assigned_user_id"]?.toString() ?: t.assignedUserId,
                                 assignedTo = data["assigned_to"]?.toString() ?: t.assignedTo,
                                 planningNote = data["planning_note"]?.toString() ?: t.planningNote,
                                 reminderForAssigneeOnly = data["reminder_for_assignee_only"] as? Boolean ?: t.reminderForAssigneeOnly,
@@ -9756,7 +9765,7 @@ class SecretaryViewModel : ViewModel() {
                     plannedDate = data["planned_date"]?.toString(),
                     plannedStartAt = data["planned_start_at"]?.toString(),
                     plannedEndAt = data["planned_end_at"]?.toString(),
-                    assignedUserId = (data["assigned_user_id"] as? Number)?.toLong(),
+                    assignedUserId = data["assigned_user_id"]?.toString(),
                     assignedTo = data["assigned_to"]?.toString(),
                     planningNote = data["planning_note"]?.toString(),
                     clientName = data["client_name"]?.toString(),

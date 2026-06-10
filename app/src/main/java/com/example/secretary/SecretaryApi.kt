@@ -444,7 +444,7 @@ interface SecretaryApi {
 
 
     @GET("api/v1/auth/roles")
-    suspend fun getAuthRoles(): Response<List<BackendRole>>
+    suspend fun getAuthRoles(): Response<Map<String, @JvmSuppressWildcards List<String>>>
 
     @GET("api/v1/users")
     suspend fun getAuthUsers(@Header("Authorization") auth: String): Response<List<BackendUser>>
