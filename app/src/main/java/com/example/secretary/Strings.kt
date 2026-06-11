@@ -1170,7 +1170,7 @@ object Strings {
         "Vytvořeno $created faktur" + if (errors > 0) ", $errors chyb" else "",
         "Utworzono $created faktur" + if (errors > 0) ", $errors błędów" else ""
     )
-    fun workReportUnknownClient(clientId: Long?): String = t(
+    fun workReportUnknownClient(clientId: String?): String = t(
         "Client #${clientId ?: "?"}",
         "Klient #${clientId ?: "?"}",
         "Klient #${clientId ?: "?"}"

@@ -995,7 +995,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     val backendRoles = if (state.backendRoles.isNotEmpty()) {
         state.backendRoles
     } else {
-        listOf("admin", "manager", "worker", "assistant", "viewer").map { BackendRole(role_name = it) }
+        listOf("admin", "manager", "staff", "accountant").map { BackendRole(role_name = it) }
     }
 
     LaunchedEffect(exp) {
@@ -1133,7 +1133,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
 ) {
     var name by remember(user.id) { mutableStateOf(user.display_name) }
     var phone by remember(user.id) { mutableStateOf(user.phone.orEmpty()) }
-    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "worker", "assistant", "viewer").map { BackendRole(role_name = it) }
+    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "staff", "accountant").map { BackendRole(role_name = it) }
     var role by remember(user.id) { mutableStateOf(user.role_name ?: roleOptions.firstOrNull()?.role_name ?: "worker") }
     var status by remember(user.id) { mutableStateOf(if (!user.isActive) "inactive" else "active") }
     var roleExpanded by remember { mutableStateOf(false) }
@@ -1318,7 +1318,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     var rE by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "worker", "assistant", "viewer").map { BackendRole(role_name = it) }
+    val roleOptions = if (roles.isNotEmpty()) roles else listOf("admin", "manager", "staff", "accountant").map { BackendRole(role_name = it) }
     val selectedRole = roleOptions.firstOrNull { it.role_name == role }
     LaunchedEffect(roleOptions) {
         if (roleOptions.none { it.role_name == role }) role = roleOptions.first().role_name

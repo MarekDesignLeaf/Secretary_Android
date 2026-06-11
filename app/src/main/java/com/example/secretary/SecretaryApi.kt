@@ -34,7 +34,7 @@ interface SecretaryApi {
     suspend fun rememberAssistantMemory(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<AssistantMemoryItem>
 
     @DELETE("assistant/memory/{id}")
-    suspend fun deleteAssistantMemory(@Path("id") id: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun deleteAssistantMemory(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === PLANT / NATURE (plugin-provided — ViewModel still references these) ===
     @Multipart
@@ -87,7 +87,7 @@ interface SecretaryApi {
     @GET("admin/activity-log")
     suspend fun getAdminActivityLog(
         @Query("limit") limit: Int = 200,
-        @Query("actor_user_id") actorUserId: Long? = null,
+        @Query("actor_user_id") actorUserId: String? = null,
     ): Response<List<AdminActivityLogEntry>>
 
     @GET("admin/hierarchy-integrity")
@@ -101,19 +101,19 @@ interface SecretaryApi {
     suspend fun searchClients(@Query("q") query: String): Response<List<Client>>
 
     @GET("crm/clients/{id}")
-    suspend fun getClientDetail(@Path("id") id: Long): Response<ClientDetail>
+    suspend fun getClientDetail(@Path("id") id: String): Response<ClientDetail>
 
     @POST("crm/clients")
     suspend fun createClient(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @PUT("crm/clients/{id}")
-    suspend fun updateClient(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun updateClient(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @DELETE("crm/clients/{id}")
-    suspend fun archiveClient(@Path("id") id: Long): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun archiveClient(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @POST("crm/clients/{id}/notes")
-    suspend fun addClientNote(@Path("id") id: Long, @Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun addClientNote(@Path("id") id: String, @Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @POST("crm/clients/sync-contacts")
     suspend fun syncContacts(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<ContactSyncResponse>
@@ -132,12 +132,12 @@ interface SecretaryApi {
 
     @PUT("crm/contacts/{contactId}")
     suspend fun updateSharedContact(
-        @Path("contactId") contactId: Long,
+        @Path("contactId") contactId: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<SharedContact>
 
     @DELETE("crm/contacts/{contactId}")
-    suspend fun deleteSharedContact(@Path("contactId") contactId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun deleteSharedContact(@Path("contactId") contactId: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @GET("crm/contacts/duplicates")
     suspend fun getContactDuplicates(): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -161,41 +161,41 @@ interface SecretaryApi {
 
     // === JOBS ===
     @GET("crm/jobs")
-    suspend fun getJobs(@Query("client_id") clientId: Long? = null, @Query("status") status: String? = null): Response<List<Job>>
+    suspend fun getJobs(@Query("client_id") clientId: String? = null, @Query("status") status: String? = null): Response<List<Job>>
 
     @GET("crm/jobs/{id}")
-    suspend fun getJobDetail(@Path("id") id: Long): Response<JobDetail>
+    suspend fun getJobDetail(@Path("id") id: String): Response<JobDetail>
 
     @Multipart
     @POST("crm/jobs/{id}/photos")
     suspend fun uploadJobPhoto(
-        @Path("id") jobId: Long,
+        @Path("id") jobId: String,
         @Part photo: MultipartBody.Part,
         @Part("description") description: RequestBody?,
         @Part("photo_type") photoType: RequestBody?
     ): Response<JobPhoto>
 
     @GET("crm/jobs/{id}/photos")
-    suspend fun getJobPhotos(@Path("id") jobId: Long): Response<List<JobPhoto>>
+    suspend fun getJobPhotos(@Path("id") jobId: String): Response<List<JobPhoto>>
 
     @POST("crm/jobs/{id}/notes")
-    suspend fun addJobNote(@Path("id") jobId: Long, @Body data: Map<String, String>): Response<JobNote>
+    suspend fun addJobNote(@Path("id") jobId: String, @Body data: Map<String, String>): Response<JobNote>
 
     @POST("crm/jobs/{id}/audit")
-    suspend fun addJobAuditEntry(@Path("id") jobId: Long, @Body data: Map<String, String>): Response<JobAuditEntry>
+    suspend fun addJobAuditEntry(@Path("id") jobId: String, @Body data: Map<String, String>): Response<JobAuditEntry>
 
     @GET("crm/jobs/{id}/audit")
-    suspend fun getJobAuditLog(@Path("id") jobId: Long): Response<List<JobAuditEntry>>
+    suspend fun getJobAuditLog(@Path("id") jobId: String): Response<List<JobAuditEntry>>
 
     @POST("crm/jobs")
     suspend fun createJob(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @PUT("crm/jobs/{id}")
-    suspend fun updateJob(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun updateJob(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === TASKS ===
     @GET("crm/tasks")
-    suspend fun getTasks(@Query("client_id") clientId: Long? = null, @Query("job_id") jobId: Long? = null): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+    suspend fun getTasks(@Query("client_id") clientId: String? = null, @Query("job_id") jobId: String? = null): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @POST("crm/tasks")
     suspend fun createTask(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -214,19 +214,19 @@ interface SecretaryApi {
     suspend fun getLeads(): Response<List<Lead>>
 
     @GET("crm/leads/{id}")
-    suspend fun getLeadDetail(@Path("id") id: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun getLeadDetail(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @POST("crm/leads")
     suspend fun createLead(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @PUT("crm/leads/{id}")
-    suspend fun updateLead(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun updateLead(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @POST("crm/leads/{id}/convert-to-client")
-    suspend fun convertLeadToClient(@Path("id") id: Long, @Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun convertLeadToClient(@Path("id") id: String, @Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @POST("crm/leads/{id}/convert-to-job")
-    suspend fun convertLeadToJob(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun convertLeadToJob(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === INVOICES ===
     @GET("crm/invoices")
@@ -236,11 +236,11 @@ interface SecretaryApi {
     suspend fun createInvoice(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @PUT("crm/invoices/{id}")
-    suspend fun updateInvoice(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun updateInvoice(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === COMMUNICATIONS ===
     @GET("crm/communications")
-    suspend fun getCommunications(@Query("client_id") clientId: Long? = null, @Query("job_id") jobId: Long? = null): Response<List<Communication>>
+    suspend fun getCommunications(@Query("client_id") clientId: String? = null, @Query("job_id") jobId: String? = null): Response<List<Communication>>
 
     @POST("crm/communications")
     suspend fun logCommunication(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
@@ -276,7 +276,7 @@ interface SecretaryApi {
     suspend fun getWorkReports(@Query("tenant_id") tenantId: Int = 1): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @GET("work-reports/{id}")
-    suspend fun getWorkReport(@Path("id") id: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun getWorkReport(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @POST("work-reports")
     suspend fun createWorkReport(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
@@ -284,29 +284,29 @@ interface SecretaryApi {
 
     // === QUOTES ===
     @GET("crm/quotes")
-    suspend fun getQuotes(@Query("tenant_id") tenantId: Int = 1, @Query("client_id") clientId: Long? = null): Response<List<Quote>>
+    suspend fun getQuotes(@Query("tenant_id") tenantId: Int = 1, @Query("client_id") clientId: String? = null): Response<List<Quote>>
 
     @GET("crm/quotes/{id}")
-    suspend fun getQuoteDetail(@Path("id") id: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun getQuoteDetail(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @POST("crm/quotes")
     suspend fun createQuote(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @PUT("crm/quotes/{id}")
-    suspend fun updateQuote(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun updateQuote(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @POST("crm/quotes/{id}/items")
-    suspend fun addQuoteItem(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun addQuoteItem(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @DELETE("crm/quotes/{id}/items/{itemId}")
-    suspend fun deleteQuoteItem(@Path("id") id: Long, @Path("itemId") itemId: Long): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun deleteQuoteItem(@Path("id") id: String, @Path("itemId") itemId: String): Response<Map<String, @JvmSuppressWildcards Any>>
 
     @POST("crm/quotes/{id}/approve")
-    suspend fun approveQuote(@Path("id") id: Long, @Body data: Map<String, @JvmSuppressWildcards Any?> = emptyMap()): Response<Map<String, @JvmSuppressWildcards Any>>
+    suspend fun approveQuote(@Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any?> = emptyMap()): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === OTHER ===
     @GET("crm/properties")
-    suspend fun getProperties(@Query("client_id") clientId: Long? = null): Response<List<Property>>
+    suspend fun getProperties(@Query("client_id") clientId: String? = null): Response<List<Property>>
 
     @GET("crm/timeline")
     suspend fun getTimeline(@Query("entity_type") entityType: String? = null, @Query("entity_id") entityId: String? = null): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
@@ -318,56 +318,56 @@ interface SecretaryApi {
     suspend fun healthCheck(): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === BOOTSTRAP ===
-    @GET("api/v1/bootstrap/status")
+    @GET("bootstrap/status")
     suspend fun getBootstrapStatus(): Response<BootstrapStatusResponse>
 
-    @POST("api/v1/bootstrap/first-install")
+    @POST("bootstrap/first-install")
     suspend fun submitFirstInstall(@Body request: FirstInstallRequest): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("api/v1/bootstrap/wipe")
+    @POST("bootstrap/wipe")
     suspend fun wipeAllData(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("api/v1/catalogue/industries")
+    @GET("catalogue/industries")
     suspend fun getCatalogueIndustries(): Response<Any>
 
-    @GET("api/v1/activities/groups")
+    @GET("activities/groups")
     suspend fun getIndustryGroups(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
-    @GET("api/v1/activities/subtypes/{groupId}")
+    @GET("activities/subtypes/{groupId}")
     suspend fun getIndustrySubtypes(@Path("groupId") groupId: Long): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
-    @GET("api/v1/company/operating-profile")
+    @GET("company/operating-profile")
     suspend fun getTenantConfig(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @PUT("api/v1/company/industry")
+    @PUT("company/industry")
     suspend fun updateCompanyIndustry(
         @Header("Authorization") auth: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @PUT("api/v1/language/settings")
+    @PUT("language/settings")
     suspend fun updateTenantLanguages(
         @Header("Authorization") auth: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === SETTINGS: dedicated clean endpoints ===
-    @GET("api/v1/version")
+    @GET("version")
     suspend fun getServerVersion(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("api/v1/company/profile")
+    @GET("company/profile")
     suspend fun getTenantProfile(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // Returns TenantOperatingProfile (language modes, defaults)
-    @GET("api/v1/language/settings")
+    @GET("language/settings")
     suspend fun getTenantLanguages(@Header("Authorization") auth: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // Returns list of TenantLanguage — used for language selector dropdowns
-    @GET("api/v1/language/tenant")
+    @GET("language/tenant")
     suspend fun getTenantLanguageList(@Header("Authorization") auth: String): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     // Available languages for dropdowns
-    @GET("api/v1/language/available")
+    @GET("language/available")
     suspend fun getAvailableLanguages(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     // === SERVICE RATE TYPES ===
@@ -393,16 +393,16 @@ interface SecretaryApi {
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @GET("crm/clients/{clientId}/service-rates")
-    suspend fun getClientServiceRates(@Path("clientId") clientId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun getClientServiceRates(@Path("clientId") clientId: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @PUT("crm/clients/{clientId}/service-rates")
     suspend fun updateClientServiceRates(
-        @Path("clientId") clientId: Long,
+        @Path("clientId") clientId: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === ACTIVITY TEMPLATES ===
-    @GET("api/v1/activities/templates")
+    @GET("activities/templates")
     suspend fun getActivityTemplates(
         @Query("subtype_code") subtypeCode: String? = null,
         @Query("group_code") groupCode: String? = null,
@@ -410,68 +410,68 @@ interface SecretaryApi {
         @Query("group_id") groupId: Long? = null
     ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
-    @GET("api/v1/activities/tenant/{tenantId}")
+    @GET("activities/tenant/{tenantId}")
     suspend fun getTenantActivityPricing(
         @Path("tenantId") tenantId: Int,
         @Query("subtype_code") subtypeCode: String? = null
     ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
-    @PUT("api/v1/activities/tenant/{tenantId}/{templateId}")
+    @PUT("activities/tenant/{tenantId}/{templateId}")
     suspend fun upsertTenantActivityPricing(
         @Path("tenantId") tenantId: Int,
         @Path("templateId") templateId: Long,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @DELETE("api/v1/activities/tenant/{tenantId}/{templateId}")
+    @DELETE("activities/tenant/{tenantId}/{templateId}")
     suspend fun resetTenantActivityPricing(
         @Path("tenantId") tenantId: Int,
         @Path("templateId") templateId: Long
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === AUTH ===
-    @POST("api/v1/auth/login")
+    @POST("auth/login")
     suspend fun authLogin(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("api/v1/auth/refresh")
+    @POST("auth/refresh")
     suspend fun authRefresh(@Body data: Map<String, String>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("api/v1/auth/register")
+    @POST("auth/register")
     suspend fun registerUser(
         @Header("Authorization") auth: String,
         @Body request: RegisterRequest
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
 
-    @GET("api/v1/auth/roles")
+    @GET("auth/roles")
     suspend fun getAuthRoles(): Response<Map<String, @JvmSuppressWildcards List<String>>>
 
-    @GET("api/v1/users")
+    @GET("users")
     suspend fun getAuthUsers(@Header("Authorization") auth: String): Response<List<BackendUser>>
 
-    @PUT("api/v1/users/{userId}")
+    @PUT("users/{userId}")
     suspend fun updateAuthUser(
         @Header("Authorization") auth: String,
         @Path("userId") userId: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @DELETE("api/v1/users/{userId}")
+    @DELETE("users/{userId}")
     suspend fun deleteAuthUser(
         @Header("Authorization") auth: String,
         @Path("userId") userId: String
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("api/v1/users/{userId}/reset-password")
+    @POST("users/{userId}/reset-password")
     suspend fun resetUserPassword(
         @Header("Authorization") auth: String,
         @Path("userId") userId: String
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("api/v1/auth/me")
+    @GET("auth/me")
     suspend fun authMe(@retrofit2.http.Header("Authorization") token: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @PUT("api/v1/auth/change-password")
+    @PUT("auth/change-password")
     suspend fun changePassword(
         @Header("Authorization") auth: String,
         @Body data: Map<String, String>
@@ -479,27 +479,27 @@ interface SecretaryApi {
 
     // === INVOICE ITEMS ===
     @GET("crm/invoices/{invoiceId}/items")
-    suspend fun getInvoiceItems(@Path("invoiceId") invoiceId: Long): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+    suspend fun getInvoiceItems(@Path("invoiceId") invoiceId: String): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @POST("crm/invoices/{invoiceId}/items")
-    suspend fun addInvoiceItem(@Path("invoiceId") invoiceId: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun addInvoiceItem(@Path("invoiceId") invoiceId: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     @DELETE("crm/invoices/{invoiceId}/items/{itemId}")
-    suspend fun deleteInvoiceItem(@Path("invoiceId") invoiceId: Long, @Path("itemId") itemId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun deleteInvoiceItem(@Path("invoiceId") invoiceId: String, @Path("itemId") itemId: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === PAYMENTS ===
     @GET("crm/invoices/{invoiceId}/payments")
-    suspend fun getPayments(@Path("invoiceId") invoiceId: Long): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+    suspend fun getPayments(@Path("invoiceId") invoiceId: String): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @POST("crm/invoices/{invoiceId}/payments")
-    suspend fun addPayment(@Path("invoiceId") invoiceId: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun addPayment(@Path("invoiceId") invoiceId: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === NOTIFICATIONS ===
     @GET("crm/notifications")
     suspend fun getNotifications(@Query("user_id") userId: Int? = null, @Query("unread_only") unreadOnly: Boolean = false): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @PUT("crm/notifications/{notificationId}/read")
-    suspend fun markNotificationRead(@Path("notificationId") notificationId: Long): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun markNotificationRead(@Path("notificationId") notificationId: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === USER RATES ===
     @GET("crm/users/{userId}/rates")
@@ -510,7 +510,7 @@ interface SecretaryApi {
 
     // === CLIENT RATE ===
     @PUT("crm/clients/{clientId}/rate")
-    suspend fun updateClientRate(@Path("clientId") clientId: Long, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+    suspend fun updateClientRate(@Path("clientId") clientId: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === INVOICE FROM WORK REPORT ===
     @POST("crm/invoices/from-work-report")
@@ -540,77 +540,77 @@ interface SecretaryApi {
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     /** Phase A5: execute a voice command as a REAL backend action (calendar/task/client). */
-    @POST("api/v1/voice/execute")
+    @POST("voice/execute")
     suspend fun voiceExecute(
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     /** Help content filtered by the user's permissions, in their language. */
-    @GET("api/v1/voice/help")
+    @GET("voice/help")
     suspend fun getVoiceHelp(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     /** Hierarchical command tree (module > branch > command), permission-filtered. */
-    @GET("api/v1/voice/command-tree")
+    @GET("voice/command-tree")
     suspend fun getCommandTree(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === GOOGLE CALENDAR (server-side OAuth; Android is control-only) ===
     /** Adaptive alias learning: map an unknown phrase to a command. */
-    @POST("api/v1/voice/learn-alias")
+    @POST("voice/learn-alias")
     suspend fun learnAlias(
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("api/v1/calendar/google/status")
+    @GET("calendar/google/status")
     suspend fun gcalStatus(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("api/v1/calendar/google/connect/start")
+    @GET("calendar/google/connect/start")
     suspend fun gcalConnectStart(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("api/v1/calendar/google/disconnect")
+    @POST("calendar/google/disconnect")
     suspend fun gcalDisconnect(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @GET("api/v1/calendar/google/calendars")
+    @GET("calendar/google/calendars")
     suspend fun gcalCalendars(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @PUT("api/v1/calendar/google/selected-calendar")
+    @PUT("calendar/google/selected-calendar")
     suspend fun gcalSelectCalendar(
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    @POST("api/v1/calendar/google/sync")
+    @POST("calendar/google/sync")
     suspend fun gcalSync(): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     // === BACKUP / UNINSTALL ===
 
     /** Create a pre-uninstall backup. Admin gets full scope; others get personal scope. */
-    @POST("api/v1/backup/create")
+    @POST("backup/create")
     suspend fun createBackup(
         @Header("Authorization") auth: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     /** List all server-stored backup manifests (admin only). */
-    @GET("api/v1/backup/manifests")
+    @GET("backup/manifests")
     suspend fun listBackupManifests(
         @Header("Authorization") auth: String
     ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     /** Download a backup by restore token. */
-    @GET("api/v1/backup/restore/{token}")
+    @GET("backup/restore/{token}")
     suspend fun getBackupByToken(
         @Header("Authorization") auth: String,
         @Path("token") token: String
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     /** Register a biometric (fingerprint) hash for the current user. */
-    @POST("api/v1/backup/biometric/register")
+    @POST("backup/biometric/register")
     suspend fun registerBiometric(
         @Header("Authorization") auth: String,
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
     /** Remove a biometric entry for a device. */
-    @DELETE("api/v1/backup/biometric/{deviceId}")
+    @DELETE("backup/biometric/{deviceId}")
     suspend fun removeBiometric(
         @Header("Authorization") auth: String,
         @Path("deviceId") deviceId: String

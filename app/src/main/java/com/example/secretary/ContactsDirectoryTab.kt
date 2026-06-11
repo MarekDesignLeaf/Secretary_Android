@@ -1,4 +1,4 @@
-﻿package com.example.secretary
+package com.example.secretary
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -305,8 +305,8 @@ fun SharedContactDialog(
     sections: List<ContactSection>,
     contact: SharedContact? = null,
     onDismiss: () -> Unit,
-    onSave: (Map<String, Any?>, Long?, (Boolean, String?) -> Unit) -> Unit,
-    onDelete: ((Long, (Boolean, String?) -> Unit) -> Unit)? = null
+    onSave: (Map<String, Any?>, String?, (Boolean, String?) -> Unit) -> Unit,
+    onDelete: ((String, (Boolean, String?) -> Unit) -> Unit)? = null
 ) {
     var displayName by remember(contact) { mutableStateOf(contact?.display_name ?: "") }
     var companyName by remember(contact) { mutableStateOf(contact?.company_name ?: "") }

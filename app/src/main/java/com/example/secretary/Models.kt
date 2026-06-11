@@ -12,7 +12,7 @@ data class ChatMessage(
 data class MessageRequest(
     val text: String,
     val history: List<ChatMessage> = emptyList(),
-    val context_entity_id: Long? = null,
+    val context_entity_id: String? = null,
     val context_type: String? = null,
     val internal_language: String = "cs-CZ",
     val external_language: String = "en-GB",
@@ -99,11 +99,11 @@ data class LanguageOption(
 
 // Contact sorting session state
 data class ContactDuplicate(
-    val id1: Long = 0,
+    val id1: String = "",
     val name1: String = "",
     val phone1: String? = null,
     val section1: String? = null,
-    val id2: Long = 0,
+    val id2: String = "",
     val name2: String = "",
     val phone2: String? = null,
     val section2: String? = null,
@@ -114,7 +114,7 @@ data class PhoneContactEntry(
     val displayName: String,
     val phone: String,
     val existingSectionCode: String? = null,
-    val existingId: Long? = null
+    val existingId: String? = null
 )
 
 data class ContactSortingSession(
@@ -133,7 +133,7 @@ data class ContactSortingSession(
 
 data class SummarizeRequest(
     val history: List<ChatMessage>,
-    val user_id: Long? = null,
+    val user_id: String? = null,
     val tenant_id: Int = 1,
     val internal_language: String = "cs"
 )
@@ -146,7 +146,7 @@ data class SummarizeResponse(
 )
 
 data class AssistantMemoryItem(
-    val id: Long = 0,
+    val id: String = "",
     val memory_type: String = "long",
     val content: String = "",
     val updated_at: String? = null
@@ -203,7 +203,7 @@ data class ClientCreationDraft(
 
 data class JobCreationDraft(
     val title: String = "",
-    val clientId: Long? = null,
+    val clientId: String? = null,
     val clientName: String? = null,
     val assignedUserId: String? = null,
     val assignedTo: String? = null,
@@ -215,9 +215,9 @@ data class TaskCreationDraft(
     val title: String = "",
     val taskType: String = "interni_poznamka",
     val priority: String = "bezna",
-    val clientId: Long? = null,
+    val clientId: String? = null,
     val clientName: String? = null,
-    val jobId: Long? = null,
+    val jobId: String? = null,
     val assignedUserId: String? = null,
     val assignedTo: String? = null,
     val plannedStartAt: String? = null,
@@ -228,7 +228,7 @@ data class TaskCreationDraft(
 
 // === CLIENT — matches DB: clients table (schema.sql) ===
 data class Client(
-    val id: Long = 0,
+    val id: String = "",
     val client_code: String? = null,
     val client_type: String? = "residential",
     val title: String? = null,
@@ -272,7 +272,7 @@ data class ClientDetail(
 )
 
 data class ClientNote(
-    val id: Long = 0,
+    val id: String = "",
     val note: String = "",
     val created_by: String? = null,
     val created_at: String? = null
@@ -293,7 +293,7 @@ data class SyncedContactCandidate(
     val billing_postcode: String? = null,
     val billing_country: String? = null,
     val selected_as_client: Boolean = false,
-    val linked_client_id: Long? = null,
+    val linked_client_id: String? = null,
     val linked_client_name: String? = null
 )
 
@@ -312,7 +312,7 @@ data class ContactSection(
 )
 
 data class SharedContact(
-    val id: Long = 0,
+    val id: String = "",
     val section_code: String = "",
     val section_name: String? = null,
     val display_name: String = "",
@@ -463,14 +463,14 @@ data class RecognitionHistoryEntry(
 )
 
 data class AdminActivityLogEntry(
-    val id: Long = 0,
+    val id: String = "",
     val entity_type: String = "",
     val entity_id: String = "",
     val action: String = "",
     val description: String = "",
     val source_channel: String = "",
     val created_at: String = "",
-    val actor_user_id: Long? = null,
+    val actor_user_id: String? = null,
     val actor_display_name: String = "",
     val actor_email: String = "",
     val details: Map<String, @JvmSuppressWildcards Any?> = emptyMap()
@@ -485,10 +485,10 @@ data class HierarchyIntegritySummary(
 )
 
 data class HierarchyEntityIssue(
-    val id: Long = 0,
+    val id: String = "",
     val display_name: String? = null,
     val job_title: String? = null,
-    val client_id: Long? = null,
+    val client_id: String? = null,
     val owner_user_id: String? = null,
     val assigned_user_id: String? = null,
     val next_action_task_id: String? = null,
@@ -499,15 +499,15 @@ data class HierarchyEntityIssue(
 data class HierarchyTaskIssue(
     val id: String = "",
     val title: String = "",
-    val client_id: Long? = null,
-    val job_id: Long? = null,
+    val client_id: String? = null,
+    val job_id: String? = null,
     val assigned_user_id: String? = null,
     val status: String? = null,
     val issues: List<String> = emptyList()
 )
 
 data class BlockedUserDeactivation(
-    val id: Long = 0,
+    val id: String = "",
     val display_name: String = "",
     val email: String = "",
     val owns_clients: Boolean = false,
@@ -543,8 +543,8 @@ data class ImportableSharedContact(
 
 // === PROPERTY — matches DB: properties table ===
 data class Property(
-    val id: Long = 0,
-    val client_id: Long = 0,
+    val id: String = "",
+    val client_id: String = "",
     val property_code: String? = null,
     val property_name: String = "",
     val property_type: String? = null,
@@ -557,13 +557,13 @@ data class Property(
 
 // === JOB — matches DB: jobs table ===
 data class Job(
-    val id: Long = 0,
+    val id: String = "",
     val job_number: String? = null,
-    val client_id: Long? = null,
+    val client_id: String? = null,
     val client_name: String? = null,
-    val property_id: Long? = null,
+    val property_id: String? = null,
     val property_address: String? = null,
-    val quote_id: Long? = null,
+    val quote_id: String? = null,
     val job_title: String = "",
     val job_status: String = "nova",
     val start_date_planned: String? = null,
@@ -590,8 +590,8 @@ data class JobDetail(
 )
 
 data class JobNote(
-    val id: Long = 0,
-    val job_id: Long = 0,
+    val id: String = "",
+    val job_id: String = "",
     val note: String = "",
     val note_type: String = "general", // general, complication, handover
     val created_by: String? = null,
@@ -600,8 +600,8 @@ data class JobNote(
 )
 
 data class JobPhoto(
-    val id: Long = 0,
-    val job_id: Long = 0,
+    val id: String = "",
+    val job_id: String = "",
     val url: String = "",
     val description: String? = null,
     val photo_type: String = "general", // start, process, end, complication
@@ -610,8 +610,8 @@ data class JobPhoto(
 )
 
 data class JobAuditEntry(
-    val id: Long = 0,
-    val job_id: Long = 0,
+    val id: String = "",
+    val job_id: String = "",
     val action_type: String = "",
     val description: String = "",
     val user_name: String? = null,
@@ -620,7 +620,7 @@ data class JobAuditEntry(
 
 // === LEAD — matches DB: leads table + ALTER columns ===
 data class Lead(
-    val id: Long = 0,
+    val id: String = "",
     val lead_code: String? = null,
     val lead_source: String? = null,
     val contact_name: String? = null,
@@ -629,17 +629,17 @@ data class Lead(
     val description: String? = null,
     val notes: String? = null,
     val status: String = "new",
-    val client_id: Long? = null,
-    val job_id: Long? = null,
+    val client_id: String? = null,
+    val job_id: String? = null,
     val received_at: String? = null,
     val updated_at: String? = null
 )
 
 // === INVOICE — matches DB: invoices table ===
 data class Invoice(
-    val id: Long = 0,
+    val id: String = "",
     val invoice_number: String? = null,
-    val client_id: Long? = null,
+    val client_id: String? = null,
     val client_name: String? = null,
     val grand_total: Double = 0.0,
     val status: String = "draft",
@@ -649,10 +649,10 @@ data class Invoice(
 
 // === COMMUNICATION — matches DB: communications table + ALTER ===
 data class Communication(
-    val id: Long = 0,
-    val client_id: Long? = null,
+    val id: String = "",
+    val client_id: String? = null,
     val client_name: String? = null,
-    val job_id: Long? = null,
+    val job_id: String? = null,
     val job_title: String? = null,
     val comm_type: String? = "telefon",
     val source: String? = null,
@@ -692,10 +692,10 @@ data class Task(
     val planningNote: String? = null,
     val reminderForAssigneeOnly: Boolean = true,
     val delegatedBy: String? = null,
-    val clientId: Long? = null,
+    val clientId: String? = null,
     val clientName: String? = null,
-    val jobId: Long? = null,
-    val propertyId: Long? = null,
+    val jobId: String? = null,
+    val propertyId: String? = null,
     val propertyAddress: String? = null,
     val isRecurring: Boolean = false,
     val recurrenceRule: String? = null,
@@ -747,9 +747,9 @@ data class WasteLoad(
 
 // === QUOTE — matches DB: quotes + quote_items ===
 data class Quote(
-    val id: Long = 0,
+    val id: String = "",
     val quote_number: String? = null,
-    val client_id: Long? = null,
+    val client_id: String? = null,
     val client_name: String? = null,
     val quote_title: String? = null,
     val status: String = "draft",
@@ -759,7 +759,7 @@ data class Quote(
 )
 
 data class QuoteItem(
-    val id: Long = 0,
+    val id: String = "",
     val description: String = "",
     val quantity: Double = 1.0,
     val unit_price: Double = 0.0,
@@ -769,8 +769,8 @@ data class QuoteItem(
 
 // === WORK REPORT — matches DB: work_reports + sub-tables ===
 data class WorkReport(
-    val id: Long = 0,
-    val client_id: Long? = null,
+    val id: String = "",
+    val client_id: String? = null,
     val client_name: String? = null,
     val work_date: String? = null,
     val total_hours: Double = 0.0,

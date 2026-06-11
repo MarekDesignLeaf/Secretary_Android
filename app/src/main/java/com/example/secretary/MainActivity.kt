@@ -845,22 +845,22 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
             }
             composable(
                 route = Screen.ClientDetail.route,
-                arguments = listOf(navArgument("clientId") { type = NavType.LongType })
+                arguments = listOf(navArgument("clientId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val clientId = backStackEntry.arguments?.getLong("clientId") ?: 0L
+                val clientId = backStackEntry.arguments?.getString("clientId") ?: ""
                 LaunchedEffect(clientId) {
                     viewModel.updateContext(clientId, "client")
-                    viewModel.updateVoiceContext("client_detail", "client", clientId.toString())
+                    viewModel.updateVoiceContext("client_detail", "client", clientId)
                 }
                 ClientDetailScreen(clientId, viewModel, navController)
             }
             composable(
                 route = Screen.JobDetail.route,
-                arguments = listOf(navArgument("jobId") { type = NavType.LongType })
+                arguments = listOf(navArgument("jobId") { type = NavType.StringType })
             ) { backStackEntry ->
-                val jobId = backStackEntry.arguments?.getLong("jobId") ?: 0L
+                val jobId = backStackEntry.arguments?.getString("jobId") ?: ""
                 LaunchedEffect(jobId) {
-                    viewModel.updateVoiceContext("job_detail", "job", jobId.toString())
+                    viewModel.updateVoiceContext("job_detail", "job", jobId)
                 }
                 JobDetailScreen(jobId, viewModel, navController)
             }
@@ -1766,9 +1766,9 @@ fun AddClientDialog(
 fun AddTaskDialog(
     clients: List<Client>,
     backendUsers: List<BackendUser>,
-    initialClientId: Long? = null,
+    initialClientId: String? = null,
     initialClientName: String? = null,
-    initialJobId: Long? = null,
+    initialJobId: String? = null,
     allowSetAsNextAction: Boolean = true,
     onDismiss: () -> Unit,
     onConfirm: (TaskCreationDraft, (Boolean, String?) -> Unit) -> Unit
@@ -1780,7 +1780,7 @@ fun AddTaskDialog(
     var deadline by remember { mutableStateOf("") }
     var plannedStartAt by remember { mutableStateOf("") }
     var planningNote by remember { mutableStateOf("") }
-    var selectedClientId by remember { mutableStateOf<Long?>(initialClientId) }
+    var selectedClientId by remember { mutableStateOf<String?>(initialClientId) }
     var selectedClientName by remember { mutableStateOf<String?>(initialClientName) }
     var selectedAssigneeId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var setAsNextAction by remember { mutableStateOf(false) }
@@ -2681,7 +2681,7 @@ fun InvoicesListTab(invoices: List<Invoice>, navController: NavHostController? =
 
 @Composable
 fun WorkReportsTab(reports: List<WorkReport>, viewModel: SecretaryViewModel, navController: NavHostController? = null) {
-    var selectedIds by remember { mutableStateOf(setOf<Long>()) }
+    var selectedIds by remember { mutableStateOf(setOf<String>()) }
     var invoiceResult by remember { mutableStateOf<String?>(null) }
     if (reports.isEmpty()) {
         Box(Modifier.fillMaxSize(), Alignment.Center) { Text(Strings.noWorkReports, color = Color.Gray) }
@@ -3102,7 +3102,7 @@ fun <T> CrmDataList(items: List<T>, icon: androidx.compose.ui.graphics.vector.Im
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClientDetailScreen(clientId: Long, viewModel: SecretaryViewModel, navController: NavHostController) {
+fun ClientDetailScreen(clientId: String, viewModel: SecretaryViewModel, navController: NavHostController) {
     val state by viewModel.uiState.collectAsState()
     var selectedTab by remember { mutableIntStateOf(0) }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -3382,7 +3382,7 @@ fun ClientInfoTab(detail: ClientDetail, viewModel: SecretaryViewModel) {
     val c = detail.client
     val ctx = LocalContext.current
     val hierarchyIssues = remember(detail, state.tasks, state.backendUsers, state.hierarchyIntegrityReport) {
-        state.hierarchyIntegrityReport?.orphan_clients?.firstOrNull { it.id == c.id }?.issues
+        state.hierarchyIntegrityReport?.orphan_clients?.firstOrNull { it.id == c.id.toString() }?.issues
             ?: clientHierarchyIssues(detail, state)
     }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -3712,7 +3712,7 @@ fun CommRow(c: Communication, navController: NavHostController? = null) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LogCommunicationDialog(clientId: Long?, onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
+fun LogCommunicationDialog(clientId: String?, onDismiss: () -> Unit, onSave: (String, String, String, String) -> Unit) {
     var commType by remember { mutableStateOf("telefon") }
     var subject by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
@@ -3851,7 +3851,7 @@ fun AddJobDialog(
     var step by remember { mutableIntStateOf(0) }
     var title by remember { mutableStateOf("") }
     var startDate by remember { mutableStateOf("") }
-    var selectedClientId by remember { mutableStateOf<Long?>(null) }
+    var selectedClientId by remember { mutableStateOf<String?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var assignedUserId by remember { mutableStateOf<String?>(activeUsers.firstOrNull()?.id) }
     var firstActionTitle by remember { mutableStateOf("") }
@@ -4011,7 +4011,7 @@ fun AddJobDialog(
 // ========== JOB DETAIL SCREEN ==========
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: NavHostController) {
+fun JobDetailScreen(jobId: String, viewModel: SecretaryViewModel, navController: NavHostController) {
     val state by viewModel.uiState.collectAsState()
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = listOf(Strings.startLabel, Strings.progressLabel, Strings.endLabel, Strings.complicationsLabel, Strings.auditLog)
@@ -4070,7 +4070,7 @@ fun JobDetailScreen(jobId: Long, viewModel: SecretaryViewModel, navController: N
     val detail = state.selectedJobDetail
     val hierarchyIssues = remember(detail, state.tasks, state.backendUsers, state.hierarchyIntegrityReport) {
         val current = detail ?: return@remember emptyList<String>()
-        state.hierarchyIntegrityReport?.orphan_jobs?.firstOrNull { it.id == current.job.id }?.issues
+        state.hierarchyIntegrityReport?.orphan_jobs?.firstOrNull { it.id == current.job.id.toString() }?.issues
             ?: jobHierarchyIssues(current, state)
     }
     val hierarchyValid = hierarchyIssues.isEmpty()
@@ -5014,7 +5014,11 @@ class SecretaryViewModel : ViewModel() {
 
     internal val api by lazy {
         val url = settingsManager?.apiUrl?.takeIf { it.isNotBlank() } ?: BuildConfig.BASE_URL
-        val baseUrl = if (url.endsWith("/")) url else "$url/"
+        // All SecretaryApi paths are relative to /api/v1/ — the server mounts every
+        // router under that prefix. Normalize here so saved URLs with or without
+        // the prefix both work and no endpoint can double-prefix.
+        val root = if (url.endsWith("/")) url else "$url/"
+        val baseUrl = if (root.endsWith("api/v1/")) root else root + "api/v1/"
         Retrofit.Builder()
         .baseUrl(baseUrl)
         .client(okHttpClient)
@@ -5073,8 +5077,8 @@ class SecretaryViewModel : ViewModel() {
             user
         }
         val userId = when (val value = source["id"]) {
-            is Number -> value.toLong()
-            is String -> value.toLongOrNull()
+            is Number -> value.toLong().toString()
+            is String -> value.takeIf { it.isNotBlank() }
             else -> null
         }
         val displayName = source["display_name"]?.toString()
@@ -5556,7 +5560,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun deleteAssistantMemory(memoryId: Long) {
+    fun deleteAssistantMemory(memoryId: String) {
         viewModelScope.launch {
             try {
                 val res = api.deleteAssistantMemory(memoryId)
@@ -5663,7 +5667,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun loadAdminActivityLog(actorUserId: Long? = null) {
+    fun loadAdminActivityLog(actorUserId: String? = null) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(adminActivityLoading = true, adminActivityError = null)
             try {
@@ -6056,15 +6060,15 @@ class SecretaryViewModel : ViewModel() {
                 if (res.isSuccessful) {
                     // Also persist preferred_language_code on the user profile so login
                     // no longer resets the language back to the previous value
-                    val uid = _uiState.value.currentUserId ?: -1L
-                    if (uid > 0L) {
+                    val uid = _uiState.value.currentUserId ?: ""
+                    if (uid.isNotBlank()) {
                         try {
                             val bcp47 = when (lang.lowercase().substringBefore("-")) {
                                 "cs" -> "cs-CZ"; "pl" -> "pl-PL"; "de" -> "de-DE"
                                 "sk" -> "sk-SK"; "fr" -> "fr-FR"; "es" -> "es-ES"
                                 else -> "en-GB"
                             }
-                            api.updateAuthUser(auth, uid.toString(), mapOf("preferred_language_code" to bcp47))
+                            api.updateAuthUser(auth, uid, mapOf("preferred_language_code" to bcp47))
                         } catch (_: Exception) { /* non-fatal */ }
                     }
                     applyAppLanguage(lang, persist = true)
@@ -6461,11 +6465,11 @@ class SecretaryViewModel : ViewModel() {
         )
     }
 
-    fun updateContext(id: Long?, type: String?) {
+    fun updateContext(id: String?, type: String?) {
         _uiState.value = _uiState.value.copy(contextEntityId = id, contextType = type)
     }
 
-    fun addJobAuditEntry(jobId: Long, actionType: String, description: String) {
+    fun addJobAuditEntry(jobId: String, actionType: String, description: String) {
         viewModelScope.launch {
             try {
                 val data = mapOf(
@@ -6482,7 +6486,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun uploadJobPhoto(jobId: Long, photoType: String, file: java.io.File, description: String? = null) {
+    fun uploadJobPhoto(jobId: String, photoType: String, file: java.io.File, description: String? = null) {
         viewModelScope.launch {
             try {
                 val mediaType = "image/*".toMediaType()
@@ -6856,8 +6860,8 @@ class SecretaryViewModel : ViewModel() {
                 val raw = res.body() ?: emptyList()
                 val reports = raw.map { m ->
                     WorkReport(
-                        id = (m["id"] as? Number)?.toLong() ?: 0,
-                        client_id = (m["client_id"] as? Number)?.toLong(),
+                        id = m["id"]?.toString() ?: "",
+                        client_id = m["client_id"]?.toString(),
                         client_name = m["client_name"]?.toString(),
                         work_date = m["work_date"]?.toString(),
                         total_hours = (m["total_hours"] as? Number)?.toDouble() ?: 0.0,
@@ -6899,7 +6903,7 @@ class SecretaryViewModel : ViewModel() {
                         planningNote = m["planning_note"]?.toString(),
                         reminderForAssigneeOnly = m["reminder_for_assignee_only"] as? Boolean ?: true,
                         clientName = m["client_name"]?.toString(),
-                        clientId = (m["client_id"] as? Number)?.toLong(),
+                        clientId = m["client_id"]?.toString(),
                         createdBy = m["created_by"]?.toString(),
                         result = m["result"]?.toString(),
                         calendarSyncEnabled = m["calendar_sync_enabled"] as? Boolean ?: true,
@@ -7058,7 +7062,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun loadClientDetail(clientId: Long) {
+    fun loadClientDetail(clientId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(selectedClientDetail = null)
             try {
@@ -7102,7 +7106,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun updateClient(clientId: Long, data: Map<String, Any?>) {
+    fun updateClient(clientId: String, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
                 val res = api.updateClient(clientId, data)
@@ -7111,7 +7115,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun updateClientServiceRates(clientId: Long, rates: Map<String, Any?>, onDone: (Boolean, String?) -> Unit) {
+    fun updateClientServiceRates(clientId: String, rates: Map<String, Any?>, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
                 val res = api.updateClientServiceRates(clientId, rates)
@@ -7136,7 +7140,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun addClientNote(clientId: Long, note: String) {
+    fun addClientNote(clientId: String, note: String) {
         viewModelScope.launch {
             try {
                 val res = api.addClientNote(clientId, mapOf("note" to note))
@@ -7352,7 +7356,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun saveSharedContact(data: Map<String, Any?>, contactId: Long? = null, onDone: (Boolean, String?) -> Unit) {
+    fun saveSharedContact(data: Map<String, Any?>, contactId: String? = null, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
                 val res = if (contactId == null) api.createSharedContact(data) else api.updateSharedContact(contactId, data)
@@ -7369,7 +7373,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun deleteSharedContact(contactId: Long, onDone: (Boolean, String?) -> Unit) {
+    fun deleteSharedContact(contactId: String, onDone: (Boolean, String?) -> Unit) {
         viewModelScope.launch {
             try {
                 val res = api.deleteSharedContact(contactId)
@@ -7437,7 +7441,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun updateLead(leadId: Long, data: Map<String, Any?>) {
+    fun updateLead(leadId: String, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
                 api.updateLead(leadId, data)
@@ -7446,7 +7450,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun createInvoiceManual(clientId: Long?, amount: Double, dueDate: String?) {
+    fun createInvoiceManual(clientId: String?, amount: Double, dueDate: String?) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "grand_total" to amount, "due_date" to dueDate)
@@ -7456,7 +7460,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun updateInvoiceStatus(invoiceId: Long, status: String) {
+    fun updateInvoiceStatus(invoiceId: String, status: String) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("status" to status)
@@ -7466,7 +7470,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun createWorkReportManual(clientId: Long?, workDate: String, totalHours: Double, totalPrice: Double, notes: String?) {
+    fun createWorkReportManual(clientId: String?, workDate: String, totalHours: Double, totalPrice: Double, notes: String?) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("tenant_id" to 1, "client_id" to clientId, "work_date" to workDate,
@@ -7477,7 +7481,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun addJobNote(jobId: Long, note: String, noteType: String = "general") {
+    fun addJobNote(jobId: String, note: String, noteType: String = "general") {
         viewModelScope.launch {
             try {
                 val data = mapOf(
@@ -7494,7 +7498,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun createQuote(clientId: Long?, title: String) {
+    fun createQuote(clientId: String?, title: String) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "quote_title" to title)
@@ -7504,7 +7508,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun approveQuote(quoteId: Long, createJob: Boolean = true) {
+    fun approveQuote(quoteId: String, createJob: Boolean = true) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("create_job" to createJob)
@@ -7514,7 +7518,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun addQuoteItem(quoteId: Long, description: String, qty: Double, price: Double) {
+    fun addQuoteItem(quoteId: String, description: String, qty: Double, price: Double) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("description" to description, "quantity" to qty, "unit_price" to price)
@@ -7559,7 +7563,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun loadJobDetail(jobId: Long) {
+    fun loadJobDetail(jobId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(selectedJobDetail = null)
             try {
@@ -7569,7 +7573,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun updateJob(jobId: Long, data: Map<String, Any?>) {
+    fun updateJob(jobId: String, data: Map<String, Any?>) {
         viewModelScope.launch {
             try {
                 val res = api.updateJob(jobId, data)
@@ -7625,7 +7629,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun convertLeadToClient(leadId: Long, name: String, email: String, phone: String) {
+    fun convertLeadToClient(leadId: String, name: String, email: String, phone: String) {
         viewModelScope.launch {
             try {
                 val data = mapOf("name" to name, "email" to email, "phone" to phone)
@@ -7635,7 +7639,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun convertLeadToJob(leadId: Long, title: String) {
+    fun convertLeadToJob(leadId: String, title: String) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("title" to title)
@@ -7645,7 +7649,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun logCommunication(clientId: Long?, jobId: Long?, commType: String, subject: String, message: String, direction: String) {
+    fun logCommunication(clientId: String?, jobId: String?, commType: String, subject: String, message: String, direction: String) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("client_id" to clientId, "job_id" to jobId, "comm_type" to commType, "subject" to subject, "message" to message, "direction" to direction)
@@ -8542,7 +8546,7 @@ class SecretaryViewModel : ViewModel() {
 
     // Cache for effectiveVoiceAliases — invalidate when aliases change
     private var _cachedAliases: List<VoiceAlias>? = null
-    private var _cachedAliasesUserId: Long = -1L
+    private var _cachedAliasesUserId: String = ""
     private var _cachedAliasesCount: Int = -1
 
     fun invalidateAliasCache() {
@@ -8610,7 +8614,7 @@ class SecretaryViewModel : ViewModel() {
                                 displayName = m["display_name"]?.toString() ?: return@mapNotNull null,
                                 phone = m["phone_primary"]?.toString() ?: "",
                                 existingSectionCode = m["contact_role"]?.toString(),
-                                existingId = (m["id"] as? Number)?.toLong()
+                                existingId = m["id"]?.toString()
                             )
                         }
                     } ?: emptyList()
@@ -8792,11 +8796,11 @@ class SecretaryViewModel : ViewModel() {
                     @Suppress("UNCHECKED_CAST")
                     val dupes = (body["duplicates"] as? List<Map<String, Any?>>)?.map { d ->
                         ContactDuplicate(
-                            id1 = (d["id1"] as? Number)?.toLong() ?: 0,
+                            id1 = d["id1"]?.toString() ?: "",
                             name1 = d["name1"]?.toString() ?: "",
                             phone1 = d["phone1"]?.toString(),
                             section1 = d["section1"]?.toString(),
-                            id2 = (d["id2"] as? Number)?.toLong() ?: 0,
+                            id2 = d["id2"]?.toString() ?: "",
                             name2 = d["name2"]?.toString() ?: "",
                             phone2 = d["phone2"]?.toString(),
                             section2 = d["section2"]?.toString(),
@@ -8812,7 +8816,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun mergeContactsById(primaryId: Long, secondaryId: Long) {
+    fun mergeContactsById(primaryId: String, secondaryId: String) {
         viewModelScope.launch {
             try {
                 val res = api.mergeSharedContacts(mapOf("primary_id" to primaryId, "secondary_id" to secondaryId))
@@ -9769,7 +9773,7 @@ class SecretaryViewModel : ViewModel() {
                     assignedTo = data["assigned_to"]?.toString(),
                     planningNote = data["planning_note"]?.toString(),
                     clientName = data["client_name"]?.toString(),
-                    clientId = (data["client_id"] as? Number)?.toLong(),
+                    clientId = data["client_id"]?.toString(),
                     createdBy = data["created_by"]?.toString() ?: "system",
                     calendarSyncEnabled = data["calendar_sync_enabled"] as? Boolean ?: true
                 )
@@ -9930,7 +9934,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun createInvoiceFromWorkReport(workReportId: Long, onResult: (Map<String, Any?>?) -> Unit) {
+    fun createInvoiceFromWorkReport(workReportId: String, onResult: (Map<String, Any?>?) -> Unit) {
         viewModelScope.launch {
             try {
                 val res = api.createInvoiceFromWorkReport(mapOf("work_report_id" to workReportId))
@@ -9939,7 +9943,7 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun batchInvoiceFromWorkReports(ids: List<Long>, onResult: (Map<String, Any?>?) -> Unit) {
+    fun batchInvoiceFromWorkReports(ids: List<String>, onResult: (Map<String, Any?>?) -> Unit) {
         viewModelScope.launch {
             try {
                 val res = api.batchInvoiceFromWorkReports(mapOf("work_report_ids" to ids))
@@ -10168,7 +10172,7 @@ data class UiState(
     val quotes: List<Quote> = emptyList(),
     val selectedClientDetail: ClientDetail? = null,
     val selectedJobDetail: JobDetail? = null,
-    val contextEntityId: Long? = null,
+    val contextEntityId: String? = null,
     val contextType: String? = null,
     val connectionStatus: ConnectionStatus = ConnectionStatus.UNKNOWN,
     val backendUsers: List<BackendUser> = emptyList(),
@@ -10221,7 +10225,7 @@ data class UiState(
     val tenantLanguages: Map<String, Any?>? = null,
     val settingsLoadErrors: Map<String, String> = emptyMap(),
     val settingsLastRefreshMs: Long = 0L,
-    val currentUserId: Long? = null,
+    val currentUserId: String? = null,
     val currentUserDisplayName: String? = null,
     val currentUserEmail: String? = null,
     val currentUserRole: String? = null,

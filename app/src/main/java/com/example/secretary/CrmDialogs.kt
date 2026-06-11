@@ -136,8 +136,8 @@ fun EditLeadDialog(lead: Lead, onDismiss: () -> Unit, onSave: (Map<String, Any?>
 // ========== INVOICE CREATE DIALOG ==========
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateInvoiceDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (Long?, Double, String?) -> Unit) {
-    var selectedClientId by remember { mutableStateOf<Long?>(null) }
+fun CreateInvoiceDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (String?, Double, String?) -> Unit) {
+    var selectedClientId by remember { mutableStateOf<String?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf("") }
@@ -184,8 +184,8 @@ fun InvoiceStatusDialog(currentStatus: String, onDismiss: () -> Unit, onSelect: 
 // ========== WORK REPORT MANUAL CREATE DIALOG ==========
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (Long?, String, Double, Double, String?) -> Unit) {
-    var selectedClientId by remember { mutableStateOf<Long?>(null) }
+fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (String?, String, Double, Double, String?) -> Unit) {
+    var selectedClientId by remember { mutableStateOf<String?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
     var workDate by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
@@ -225,8 +225,8 @@ fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfi
 // ========== GLOBAL LOG COMMUNICATION DIALOG ==========
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GlobalLogCommDialog(clients: List<Client>, onDismiss: () -> Unit, onSave: (Long?, String, String, String, String) -> Unit) {
-    var selectedClientId by remember { mutableStateOf<Long?>(null) }
+fun GlobalLogCommDialog(clients: List<Client>, onDismiss: () -> Unit, onSave: (String?, String, String, String, String) -> Unit) {
+    var selectedClientId by remember { mutableStateOf<String?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
     var commType by remember { mutableStateOf("telefon") }
@@ -323,8 +323,8 @@ fun QuotesListTab(quotes: List<Quote>, viewModel: SecretaryViewModel) {
 // ========== CREATE QUOTE DIALOG ==========
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateQuoteDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (Long?, String) -> Unit) {
-    var selectedClientId by remember { mutableStateOf<Long?>(null) }
+fun CreateQuoteDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (String?, String) -> Unit) {
+    var selectedClientId by remember { mutableStateOf<String?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
@@ -671,7 +671,7 @@ fun CommunicationEditDialog(onDismiss: () -> Unit, clients: List<Client>, onSave
     var direction by remember { mutableStateOf("outbound") }
     var subject by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
-    var selectedClientId by remember { mutableStateOf<Long?>(null) }
+    var selectedClientId by remember { mutableStateOf<String?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.newCommunication) },

@@ -33,7 +33,7 @@ data class SavedSignature(
 )
 
 data class BiometricProfile(
-    val userId: Long? = null,
+    val userId: String? = null,
     val displayName: String = "",
     val email: String = "",
     val password: String = ""
@@ -52,8 +52,8 @@ class SettingsManager(context: Context) {
     internal val prefsPublic: SharedPreferences get() = prefs
     private val gson = Gson()
 
-    private fun scopedKey(base: String, userId: Long = currentBackendUserId): String? =
-        if (userId > 0L) "${base}_user_$userId" else null
+    private fun scopedKey(base: String, userId: String = currentBackendUserId): String? =
+        if (userId.isNotBlank()) "${base}_user_$userId" else null
 
     private fun getScopedBoolean(base: String, default: Boolean): Boolean {
         val scoped = scopedKey(base)
@@ -273,10 +273,12 @@ class SettingsManager(context: Context) {
         set(v) = prefs.edit { putString("theme_mode", v) }
 
     // 9. Jazyk / Language + Backend user
-    var currentBackendUserId: Long
-        get() = prefs.getLong("current_backend_user_id", -1L)
+    var currentBackendUserId: String
+        // New key (UUID string). Old Long key "current_backend_user_id" is ignored
+        // to avoid ClassCastException on upgrade.
+        get() = prefs.getString("current_backend_user_uuid", "") ?: ""
         set(v) = prefs.edit {
-            if (v <= 0L) remove("current_backend_user_id") else putLong("current_backend_user_id", v)
+            if (v.isBlank()) remove("current_backend_user_uuid") else putString("current_backend_user_uuid", v)
         }
     var currentBackendUserRole: String
         get() = prefs.getString("current_backend_user_role", "") ?: ""
@@ -289,15 +291,15 @@ class SettingsManager(context: Context) {
     var appLanguage: String
         get() = normalizeAppLanguage(prefs.getString("app_language", "cs") ?: "cs")
         set(v) = prefs.edit { putString("app_language", normalizeAppLanguage(v)) }
-    fun setCurrentBackendUser(userId: Long?, role: String?, displayName: String? = null, email: String? = null) {
-        currentBackendUserId = if ((userId ?: 0L) > 0L) userId!! else -1L
+    fun setCurrentBackendUser(userId: String?, role: String?, displayName: String? = null, email: String? = null) {
+        currentBackendUserId = userId?.takeIf { it.isNotBlank() } ?: ""
         currentBackendUserRole = role.orEmpty()
         if (!displayName.isNullOrBlank()) currentUserDisplayName = displayName
         // FIX A9/A3: persist login email for use in CalendarManager and task creation
         if (!email.isNullOrBlank()) loginEmail = email
     }
     fun clearCurrentBackendUser() {
-        currentBackendUserId = -1L
+        currentBackendUserId = ""
         currentBackendUserRole = ""
         currentUserDisplayName = ""
         // Do NOT clear loginEmail on logout so CalendarManager can still find the calendar
@@ -310,7 +312,7 @@ class SettingsManager(context: Context) {
     fun clearAllAuthForCleanInstall() {
         accessToken = null
         refreshToken = null
-        currentBackendUserId = -1L
+        currentBackendUserId = ""
         currentBackendUserRole = ""
         currentUserDisplayName = ""
         loginEmail = ""
@@ -326,7 +328,7 @@ class SettingsManager(context: Context) {
 
     fun getCurrentAppLanguage(): String {
         val userId = currentBackendUserId
-        val lang = if (userId > 0L) {
+        val lang = if (userId.isNotBlank()) {
             normalizeAppLanguage(prefs.getString("app_language_user_$userId", appLanguage) ?: appLanguage)
         } else {
             appLanguage
@@ -337,14 +339,14 @@ class SettingsManager(context: Context) {
     fun setCurrentAppLanguage(lang: String) {
         val normalized = normalizeAppLanguage(lang)
         val userId = currentBackendUserId
-        if (userId > 0L) {
+        if (userId.isNotBlank()) {
             prefs.edit { putString("app_language_user_$userId", normalized) }
         }
         appLanguage = normalized
     }
-    fun getAppLanguageForUser(userId: Long?, fallback: String = appLanguage): String {
-        val resolved = userId ?: currentBackendUserId
-        if (resolved > 0L) {
+    fun getAppLanguageForUser(userId: String?, fallback: String = appLanguage): String {
+        val resolved = userId?.takeIf { it.isNotBlank() } ?: currentBackendUserId
+        if (resolved.isNotBlank()) {
             return normalizeAppLanguage(prefs.getString("app_language_user_$resolved", fallback) ?: fallback)
         }
         return normalizeAppLanguage(fallback)
