@@ -63,6 +63,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         item { LanguageSection(sm, viewModel) }
         item { ThemeSection(sm) }
         item { VoiceSection(sm) }
+        item { WhatsAppSection() }
         item { CommandAliasSection(sm) }
         item { GoogleCalendarSection(viewModel) }
         item { AssistantMemorySection(viewModel) }
@@ -466,6 +467,36 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         SSlider(Strings.voicePitch, pitch, 0.5f..2.0f, 5, "%.1fx".format(pitch), { pitch = it }) { sm.ttsPitch = pitch }
         var sil by remember { mutableFloatStateOf(sm.silenceLength.toFloat()) }
         SSlider(Strings.silenceLengthLabel, sil, 1500f..10000f, 7, "%.1fs".format(sil / 1000), { sil = it }) { sm.silenceLength = sil.toLong() }
+    }
+}
+
+@Composable private fun WhatsAppSection() {
+    var exp by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var granted by remember { mutableStateOf(WhatsAppNotificationListener.isAccessGranted(ctx)) }
+    // Re-check whenever the card is (re)opened — covers returning from settings.
+    LaunchedEffect(exp) { if (exp) granted = WhatsAppNotificationListener.isAccessGranted(ctx) }
+    SCard(Strings.t("WhatsApp", "WhatsApp", "WhatsApp"), Icons.Default.Email, exp, { exp = !exp }) {
+        Text(
+            Strings.t(
+                "To read incoming WhatsApp messages aloud, allow Secretary to access notifications. Sending and opening WhatsApp work without this.",
+                "Aby Secretary mohl číst příchozí WhatsApp zprávy nahlas, povol přístup k oznámením. Odesílání a otevírání WhatsAppu funguje i bez toho.",
+                "Aby Secretary czytał przychodzące wiadomości WhatsApp, zezwól na dostęp do powiadomień."
+            ),
+            fontSize = 12.sp, color = Color.Gray
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                if (granted) "✅ ${Strings.t("Notification access granted", "Přístup k oznámením povolen", "Dostęp przyznany")}"
+                else "⚠️ ${Strings.t("Notification access required", "Vyžaduje přístup k oznámením", "Wymagany dostęp")}",
+                fontSize = 13.sp,
+                color = if (granted) Color(0xFF4CAF50) else Color(0xFFFF9800)
+            )
+            Button(onClick = { WhatsAppNotificationListener.openAccessSettings(ctx) }) {
+                Text(if (granted) Strings.t("Open", "Otevřít", "Otwórz") else Strings.t("Allow", "Povolit", "Zezwól"))
+            }
+        }
     }
 }
 
