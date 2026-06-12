@@ -8229,6 +8229,20 @@ class SecretaryViewModel : ViewModel() {
             } else { startVoiceNavigationTarget(addr, text) }
             return
         }
+        // Teach a NAME alias: "říkej Honza pro Jana Nováka", "alias jména Honza
+        // je Jan Novák", "když řeknu Honza myslím Jana Nováka". Stored as a
+        // contact alias and applied to every later utterance before resolving.
+        parseVoiceNameAliasCommand(text)?.let { (alias, target) ->
+            settingsManager?.upsertVoiceAlias(alias, target, "contact")
+            val msg = Strings.t(
+                "OK, \"$alias\" now means $target.",
+                "Dobře, „$alias“ teď znamená $target.",
+                "OK, „$alias” oznacza teraz $target.")
+            _uiState.value = _uiState.value.copy(status = Strings.waitingForCommand, lastAiReply = msg,
+                history = (_uiState.value.history + ChatMessage("user", text) + ChatMessage("assistant", msg)).takeLast(30))
+            voiceManager?.speak(msg, expectReply = false)
+            return
+        }
         parseVoiceCallTarget(text)?.let { startVoiceCallTarget(it, text); return }
         parseVoiceWhatsAppCommand(text)?.let { startVoiceWhatsApp(it, text); return }
 
@@ -8256,7 +8270,9 @@ class SecretaryViewModel : ViewModel() {
     private suspend fun runActionEngine(text: String) {
         try {
             val reqBody = HashMap<String, Any?>()
-            reqBody["utterance"] = text
+            // Resolve contact name aliases (e.g. "Honza" -> "Jan Novák") so the
+            // backend's name matching finds the right client.
+            reqBody["utterance"] = applyContactAliases(text)
             reqBody["confirmed"] = true
             pendingVoiceActionId?.let { reqBody["pending_action_id"] = it }
             val resp = api.voiceExecute(reqBody)
@@ -9420,6 +9436,35 @@ class SecretaryViewModel : ViewModel() {
         return value.trim()
     }
 
+    /** Parse a "teach a name alias" utterance -> (alias, target name). Returns
+     *  null if it isn't an alias-teaching command. Both parts must be non-trivial. */
+    private fun parseVoiceNameAliasCommand(text: String): Pair<String, String>? {
+        val t = text.trim()
+        // Patterns: alias BEFORE the connector, target AFTER.
+        val patterns = listOf(
+            // "říkej Honza pro Jana Nováka" / "rikej Honza pro Jana"
+            Regex("""^(?:říkej|rikej|řekni|rekni)\s+(.+?)\s+(?:pro|na)\s+(.+)$""", RegexOption.IGNORE_CASE),
+            // "alias jména Honza je Jan Novák" / "alias jmena Honza pro Jana"
+            Regex("""^alias\s+(?:jména|jmena|kontaktu|klienta)\s+(.+?)\s+(?:je|pro|znamená|znamena)\s+(.+)$""", RegexOption.IGNORE_CASE),
+            // "Honza je zkratka pro Jana Nováka"
+            Regex("""^(.+?)\s+je\s+(?:zkratka|alias|přezdívka|prezdivka)\s+(?:pro|na)\s+(.+)$""", RegexOption.IGNORE_CASE),
+            // "když řeknu Honza myslím Jana Nováka"
+            Regex("""^(?:když|kdyz)\s+(?:řeknu|reknu|říkám|rikam)\s+(.+?)\s+(?:myslím|myslim|tak je to|je to)\s+(.+)$""", RegexOption.IGNORE_CASE),
+            // English: "call Jan Novák Honza" -> alias=Honza? ambiguous; use "X means Y"
+            Regex("""^(.+?)\s+means\s+(.+)$""", RegexOption.IGNORE_CASE),
+            Regex("""^(?:alias|nickname)\s+(.+?)\s+(?:for|is)\s+(.+)$""", RegexOption.IGNORE_CASE),
+        )
+        for (re in patterns) {
+            val m = re.find(t) ?: continue
+            val alias = m.groupValues[1].trim().trim(',', '.', '"', '„', '"')
+            val target = m.groupValues[2].trim().trim(',', '.', '"', '„', '"')
+            if (alias.length >= 2 && target.length >= 2 && !alias.equals(target, ignoreCase = true)) {
+                return alias to target
+            }
+        }
+        return null
+    }
+
     private fun applyVoiceAliasToQuery(normalizedQuery: String): String {
         var value = normalizedQuery
         effectiveVoiceAliases().forEach { alias ->
@@ -9430,6 +9475,24 @@ class SecretaryViewModel : ViewModel() {
             if (value == aliasNorm) value = targetNorm
         }
         return value
+    }
+
+    /** Replace only CONTACT name aliases in the utterance, preserving the rest
+     *  of the text (case + diacritics) so titles/notes stay intact. Used before
+     *  sending to the backend action engine. */
+    private fun applyContactAliases(text: String): String {
+        var result = text
+        effectiveVoiceAliases()
+            .filter { it.targetType == "contact" }
+            .sortedByDescending { it.alias.length }
+            .forEach { a ->
+                if (a.alias.trim().length < 2 || a.target.trim().length < 2) return@forEach
+                if (isReservedWakeAlias(normalizeVoiceCommand(a.alias))) return@forEach
+                result = result.replace(
+                    Regex("(?<!\\p{L})${Regex.escape(a.alias.trim())}(?!\\p{L})", RegexOption.IGNORE_CASE),
+                    a.target.trim())
+            }
+        return result
     }
 
     private fun applyVoiceAliasesToFreeText(text: String): String {
