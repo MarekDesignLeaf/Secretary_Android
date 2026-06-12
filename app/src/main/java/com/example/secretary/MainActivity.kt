@@ -8376,6 +8376,7 @@ class SecretaryViewModel : ViewModel() {
                 val data = body["data"] as? Map<String, Any?>
                 when (data?.get("client_action")?.toString()) {
                     "import_contacts" -> { importDeviceContacts(message); return }
+                    "start_work_report" -> { startWorkReportSession(); return }
                 }
             }
 
