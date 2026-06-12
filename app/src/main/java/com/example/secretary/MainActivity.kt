@@ -8174,7 +8174,34 @@ class SecretaryViewModel : ViewModel() {
     //   - explicit chat mode (user asked to talk to the AI) -> /process
     //   - hard device actions (call / whatsapp / navigation)
     // ════════════════════════════════════════════════════════════════════
-    fun onVoiceInput(text: String) {
+    fun onVoiceInput(rawText: String) {
+        // ── WAKE-WORD LEAK GUARD ────────────────────────────────────────────────
+        // After the hotword fires, the recognizer often captures the wake word
+        // itself ("hej", "hey secretary"). It must never be treated as a command
+        // (it used to hit the action engine and produce "Nerozuměl jsem příkazu").
+        var text = rawText
+        run {
+            val wake = normalizeVoiceCommand(settingsManager?.activationWord ?: "")
+            val wakeVariants = buildSet {
+                if (wake.isNotBlank()) { add(wake); add("hej $wake"); add("hey $wake") }
+                addAll(listOf("hej", "hey", "ahoj", "ok"))
+            }
+            val norm = normalizeVoiceCommand(rawText)
+            if (norm in wakeVariants) {
+                Log.d("VoiceInput", "Ignored bare wake word: '$norm'")
+                voiceManager?.startListening()
+                return
+            }
+            // Strip a leading wake word from a longer command ("hej vytvoř úkol"
+            // -> "vytvoř úkol") by dropping the same number of raw tokens.
+            for (w in wakeVariants.sortedByDescending { it.length }) {
+                if (w.isNotBlank() && norm.startsWith("$w ")) {
+                    val drop = w.split(" ").size
+                    text = rawText.trim().split(Regex("\\s+")).drop(drop).joinToString(" ")
+                    break
+                }
+            }
+        }
         val lower = text.lowercase().trim()
         val normalized = normalizeVoiceCommand(text)
         Log.d("VoiceInput", "Processing: '$text' (norm: '$normalized')")

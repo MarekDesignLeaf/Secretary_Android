@@ -332,6 +332,14 @@ class WakeWordEngine(
                     variants += normalized
                 }
             }
+        // Short greeting wake words are often outside the small Vosk model's
+        // vocabulary or transcribed differently per language ("hej" -> "hey" on
+        // the EN model; the CS model rarely emits "hej" but knows "ahoj").
+        // Accept the common confusions so the same wake word works in cs/en/pl.
+        val greetings = setOf("hej", "hey", "ahoj", "ej", "czesc", "cześć")
+        if (variants.any { it in greetings || it.split(" ").firstOrNull() in greetings }) {
+            variants += listOf("hej", "hey", "ahoj", "ej")
+        }
         return variants
     }
 
