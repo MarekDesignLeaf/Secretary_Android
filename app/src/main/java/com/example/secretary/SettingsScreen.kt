@@ -297,6 +297,15 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         "ru-RU" to "Русский"
     )
 
+    // Team/app language: only the languages the UI is actually translated into —
+    // picking anything else would silently fall back to English. Customer
+    // language stays broad (client messages are translated at runtime).
+    val appUiLangs = listOf(
+        "cs-CZ" to "Čeština",
+        "en-GB" to "English (UK)",
+        "pl-PL" to "Polski"
+    )
+
     var showSystemLangPicker by remember { mutableStateOf(false) }
     var showCustomerLangPicker by remember { mutableStateOf(false) }
     var systemLangFeedback by remember { mutableStateOf<String?>(null) }
@@ -358,7 +367,10 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
             title = { Text("Jazyk systému") },
             text = {
                 Column {
-                    supportedLangs.forEach { (code, label) ->
+                    Text("Aplikace je přeložená do těchto jazyků. Pro zákaznickou komunikaci je k dispozici více jazyků níže.",
+                        fontSize = 11.sp, color = Color.Gray)
+                    Spacer(Modifier.height(4.dp))
+                    appUiLangs.forEach { (code, label) ->
                         val selected = code.equals(currentSystemLang, ignoreCase = true)
                             || langPrefix(code) == langPrefix(currentSystemLang)
                         Row(
