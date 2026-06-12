@@ -81,9 +81,6 @@ interface SecretaryApi {
         @Query("language") language: String? = null,
     ): Response<List<RecognitionHistoryEntry>>
 
-    @GET("system/settings")
-    suspend fun getSettings(): Response<Map<String, @JvmSuppressWildcards Any>>
-
     @GET("admin/activity-log")
     suspend fun getAdminActivityLog(
         @Query("limit") limit: Int = 200,
@@ -273,7 +270,7 @@ interface SecretaryApi {
 
     // === WORK REPORTS ===
     @GET("work-reports")
-    suspend fun getWorkReports(@Query("tenant_id") tenantId: Int = 1): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+    suspend fun getWorkReports(): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
 
     @GET("work-reports/{id}")
     suspend fun getWorkReport(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -284,7 +281,7 @@ interface SecretaryApi {
 
     // === QUOTES ===
     @GET("crm/quotes")
-    suspend fun getQuotes(@Query("tenant_id") tenantId: Int = 1, @Query("client_id") clientId: String? = null): Response<List<Quote>>
+    suspend fun getQuotes(@Query("client_id") clientId: String? = null): Response<List<Quote>>
 
     @GET("crm/quotes/{id}")
     suspend fun getQuoteDetail(@Path("id") id: String): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -313,9 +310,6 @@ interface SecretaryApi {
 
     @GET("crm/export/csv")
     suspend fun exportCsv(): Response<okhttp3.ResponseBody>
-
-    @GET("health")
-    suspend fun healthCheck(): Response<Map<String, @JvmSuppressWildcards Any>>
 
     // === BOOTSTRAP ===
     @GET("bootstrap/status")
@@ -501,13 +495,6 @@ interface SecretaryApi {
     @PUT("crm/notifications/{notificationId}/read")
     suspend fun markNotificationRead(@Path("notificationId") notificationId: String): Response<Map<String, @JvmSuppressWildcards Any?>>
 
-    // === USER RATES ===
-    @GET("crm/users/{userId}/rates")
-    suspend fun getUserRates(@Path("userId") userId: Int): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    @PUT("crm/users/{userId}/rates")
-    suspend fun updateUserRates(@Path("userId") userId: Int, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
-
     // === CLIENT RATE ===
     @PUT("crm/clients/{clientId}/rate")
     suspend fun updateClientRate(@Path("clientId") clientId: String, @Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
@@ -521,8 +508,7 @@ interface SecretaryApi {
 
     @GET("tools/hub-tiles")
     suspend fun getToolHubTiles(
-        @Header("Authorization") auth: String,
-        @Query("tenant_id") tenantId: Int = 1
+        @Header("Authorization") auth: String
     ): Response<ToolHubTilesResponse>
 
     // === VOICE RESOLVE (AI Control Bridge) ===
@@ -530,12 +516,6 @@ interface SecretaryApi {
     /** Resolve a voice utterance to a control/action. Does NOT execute. */
     @POST("voice/resolve")
     suspend fun voiceResolve(
-        @Body data: Map<String, @JvmSuppressWildcards Any?>
-    ): Response<Map<String, @JvmSuppressWildcards Any?>>
-
-    /** Update current screen context so voice resolver knows what controls are available. */
-    @POST("voice/context")
-    suspend fun voiceContext(
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 

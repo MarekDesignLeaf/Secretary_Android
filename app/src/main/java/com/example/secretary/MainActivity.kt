@@ -7782,29 +7782,15 @@ class SecretaryViewModel : ViewModel() {
 
     // =================== VOICE CONTEXT + RESOLVE ===================
 
-    /** Fire-and-forget: tell the server which screen the user is on. */
+    /** Track which screen the user is on (screen context for voice resolve).
+     * The legacy POST /voice/context backend endpoint no longer exists —
+     * context now travels with each voice/resolve request. */
     fun updateVoiceContext(
         screenCode: String,
         entityType: String? = null,
         entityId: String? = null
     ) {
         _uiState.value = _uiState.value.copy(currentScreenCode = screenCode)
-        val uid = _uiState.value.currentUserId?.toInt() ?: 1
-        viewModelScope.launch {
-            try {
-                api.voiceContext(
-                    mapOf(
-                        "tenant_id" to 1,
-                        "user_id" to uid,
-                        "screen_code" to screenCode,
-                        "entity_type" to entityType,
-                        "entity_id" to entityId
-                    )
-                )
-            } catch (_: Exception) {
-                // non-critical — ignore silently
-            }
-        }
     }
 
     /**
@@ -7813,7 +7799,7 @@ class SecretaryViewModel : ViewModel() {
      * false if we should fall through to the AI server.
      */
     private suspend fun tryVoiceResolveSuspend(text: String, screenCode: String): Boolean {
-        val uid  = _uiState.value.currentUserId?.toInt() ?: 1
+        val uid: Any = _uiState.value.currentUserId ?: 1  // UUID string — never toInt()
         val lang = _uiState.value.appLanguage.ifBlank { "cs" }
         return try {
             val resp = api.voiceResolve(
