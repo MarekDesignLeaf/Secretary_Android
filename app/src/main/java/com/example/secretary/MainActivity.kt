@@ -6144,33 +6144,28 @@ class SecretaryViewModel : ViewModel() {
     }
 
     fun updateInternalLanguage(lang: String, onDone: (Boolean, String?) -> Unit) {
+        val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
+            _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
+        if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return }
         viewModelScope.launch {
+            // 1) Apply locally FIRST — instant, reliable, never blocked by the
+            //    backend and never flipped back by a reload. This is the fix for
+            //    "switching errors / changes languages".
+            applyAppLanguage(lang, persist = true)
+            onDone(true, null)
+            // 2) Best-effort sync to the backend (tenant default + user
+            //    preferred). Failures are non-fatal and never revert the UI.
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
-            try {
-                val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
-                    _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
-                if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return@launch }
-                val res = api.updateTenantLanguages(auth, mapOf("default_internal_language_code" to lang))
-                if (res.isSuccessful) {
-                    // Also persist preferred_language_code on the user profile so login
-                    // no longer resets the language back to the previous value
-                    val uid = _uiState.value.currentUserId ?: ""
-                    if (uid.isNotBlank()) {
-                        try {
-                            val bcp47 = when (lang.lowercase().substringBefore("-")) {
-                                "cs" -> "cs-CZ"; "pl" -> "pl-PL"; "de" -> "de-DE"
-                                "sk" -> "sk-SK"; "fr" -> "fr-FR"; "es" -> "es-ES"
-                                else -> "en-GB"
-                            }
-                            api.updateAuthUser(auth, uid, mapOf("preferred_language_code" to bcp47))
-                        } catch (_: Exception) { /* non-fatal */ }
-                    }
-                    applyAppLanguage(lang, persist = true)
-                    loadSettings()
-                    loadTenantConfig()
-                    onDone(true, null)
-                } else { onDone(false, parseBackendAdminError(res.code(), res.errorBody()?.string(), Strings.save)) }
-            } catch (e: Exception) { e.rethrowIfCancellation(); onDone(false, e.message ?: Strings.connectionError) }
+            val bcp47 = when (lang.lowercase().substringBefore("-")) {
+                "cs" -> "cs-CZ"; "pl" -> "pl-PL"; else -> "en-GB"
+            }
+            try { api.updateTenantLanguages(auth, mapOf("default_internal_language_code" to bcp47)) }
+            catch (e: Exception) { e.rethrowIfCancellation(); Log.w("ViewModel", "tenant lang sync failed: ${e.message}") }
+            val uid = _uiState.value.currentUserId ?: ""
+            if (uid.isNotBlank()) {
+                try { api.updateAuthUser(auth, uid, mapOf("preferred_language_code" to bcp47)) }
+                catch (e: Exception) { e.rethrowIfCancellation(); Log.w("ViewModel", "user lang sync failed: ${e.message}") }
+            }
         }
     }
 
