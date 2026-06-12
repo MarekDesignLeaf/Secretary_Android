@@ -261,6 +261,24 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                         vm.onWhatsAppLaunchHandled(opened, phone)
                     }
                 }
+
+                // Voice-armed photo recognition (plant / disease / mushroom):
+                // launch the camera, then dispatch the photo to the right mode.
+                val recognitionPhotoFile = remember { mutableStateOf<java.io.File?>(null) }
+                val recognitionCamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+                    val f = recognitionPhotoFile.value
+                    if (ok && f != null) vm.dispatchPlantCapturePhoto(f) else vm.clearPlantCaptureRequest()
+                }
+                LaunchedEffect(state.pendingPlantCaptureRequestId) {
+                    if (state.pendingPlantCaptureRequestId == null) return@LaunchedEffect
+                    try {
+                        val f = java.io.File(cacheDir, "recognition_${System.currentTimeMillis()}.jpg")
+                        recognitionPhotoFile.value = f
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            this@MainActivity, "${packageName}.provider", f)
+                        recognitionCamera.launch(uri)
+                    } catch (_: Exception) { vm.clearPlantCaptureRequest() }
+                }
                 
                 when {
                     !state.bootstrapChecked -> BootstrapLoadingScreen()
@@ -6823,6 +6841,43 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    /** A photo was captured for the armed recognition mode -> dispatch it. */
+    fun dispatchPlantCapturePhoto(file: java.io.File) {
+        val photo = PlantPhotoUpload(file = file, organ = "auto", label = "capture")
+        when (_uiState.value.plantCaptureMode) {
+            "mushroom" -> identifyMushroom(listOf(photo))
+            "health" -> assessPlantHealth(listOf(photo))
+            else -> identifyPlant(listOf(photo))
+        }
+        _uiState.value = _uiState.value.copy(pendingPlantCaptureRequestId = null)
+    }
+
+    fun clearPlantCaptureRequest() {
+        _uiState.value = _uiState.value.copy(
+            pendingPlantCaptureRequestId = null, isPlantVoiceCaptureActive = false)
+    }
+
+    /** Detect a photo-recognition voice command and return its mode
+     *  (mushroom / health / identify), or null. */
+    private fun parseVoiceRecognitionMode(text: String): String? {
+        val t = normalizeVoiceCommand(text)
+        val mushroom = listOf("houba", "houbu", "houby", "co je to za houbu",
+            "rozpoznej houbu", "urci houbu", "mushroom", "identify mushroom", "what mushroom")
+        val health = listOf("nemocna", "nemocnou", "choroba", "choroby", "nemoc rostliny",
+            "je rostlina nemocna", "co je s rostlinou", "zdravi rostliny", "skudci",
+            "plant disease", "is this plant sick", "plant health")
+        val plant = listOf("rostlina", "rostlinu", "co je to za rostlinu", "rozpoznej rostlinu",
+            "urci rostlinu", "jaka je to rostlina", "identify plant", "what plant", "what flower",
+            "co je to za kytku", "rozpoznej kytku")
+        fun hit(words: List<String>) = words.any { t == it || t.contains(it) }
+        return when {
+            hit(mushroom) -> "mushroom"
+            hit(health) -> "health"
+            hit(plant) -> "identify"
+            else -> null
+        }
+    }
+
     fun requestPlantCaptureFromVoice(mode: String = "identify") {
         val isHealthMode = mode == "health"
         val isMushroomMode = mode == "mushroom"
@@ -8245,6 +8300,9 @@ class SecretaryViewModel : ViewModel() {
         }
         parseVoiceCallTarget(text)?.let { startVoiceCallTarget(it, text); return }
         parseVoiceWhatsAppCommand(text)?.let { startVoiceWhatsApp(it, text); return }
+        // Photo-recognition tools: "co je to za rostlinu", "je tahle rostlina
+        // nemocná", "co je to za houbu" -> arm the camera capture flow.
+        parseVoiceRecognitionMode(text)?.let { requestPlantCaptureFromVoice(it); return }
 
         // ── D. LOGOUT ───────────────────────────────────────────────────────────
         if (Strings.matchesLogoutCommand(lower)) {
