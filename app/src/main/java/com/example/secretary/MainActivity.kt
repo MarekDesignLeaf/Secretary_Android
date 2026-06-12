@@ -2472,8 +2472,8 @@ fun CrmHubScreen(viewModel: SecretaryViewModel, navController: NavHostController
             onConfirm = { clientId, title -> viewModel.createQuote(clientId, title); showAddQuote = false })
     }
     if (showAddWorkReport) {
-        CreateWorkReportDialog(clients = state.clients, onDismiss = { showAddWorkReport = false },
-            onConfirm = { clientId, date, hrs, price, notes -> viewModel.createWorkReportManual(clientId, date, hrs, price, notes); showAddWorkReport = false })
+        CreateWorkReportDialog(clients = state.clients, viewModel = viewModel, onDismiss = { showAddWorkReport = false },
+            onConfirm = { clientId, date, hrs, price, notes, activities -> viewModel.createWorkReportManual(clientId, date, hrs, price, notes, activities); showAddWorkReport = false })
     }
     if (showLogComm) {
         GlobalLogCommDialog(clients = state.clients, onDismiss = { showLogComm = false },
@@ -7584,11 +7584,13 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
-    fun createWorkReportManual(clientId: String?, workDate: String, totalHours: Double, totalPrice: Double, notes: String?) {
+    fun createWorkReportManual(clientId: String?, workDate: String, totalHours: Double, totalPrice: Double, notes: String?,
+                               activities: List<Map<String, Any?>> = emptyList()) {
         viewModelScope.launch {
             try {
                 val data = mapOf<String, Any?>("tenant_id" to 1, "client_id" to clientId, "work_date" to workDate,
-                    "total_hours" to totalHours, "total_price" to totalPrice, "notes" to notes, "input_type" to "manual", "status" to "draft")
+                    "total_hours" to totalHours, "total_price" to totalPrice, "notes" to notes,
+                    "activities" to activities, "input_type" to "manual", "status" to "draft")
                 api.createWorkReport(data)
                 refreshCrmData()
             } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Create work report error", e) }

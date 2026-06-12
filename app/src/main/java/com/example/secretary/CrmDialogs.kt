@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -184,17 +186,41 @@ fun InvoiceStatusDialog(currentStatus: String, onDismiss: () -> Unit, onSelect: 
 // ========== WORK REPORT MANUAL CREATE DIALOG ==========
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfirm: (String?, String, Double, Double, String?) -> Unit) {
+fun CreateWorkReportDialog(
+    clients: List<Client>,
+    viewModel: SecretaryViewModel,
+    onDismiss: () -> Unit,
+    onConfirm: (String?, String, Double, Double, String?, List<Map<String, Any?>>) -> Unit
+) {
     var selectedClientId by remember { mutableStateOf<String?>(null) }
     var selectedClientName by remember { mutableStateOf<String?>(null) }
     var clientExpanded by remember { mutableStateOf(false) }
     var workDate by remember { mutableStateOf(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())) }
-    var totalHours by remember { mutableStateOf("") }
-    var totalPrice by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+
+    // All priced activities for this tenant (activity_code, name, rate, rate_unit).
+    var catalogue by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
+    var search by remember { mutableStateOf("") }
+    // Picked activities: code -> (name, rate, unit, quantity)
+    data class PickedActivity(val code: String, val name: String, val rate: Double, val unit: String, var qty: String)
+    val picked = remember { mutableStateListOf<PickedActivity>() }
+
+    LaunchedEffect(Unit) {
+        try {
+            val res = viewModel.getApi().getTenantActivityPricing(1)
+            if (res.isSuccessful) catalogue = res.body() ?: emptyList()
+        } catch (_: Exception) {}
+    }
+
+    fun dbl(s: String) = s.replace(",", ".").toDoubleOrNull() ?: 0.0
+    val grandTotal = picked.sumOf { dbl(it.qty) * it.rate }
+    val matches = if (search.length < 2) emptyList() else catalogue.filter {
+        (it["name"]?.toString() ?: "").contains(search, ignoreCase = true)
+    }.take(25)
+
     AlertDialog(onDismissRequest = onDismiss, title = { Text(Strings.newWorkReport) },
         text = {
-            LazyColumn(Modifier.heightIn(max = 350.dp)) { item {
+            LazyColumn(Modifier.heightIn(max = 460.dp)) { item {
                 if (clients.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = clientExpanded, onExpandedChange = { clientExpanded = it }) {
                         OutlinedTextField(value = selectedClientName ?: Strings.selectClient, onValueChange = {}, readOnly = true, label = { Text("${Strings.client} *") }, modifier = Modifier.fillMaxWidth().menuAnchor(), trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(clientExpanded) })
@@ -205,19 +231,49 @@ fun CreateWorkReportDialog(clients: List<Client>, onDismiss: () -> Unit, onConfi
                     Spacer(Modifier.height(8.dp))
                 }
                 DateInputField(value = workDate, onValueChange = { workDate = it }, label = "${Strings.workDate} (YYYY-MM-DD)")
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = totalHours, onValueChange = { totalHours = it }, label = { Text(Strings.totalHours) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = totalPrice, onValueChange = { totalPrice = it }, label = { Text("${Strings.totalPrice} £") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Spacer(Modifier.height(12.dp))
+
+                Text(Strings.t("Activities & prices", "Činnosti a ceny", "Czynności i ceny"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                // Picked activities with editable quantity.
+                picked.forEachIndexed { idx, a ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(a.name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("£${a.rate} ${a.unit}", fontSize = 11.sp, color = Color.Gray)
+                        }
+                        OutlinedTextField(value = a.qty, onValueChange = { v -> picked[idx] = a.copy(qty = v.filter { it.isDigit() || it == '.' || it == ',' }) },
+                            modifier = Modifier.width(72.dp), singleLine = true, label = { Text("×", fontSize = 11.sp) })
+                        Text("£%.0f".format(dbl(a.qty) * a.rate), Modifier.width(56.dp), textAlign = TextAlign.End, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        IconButton(onClick = { picked.removeAt(idx) }) { Icon(Icons.Default.Delete, contentDescription = null, tint = Color.Red) }
+                    }
+                }
+                OutlinedTextField(value = search, onValueChange = { search = it }, label = { Text(Strings.t("Add activity…", "Přidat činnost…", "Dodaj czynność…")) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                matches.forEach { m ->
+                    val code = m["activity_code"]?.toString() ?: return@forEach
+                    if (picked.any { it.code == code }) return@forEach
+                    val name = m["name"]?.toString() ?: code
+                    val rate = (m["rate"] as? Number)?.toDouble() ?: (m["default_rate"] as? Number)?.toDouble() ?: 0.0
+                    val unit = m["rate_unit"]?.toString() ?: "GBP"
+                    DropdownMenuItem(text = { Text("$name  ·  £$rate $unit", fontSize = 13.sp) },
+                        onClick = { picked.add(PickedActivity(code, name, rate, unit, "1")); search = "" })
+                }
+                if (picked.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(Strings.t("Estimated total", "Předběžný součet", "Suma"), fontWeight = FontWeight.SemiBold)
+                        Text("£%.2f".format(grandTotal), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(Strings.notes) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             } }
         },
         confirmButton = { Button(onClick = {
-            val hrs = totalHours.replace(",",".").toDoubleOrNull() ?: 0.0
-            val price = totalPrice.replace(",",".").toDoubleOrNull() ?: 0.0
-            onConfirm(selectedClientId, workDate, hrs, price, notes.ifBlank { null })
-        }, enabled = selectedClientId != null && totalHours.isNotBlank()) { Text(Strings.create) } },
+            val activities = picked.map { mapOf<String, Any?>(
+                "activity_code" to it.code, "name" to it.name,
+                "quantity" to dbl(it.qty), "rate" to it.rate, "unit" to it.unit) }
+            onConfirm(selectedClientId, workDate, 0.0, grandTotal, notes.ifBlank { null }, activities)
+        }, enabled = selectedClientId != null && picked.isNotEmpty()) { Text(Strings.create) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.cancel) } }
     )
 }
