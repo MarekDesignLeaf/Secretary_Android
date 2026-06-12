@@ -8240,6 +8240,26 @@ class SecretaryViewModel : ViewModel() {
             val question = body["question"]?.toString()
             Log.d("VoiceExecute", "intent=$intent status=$status executed=$executed pid=$pendingId msg=$message")
 
+            // Server cannot send WhatsApp itself (no Meta credentials / outside
+            // 24h window) -> it hands back phone + (translated) message and the
+            // app opens WhatsApp pre-filled so the user just taps send.
+            if (status == "client_fallback" && intent == "whatsapp.send") {
+                pendingVoiceActionId = null
+                @Suppress("UNCHECKED_CAST")
+                val data = body["data"] as? Map<String, Any?>
+                val phone = data?.get("phone")?.toString()?.takeIf { it.isNotBlank() }
+                val waMessage = data?.get("message")?.toString().orEmpty()
+                _uiState.value = _uiState.value.copy(
+                    pendingWhatsAppPhone = phone,
+                    pendingWhatsAppMessage = waMessage,
+                    status = Strings.waitingForCommand,
+                    lastAiReply = message,
+                    history = (_uiState.value.history + ChatMessage("assistant", message)).takeLast(30)
+                )
+                voiceManager?.speak(message, expectReply = false)
+                return
+            }
+
             // A5.2: backend needs more info -> ask the follow-up question and keep
             // the pending action id; the NEXT utterance continues this action.
             if (status == "needs_more_info" && pendingId != null) {
