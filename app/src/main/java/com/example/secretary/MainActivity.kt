@@ -3001,6 +3001,19 @@ fun DashboardTab(state: UiState, viewModel: SecretaryViewModel, navController: N
         state.tasks.count { !taskHasPlanning(it) }
     }
     LazyColumn(Modifier.fillMaxSize()) {
+        // Dnešní úkoly — VŽDY nahoře a POUZE úkoly s termínem na dnešní den
+        // (urgentní z dneška první). Úkoly jiných dnů sem nepatří — jsou
+        // v kalendáři pod svým dnem.
+        val todayKey = formatCalendarDayKey(Calendar.getInstance())
+        val todayTasks = state.tasks
+            .filter { isOpenCalendarTask(it) && !it.isCompleted && taskCalendarDayKey(it) == todayKey }
+            .sortedByDescending { it.priority == "urgentni" || it.priority == "kriticka" }
+        item { DashSection(Strings.t("Today's tasks", "Dnešní úkoly", "Zadania na dziś"), todayTasks.size) }
+        if (todayTasks.isEmpty()) {
+            item { Text(Strings.t("No tasks due today", "Žádné úkoly na dnešek", "Brak zadań na dziś"), color = Color.Gray, modifier = Modifier.padding(16.dp)) }
+        } else {
+            items(todayTasks) { t -> TaskRow(t, viewModel) }
+        }
         if (state.hierarchyIntegrityError != null && canManageHierarchy(state)) {
             item {
                 Text(
@@ -3015,17 +3028,6 @@ fun DashboardTab(state: UiState, viewModel: SecretaryViewModel, navController: N
         item { DashSection(Strings.tasksWithoutAssignee, orphanTasksAssignee) }
         item { DashSection(Strings.tasksWithoutSchedule, orphanTasksPlanning) }
         item { FieldModeCard(state, viewModel) }
-        // Urgentni ukoly
-        val urgent = state.tasks.filter { !it.isCompleted && (it.priority == "urgentni" || it.priority == "kriticka") }
-        if (urgent.isNotEmpty()) {
-            item { DashSection(Strings.urgentTasks, urgent.size) }
-            items(urgent) { t -> TaskRow(t, viewModel) }
-        }
-        // Dnesni ukoly
-        val today = state.tasks.filter { !it.isCompleted && it.status != "hotovo" && it.status != "zruseno" }.take(10)
-        item { DashSection(Strings.activeTasks, today.size) }
-        if (today.isEmpty()) { item { Text(Strings.noActiveTasks, color = Color.Gray, modifier = Modifier.padding(16.dp)) } }
-        else { items(today) { t -> TaskRow(t, viewModel) } }
         // Ceka na klienta
         val waiting = state.tasks.filter { it.status == "ceka_na_klienta" }
         if (waiting.isNotEmpty()) {
