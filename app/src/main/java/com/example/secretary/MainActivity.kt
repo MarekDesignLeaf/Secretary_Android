@@ -954,20 +954,29 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
     var calViewMode by remember { mutableStateOf("month") }
     LaunchedEffect(Unit) {
         viewModel.loadCalendarFeed()
+        viewModel.loadTasks()
         val ctx = viewModel.getCalendarText(7)
         calendarText.value = ctx
     }
     val itemsByDate = remember(state.calendarFeed) {
         state.calendarFeed.groupBy { calendarEntryDayKey(it) }
     }
-    val monthDays = remember(visibleMonth, itemsByDate, selectedDate) {
-        buildCalendarMonthCells(visibleMonth, itemsByDate, selectedDate)
+    val tasksByDate = remember(state.tasks) {
+        state.tasks.filter { isOpenCalendarTask(it) }
+            .mapNotNull { t -> taskCalendarDayKey(t)?.let { key -> key to t } }
+            .groupBy({ it.first }, { it.second })
+    }
+    val monthDays = remember(visibleMonth, itemsByDate, tasksByDate, selectedDate) {
+        buildCalendarMonthCells(visibleMonth, itemsByDate, tasksByDate, selectedDate)
     }
     val selectedEntries = remember(selectedDate, itemsByDate) {
         itemsByDate[selectedDate].orEmpty()
     }
-    val selectedWeek = remember(selectedDate, itemsByDate) {
-        buildCalendarWeekCells(selectedDate, itemsByDate, selectedDate)
+    val selectedTasks = remember(selectedDate, tasksByDate) {
+        tasksByDate[selectedDate].orEmpty()
+    }
+    val selectedWeek = remember(selectedDate, itemsByDate, tasksByDate) {
+        buildCalendarWeekCells(selectedDate, itemsByDate, tasksByDate, selectedDate)
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -1027,7 +1036,39 @@ fun CalendarScreen(viewModel: SecretaryViewModel) {
                 fontWeight = FontWeight.SemiBold
             )
         }
-        if (selectedEntries.isEmpty()) {
+        // Tasks always FIRST, but only the ones due on the selected day.
+        if (selectedTasks.isNotEmpty()) {
+            item {
+                Text(
+                    "☑ " + Strings.t("Tasks", "Úkoly", "Zadania"),
+                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                    color = Color(0xFFFF9800)
+                )
+            }
+            items(selectedTasks) { task ->
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFF9800).copy(alpha = 0.08f))
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(task.title.ifBlank { "—" },
+                                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(Strings.localizeStatus(task.status),
+                                fontSize = 11.sp, color = Color(0xFFFF9800))
+                        }
+                        task.clientName?.takeIf { it.isNotBlank() }?.let {
+                            Text("${Strings.client}: $it", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        task.assignedTo?.takeIf { it.isNotBlank() }?.let {
+                            Text("${Strings.assigned}: $it", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+        }
+        if (selectedEntries.isEmpty() && selectedTasks.isEmpty()) {
             item {
                 Text(Strings.noCalendarEntriesForDay, color = Color.Gray)
             }
@@ -1075,8 +1116,32 @@ private data class CalendarDayCell(
     val isToday: Boolean,
     val isSelected: Boolean,
     val entryCount: Int,
+    val taskCount: Int,
     val calendar: Calendar
 )
+
+/** Markers for a day cell: ● event (primary), ● task (orange). */
+@Composable
+private fun CalendarDayMarkers(day: CalendarDayCell, contentColor: Color) {
+    val total = day.entryCount + day.taskCount
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (day.entryCount > 0) {
+            Box(
+                Modifier.size(6.dp).clip(CircleShape).background(
+                    if (day.isSelected) contentColor else MaterialTheme.colorScheme.primary)
+            )
+        }
+        if (day.taskCount > 0) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFFF9800)))
+        }
+        if (total > 0) {
+            Text(total.toString(), fontSize = 10.sp, color = contentColor.copy(alpha = 0.8f))
+        }
+    }
+}
 
 @Composable
 private fun CalendarMonthHeader(
@@ -1179,7 +1244,7 @@ private fun CalendarCompactDayChip(
         ) {
             Text(calendarWeekdayShort(day.calendar), fontSize = 11.sp, color = content)
             Text(day.dayNumber.toString(), fontWeight = FontWeight.Bold, color = content)
-            Text(day.entryCount.toString(), fontSize = 11.sp, color = content.copy(alpha = 0.8f))
+            CalendarDayMarkers(day, content)
         }
     }
 }
@@ -1215,15 +1280,7 @@ private fun CalendarMonthDayCell(
                 fontWeight = if (day.isToday || day.isSelected) FontWeight.Bold else FontWeight.Medium,
                 color = content
             )
-            if (day.entryCount > 0) {
-                Text(
-                    Strings.calendarItemCount(day.entryCount),
-                    fontSize = 11.sp,
-                    color = content,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            CalendarDayMarkers(day, content)
         }
     }
 }
@@ -1292,9 +1349,23 @@ private fun parseFlexibleCalendarDate(raw: String?): String? {
 private fun calendarEntryDateLabel(entry: CalendarFeedEntry): String =
     (entry.planned_start_at ?: entry.planned_date ?: entry.planned_end_at).orEmpty()
 
+private fun taskCalendarDayKey(task: Task): String? {
+    val raw = listOf(task.plannedDate, task.plannedStartAt, task.deadline)
+        .firstNotNullOfOrNull { it?.takeIf { v -> v.isNotBlank() } }
+        ?: return null
+    return parseFlexibleCalendarDate(raw)
+}
+
+private val DONE_TASK_STATUSES = setOf(
+    "hotovo", "done", "completed", "splneno", "splněno", "deleted", "zruseno", "zrušeno", "cancelled")
+
+private fun isOpenCalendarTask(task: Task): Boolean =
+    task.status.lowercase() !in DONE_TASK_STATUSES
+
 private fun buildCalendarMonthCells(
     month: Calendar,
     itemsByDate: Map<String, List<CalendarFeedEntry>>,
+    tasksByDate: Map<String, List<Task>>,
     selectedDate: String
 ): List<CalendarDayCell> {
     val start = (month.clone() as Calendar).apply {
@@ -1315,6 +1386,7 @@ private fun buildCalendarMonthCells(
                     isToday = key == todayKey,
                     isSelected = key == selectedDate,
                     entryCount = itemsByDate[key]?.size ?: 0,
+                    taskCount = tasksByDate[key]?.size ?: 0,
                     calendar = cellCal
                 )
             )
@@ -1326,6 +1398,7 @@ private fun buildCalendarMonthCells(
 private fun buildCalendarWeekCells(
     selectedDate: String,
     itemsByDate: Map<String, List<CalendarFeedEntry>>,
+    tasksByDate: Map<String, List<Task>>,
     activeDate: String
 ): List<CalendarDayCell> {
     val selected = parseCalendarDayKey(selectedDate)
@@ -1344,6 +1417,7 @@ private fun buildCalendarWeekCells(
                     isToday = key == todayKey,
                     isSelected = key == activeDate,
                     entryCount = itemsByDate[key]?.size ?: 0,
+                    taskCount = tasksByDate[key]?.size ?: 0,
                     calendar = cell
                 )
             )
@@ -6881,6 +6955,12 @@ class SecretaryViewModel : ViewModel() {
             }
         } catch (e: Exception) { e.rethrowIfCancellation(); Log.e("ViewModel", "Work reports load error", e) }
     }
+    fun loadTasks() {
+        viewModelScope.launch {
+            try { loadTasksFromServer() } catch (e: Exception) { e.rethrowIfCancellation() }
+        }
+    }
+
     private suspend fun loadTasksFromServer() {
         try {
             val tr = api.getTasks()
