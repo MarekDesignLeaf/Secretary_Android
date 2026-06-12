@@ -7584,6 +7584,44 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    /** Voice "importuj kontakty": read device contacts and POST them to the
+     *  backend (which dedupes), then speak the result. Device access is here;
+     *  the backend stays the source of truth. */
+    private fun importDeviceContacts(spokenPrefix: String) {
+        viewModelScope.launch {
+            try {
+                val device = contactManager?.getAllContacts().orEmpty()
+                if (device.isEmpty()) {
+                    val msg = Strings.t("No contacts found (check the contacts permission).",
+                        "Nenašla jsem žádné kontakty (zkontroluj oprávnění ke kontaktům).",
+                        "Brak kontaktów (sprawdź uprawnienia).")
+                    _uiState.value = _uiState.value.copy(status = Strings.waitingForCommand, lastAiReply = msg)
+                    voiceManager?.speak(msg, expectReply = false); return@launch
+                }
+                val payload = device.map { mapOf(
+                    "name" to (it["name"] ?: ""),
+                    "phone" to (it["phone"] ?: ""),
+                    "email" to (it["email"] ?: "")) }
+                val res = api.syncContacts(mapOf("contacts" to payload))
+                val msg = if (res.isSuccessful) {
+                    val b = res.body()
+                    val imported = b?.imported ?: 0
+                    val skipped = b?.skipped ?: 0
+                    refreshCrmData()
+                    Strings.t("Imported $imported contacts, $skipped already existed.",
+                        "Naimportovala jsem $imported kontaktů, $skipped už existovalo.",
+                        "Zaimportowano $imported kontaktów, $skipped już istniało.")
+                } else Strings.t("Contact import failed.", "Import kontaktů se nepovedl.", "Import nie powiódł się.")
+                _uiState.value = _uiState.value.copy(status = Strings.waitingForCommand, lastAiReply = msg,
+                    history = (_uiState.value.history + ChatMessage("assistant", msg)).takeLast(30))
+                voiceManager?.speak(msg, expectReply = false)
+            } catch (e: Exception) {
+                e.rethrowIfCancellation(); Log.e("ViewModel", "importDeviceContacts error", e)
+                voiceManager?.speak(Strings.t("Contact import failed.", "Import kontaktů se nepovedl.", "Import nie powiódł się."), expectReply = false)
+            }
+        }
+    }
+
     fun createWorkReportManual(clientId: String?, workDate: String, totalHours: Double, totalPrice: Double, notes: String?,
                                activities: List<Map<String, Any?>> = emptyList()) {
         viewModelScope.launch {
@@ -8260,6 +8298,16 @@ class SecretaryViewModel : ViewModel() {
                 )
                 voiceManager?.speak(message, expectReply = false)
                 return
+            }
+
+            // Device-side action the server asked for (it can't read device data).
+            if (status == "client_action") {
+                pendingVoiceActionId = null
+                @Suppress("UNCHECKED_CAST")
+                val data = body["data"] as? Map<String, Any?>
+                when (data?.get("client_action")?.toString()) {
+                    "import_contacts" -> { importDeviceContacts(message); return }
+                }
             }
 
             // A5.2: backend needs more info -> ask the follow-up question and keep

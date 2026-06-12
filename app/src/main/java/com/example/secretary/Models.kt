@@ -301,7 +301,10 @@ data class ContactSyncResponse(
     val total_contacts: Int = 0,
     val selected_clients: Int = 0,
     val contacts: List<SyncedContactCandidate> = emptyList(),
-    val errors: List<String> = emptyList()
+    val errors: List<String> = emptyList(),
+    // Bulk voice import (POST /crm/clients/sync-contacts) result counts.
+    val imported: Int = 0,
+    val skipped: Int = 0
 )
 
 data class ContactSection(
