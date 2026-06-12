@@ -7000,6 +7000,38 @@ class SecretaryViewModel : ViewModel() {
         }
     }
 
+    fun loadCompanyIndustries(onDone: (List<Map<String, Any?>>) -> Unit) {
+        viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
+            try {
+                val res = api.getCompanyIndustries(auth)
+                onDone(if (res.isSuccessful) res.body() ?: emptyList() else emptyList())
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                onDone(emptyList())
+            }
+        }
+    }
+
+    fun updateCompanyIndustries(industries: List<Map<String, Any?>>, onDone: (Boolean, String?) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
+            try {
+                val res = api.updateCompanyIndustries(auth, mapOf("industries" to industries))
+                if (res.isSuccessful) {
+                    loadTenantConfig()
+                    onDone(true, null)
+                } else {
+                    onDone(false, "HTTP ${res.code()}: ${res.message()}")
+                }
+            } catch (e: Exception) {
+                e.rethrowIfCancellation()
+                onDone(false, e.message ?: "Network error")
+                Log.e("ViewModel", "updateCompanyIndustries error", e)
+            }
+        }
+    }
+
     fun loadSystemSettings() {
         viewModelScope.launch {
             try {

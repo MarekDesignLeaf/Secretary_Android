@@ -339,6 +339,18 @@ interface SecretaryApi {
         @Body data: Map<String, @JvmSuppressWildcards Any?>
     ): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    // Multi-industry (Phase A1): tenant can have any number of industries.
+    @GET("company/industries")
+    suspend fun getCompanyIndustries(
+        @Header("Authorization") auth: String
+    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
+    @PUT("company/industries")
+    suspend fun updateCompanyIndustries(
+        @Header("Authorization") auth: String,
+        @Body data: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<List<Map<String, @JvmSuppressWildcards Any?>>>
+
     @PUT("language/settings")
     suspend fun updateTenantLanguages(
         @Header("Authorization") auth: String,

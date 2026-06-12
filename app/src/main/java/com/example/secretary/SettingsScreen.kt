@@ -2,6 +2,8 @@ package com.example.secretary
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -1550,8 +1552,8 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
             currentGroup = state.tenantConfig?.get("industry_group")?.toString()?.takeIf { it.isNotBlank() },
             currentSubtype = state.tenantConfig?.get("industry_subtype")?.toString()?.takeIf { it.isNotBlank() },
             onDismiss = { showIndustryDialog = false },
-            onSave = { group, subtype ->
-                viewModel.updateCompanyIndustry(group, subtype) { ok, _ ->
+            onSave = { industries ->
+                viewModel.updateCompanyIndustries(industries) { ok, _ ->
                     if (ok) showIndustryDialog = false
                 }
             }
@@ -1564,17 +1566,24 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     currentGroup: String?,
     currentSubtype: String?,
     onDismiss: () -> Unit,
-    onSave: (String?, String?) -> Unit
+    onSave: (List<Map<String, Any?>>) -> Unit
 ) {
     // groups: List<Map> with id (Long), code (String), name (String)
     var groups by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
     var subtypes by remember { mutableStateOf<List<Map<String, Any?>>>(emptyList()) }
-    var selectedGroupCode by remember { mutableStateOf(currentGroup) }
+    // Multi-select: any number of industries; the primary one carries the subtype.
+    var selectedCodes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var primaryCode by remember { mutableStateOf(currentGroup) }
     var selectedSubtypeCode by remember { mutableStateOf(currentSubtype) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    // Load groups on first open
+    fun toggle(code: String) {
+        selectedCodes = if (code in selectedCodes) selectedCodes - code else selectedCodes + code
+        if (primaryCode !in selectedCodes) primaryCode = selectedCodes.firstOrNull()
+    }
+
+    // Load groups + current multi-industry selection on first open
     LaunchedEffect(Unit) {
         try {
             val res = viewModel.getApi().getIndustryGroups()
@@ -1587,16 +1596,28 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         } catch (e: Exception) {
             error = e.message ?: "Network error"
         }
-        loading = false
+        viewModel.loadCompanyIndustries { current ->
+            if (current.isNotEmpty()) {
+                selectedCodes = current.mapNotNull { it["industry_code"]?.toString() }
+                primaryCode = current.firstOrNull { it["is_primary"] == true }
+                    ?.get("industry_code")?.toString() ?: selectedCodes.firstOrNull()
+                current.firstOrNull { it["is_primary"] == true }?.get("subtype_code")?.toString()
+                    ?.takeIf { it.isNotBlank() }?.let { selectedSubtypeCode = it }
+            } else if (currentGroup != null) {
+                selectedCodes = listOf(currentGroup)
+                primaryCode = currentGroup
+            }
+            loading = false
+        }
     }
 
-    // Load subtypes whenever group selection changes
-    val selectedGroupId = groups.firstOrNull {
-        it["code"]?.toString() == selectedGroupCode
+    // Load subtypes for the PRIMARY industry
+    val primaryGroupId = groups.firstOrNull {
+        it["code"]?.toString() == primaryCode
     }?.let { (it["id"] as? Number)?.toLong() }
 
-    LaunchedEffect(selectedGroupId) {
-        val gId = selectedGroupId ?: return@LaunchedEffect
+    LaunchedEffect(primaryGroupId) {
+        val gId = primaryGroupId ?: run { subtypes = emptyList(); return@LaunchedEffect }
         try {
             val res = viewModel.getApi().getIndustrySubtypes(gId)
             if (res.isSuccessful) {
@@ -1611,29 +1632,37 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Změnit odvětví firmy", fontWeight = FontWeight.Bold) },
+        title = { Text("Odvětví firmy", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
                 if (loading) {
                     CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
                 } else if (error != null) {
                     Text("❌ $error", color = Color.Red, fontSize = 13.sp)
                 } else {
-                    Text("Odvětví", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("Zaškrtni libovolný počet odvětví. Hvězdička = hlavní odvětví.", fontSize = 11.sp, color = Color.Gray)
                     groups.forEach { g ->
                         val code = g["code"]?.toString() ?: return@forEach
                         val name = g["name"]?.toString() ?: code
+                        val checked = code in selectedCodes
                         Row(
-                            Modifier.fillMaxWidth().clickable { selectedGroupCode = code },
+                            Modifier.fillMaxWidth().clickable { toggle(code) },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(selected = selectedGroupCode == code, onClick = { selectedGroupCode = code })
-                            Text(name, fontSize = 13.sp)
+                            Checkbox(checked = checked, onCheckedChange = { toggle(code) })
+                            Text(name, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            if (checked) {
+                                IconButton(onClick = { primaryCode = code }) {
+                                    Text(if (primaryCode == code) "★" else "☆",
+                                        fontSize = 16.sp,
+                                        color = if (primaryCode == code) Color(0xFFFFB300) else Color.Gray)
+                                }
+                            }
                         }
                     }
                     if (subtypes.isNotEmpty()) {
                         Spacer(Modifier.height(4.dp))
-                        Text("Typ", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Text("Typ (hlavní odvětví)", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         subtypes.forEach { s ->
                             val code = s["code"]?.toString() ?: return@forEach
                             val name = s["name"]?.toString() ?: code
@@ -1651,8 +1680,18 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         },
         confirmButton = {
             Button(
-                onClick = { onSave(selectedGroupCode, selectedSubtypeCode) },
-                enabled = !loading && error == null && selectedGroupCode != null
+                onClick = {
+                    val primary = primaryCode ?: selectedCodes.firstOrNull()
+                    val payload = selectedCodes.map { code ->
+                        mapOf<String, Any?>(
+                            "industry_code" to code,
+                            "subtype_code" to if (code == primary) selectedSubtypeCode else null,
+                            "is_primary" to (code == primary)
+                        )
+                    }
+                    onSave(payload)
+                },
+                enabled = !loading && error == null && selectedCodes.isNotEmpty()
             ) { Text("Uložit") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } }
