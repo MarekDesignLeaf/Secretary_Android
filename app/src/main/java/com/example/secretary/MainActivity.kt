@@ -5072,6 +5072,14 @@ private fun Exception.rethrowIfCancellation() {
 class SecretaryViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState = _uiState.asStateFlow()
+    // Timestamp (elapsedRealtime ms) of the last LOCAL language switch. While
+    // recent, async reloads (loadSettings/loadTenantConfig/applyCurrentUserData)
+    // must NOT override the user's choice. 0 = no recent switch.
+    @Volatile private var lastLocalLangSwitchAt: Long = 0L
+    private val localLangGuardMs = 5_000L
+    private fun localLangSwitchIsRecent() =
+        lastLocalLangSwitchAt != 0L &&
+        (android.os.SystemClock.elapsedRealtime() - lastLocalLangSwitchAt) < localLangGuardMs
     private var voiceManager: VoiceManager? = null
     private var calendarManager: CalendarManager? = null
     private var contactManager: ContactManager? = null
@@ -5193,10 +5201,18 @@ class SecretaryViewModel : ViewModel() {
         }
         settingsManager?.setCurrentBackendUser(userId, role)
         val preferredLang = source["preferred_language_code"]?.toString()?.takeIf { it.isNotBlank() }
-        val resolvedLang = settingsManager?.getAppLanguageForUser(userId, preferredLang ?: settingsManager?.appLanguage ?: "cs")
+        // Local user choice is the source of truth. The server preference is only a
+        // SEED for users who never chose locally on this device. This stops a stale
+        // server value (other device / not-yet-synced) from reverting a fresh switch.
+        val localChoice = settingsManager?.getAppLanguageForUser(userId, null)
+        val resolvedLang = localChoice
             ?: preferredLang
+            ?: settingsManager?.appLanguage
             ?: "cs"
-        applyAppLanguage(resolvedLang, persist = true, refreshVoice = false)
+        // Do not let a token-refresh / auth-me that raced a local switch revert the UI.
+        if (!localLangSwitchIsRecent()) {
+            applyAppLanguage(resolvedLang, persist = true, refreshVoice = false)
+        }
         _uiState.value = _uiState.value.copy(
             currentUserId = userId,
             currentUserDisplayName = displayName,
@@ -6133,6 +6149,14 @@ class SecretaryViewModel : ViewModel() {
                 Log.e("ViewModel", "loadSettings /language/tenant error", e)
             }
 
+            // If the user just changed the customer language, keep their choice —
+            // the server may still return the previous value (not yet synced).
+            if (localLangSwitchIsRecent()) {
+                val keepCustomer = _uiState.value.tenantProfile?.get("default_customer_lang")
+                if (keepCustomer != null && profile != null) {
+                    profile = profile.toMutableMap().apply { put("default_customer_lang", keepCustomer) }
+                }
+            }
             _uiState.value = _uiState.value.copy(
                 serverVersionInfo = versionInfo,
                 tenantProfile = profile,
@@ -6147,41 +6171,47 @@ class SecretaryViewModel : ViewModel() {
         val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
             _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
         if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return }
+        // 1) Apply locally FIRST (synchronous via SettingsManager.commit()) and
+        //    mark the switch so concurrent reloads can't revert it. UI flips now.
+        applyAppLanguage(lang, persist = true)
+        lastLocalLangSwitchAt = android.os.SystemClock.elapsedRealtime()
+        onDone(true, null)
+        // 2) Best-effort backend sync. Failure does NOT revert the UI (intentional)
+        //    but is reported via a non-blocking flag so the user sees it.
         viewModelScope.launch {
-            // 1) Apply locally FIRST — instant, reliable, never blocked by the
-            //    backend and never flipped back by a reload. This is the fix for
-            //    "switching errors / changes languages".
-            applyAppLanguage(lang, persist = true)
-            onDone(true, null)
-            // 2) Best-effort sync to the backend (tenant default + user
-            //    preferred). Failures are non-fatal and never revert the UI.
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             val bcp47 = when (lang.lowercase().substringBefore("-")) {
                 "cs" -> "cs-CZ"; "pl" -> "pl-PL"; else -> "en-GB"
             }
+            var synced = true
             try { api.updateTenantLanguages(auth, mapOf("default_internal_language_code" to bcp47)) }
-            catch (e: Exception) { e.rethrowIfCancellation(); Log.w("ViewModel", "tenant lang sync failed: ${e.message}") }
+            catch (e: Exception) { e.rethrowIfCancellation(); synced = false; Log.w("ViewModel", "tenant lang sync failed: ${e.message}") }
             val uid = _uiState.value.currentUserId ?: ""
             if (uid.isNotBlank()) {
                 try { api.updateAuthUser(auth, uid, mapOf("preferred_language_code" to bcp47)) }
-                catch (e: Exception) { e.rethrowIfCancellation(); Log.w("ViewModel", "user lang sync failed: ${e.message}") }
+                catch (e: Exception) { e.rethrowIfCancellation(); synced = false; Log.w("ViewModel", "user lang sync failed: ${e.message}") }
             }
+            _uiState.value = _uiState.value.copy(languageSyncPending = !synced)
         }
     }
 
     fun updateCustomerLanguage(customerLang: String, onDone: (Boolean, String?) -> Unit) {
+        val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
+            _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
+        if (!canManage) { onDone(false, Strings.backendPermissionDenied()); return }
+        // Optimistic local update so a concurrent reload with stale data can't
+        // revert the selector. Customer language is OUTBOUND only — it never
+        // touches the app UI language or STT/TTS. The picker reads tenantProfile.
+        _uiState.value.tenantProfile?.let { p ->
+            _uiState.value = _uiState.value.copy(
+                tenantProfile = p.toMutableMap().apply { put("default_customer_lang", customerLang) })
+        }
+        lastLocalLangSwitchAt = android.os.SystemClock.elapsedRealtime()
         viewModelScope.launch {
             val auth = "Bearer ${settingsManager?.accessToken ?: ""}"
             try {
-                val canManage = _uiState.value.currentUserPermissions["manage_users"] == true ||
-                    _uiState.value.currentUserRole == "owner" || _uiState.value.currentUserRole == "admin"
-                if (!canManage) {
-                    onDone(false, Strings.backendPermissionDenied())
-                    return@launch
-                }
                 val res = api.updateTenantLanguages(auth, mapOf("default_customer_language_code" to customerLang))
                 if (res.isSuccessful) {
-                    loadTenantConfig()
                     onDone(true, null)
                 } else {
                     val rawError = res.errorBody()?.string()
@@ -10537,6 +10567,8 @@ data class UiState(
     val serverVersionInfo: Map<String, Any?>? = null,
     val tenantProfile: Map<String, Any?>? = null,
     val tenantLanguages: Map<String, Any?>? = null,
+    // True when a local language switch could not be synced to the server yet.
+    val languageSyncPending: Boolean = false,
     val settingsLoadErrors: Map<String, String> = emptyMap(),
     val settingsLastRefreshMs: Long = 0L,
     val currentUserId: String? = null,

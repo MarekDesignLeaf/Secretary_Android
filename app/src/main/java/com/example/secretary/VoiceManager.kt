@@ -38,6 +38,13 @@ class VoiceManager(
     private var isTtsReady = false
     // FIX A2: track permanent TTS init failure so speak() can skip audio but continue state machine
     private var ttsFailedPermanently = false
+    // The BCP47 language TTS actually fell back to (e.g. "en-GB" when cs-CZ data
+    // is missing). null = TTS speaks the requested app language. The recognizer
+    // must match what the user actually HEARS, not what we asked for.
+    private var ttsActiveLanguage: String? = null
+    // Set on a language switch so the recognizer is rebuilt with the new locale
+    // instead of being reused stale.
+    private var recognizerNeedsRecreation = false
     // FIX A7: guard against zombie recognizer callbacks after destroy()
     @Volatile private var isDestroyed = false
     private var isSpeaking = false
@@ -97,16 +104,24 @@ class VoiceManager(
     private fun normalizeRecognitionLanguage(value: String?): String {
         val normalized = value.orEmpty().trim().lowercase(Locale.ROOT)
         return when {
-            normalized.startsWith("cs") -> "cs-CZ"
+            normalized.isEmpty() -> ""  // legitimately "follow app language"
+            normalized.startsWith("cs") || normalized.startsWith("cz") -> "cs-CZ"
             normalized.startsWith("pl") -> "pl-PL"
             normalized.startsWith("en") -> "en-GB"
-            else -> ""
+            else -> { Log.w(TAG, "Unrecognized recognitionLanguage '$value' — using app language"); "" }
         }
     }
 
     private fun currentRecognitionLanguage(): String {
         val configured = normalizeRecognitionLanguage(settings.recognitionLanguage)
         if (configured.isNotBlank()) return configured
+        // If TTS could not speak the app language and fell back, listen in the
+        // SAME language the user just heard — otherwise we speak English but
+        // expect Czech, which garbles every command.
+        ttsActiveLanguage?.let { fb ->
+            val norm = normalizeRecognitionLanguage(fb)
+            if (norm.isNotBlank()) return norm
+        }
         return when (Strings.fromCode(settings.getCurrentAppLanguage())) {
             Strings.Lang.CS -> "cs-CZ"
             Strings.Lang.PL -> "pl-PL"
@@ -135,6 +150,8 @@ class VoiceManager(
                 } else {
                     Log.d(TAG, "TTS language set to $lang OK (result=$result)")
                 }
+                // Record a fallback so the recognizer listens in what was spoken.
+                ttsActiveLanguage = if (lang == preferredLang) null else lang
                 return true
             }
             Log.w(TAG, "TTS language $lang explicitly not supported, trying next")
@@ -144,6 +161,7 @@ class VoiceManager(
         val defaultResult = tts?.setLanguage(defaultLocale) ?: TextToSpeech.LANG_NOT_SUPPORTED
         if (defaultResult != TextToSpeech.LANG_NOT_SUPPORTED) {
             Log.w(TAG, "TTS using device default locale $defaultLocale (result=$defaultResult)")
+            ttsActiveLanguage = defaultLocale.toLanguageTag()
             return true
         }
         Log.e(TAG, "TTS: absolutely no language supported on this device — TTS disabled")
@@ -153,6 +171,7 @@ class VoiceManager(
     fun refreshLanguage() {
         handler.post {
             if (isDestroyed) return@post
+            recognizerNeedsRecreation = true  // force a fresh recognizer with the new locale
             if (isTtsReady && !ttsFailedPermanently) {
                 applyTtsLanguage()
             }
@@ -331,6 +350,10 @@ class VoiceManager(
         mode = ListenMode.IDLE
         stopBargeInDetector()
         wakeWordEngine?.stop()
+        // Null the engine so the next ensureWakeWordEngine() rebuilds it with the
+        // CURRENT language's Vosk model (the model is locked at construction time).
+        // refreshLanguage() calls stop() on a switch, so this gives the new model.
+        wakeWordEngine = null
         cancelRecognizer()
         handler.removeCallbacksAndMessages(null)
     }
@@ -470,11 +493,11 @@ class VoiceManager(
                     return@post
                 }
                 val activeForMs = SystemClock.elapsedRealtime() - lastRecognizerStartAt
-                if (isRecognizerActive && activeForMs < 8000L) {
+                if (isRecognizerActive && activeForMs < 8000L && !recognizerNeedsRecreation) {
                     Log.d(TAG, "Recognizer already active; skip duplicate startListening")
                     return@post
                 } else if (isRecognizerActive) {
-                    Log.w(TAG, "Recognizer looked stale for ${activeForMs}ms; recreating")
+                    Log.w(TAG, "Recognizer recreate (stale=${activeForMs}ms, langChange=$recognizerNeedsRecreation)")
                     try { recognizer?.cancel() } catch (_: Exception) { }
                     try { recognizer?.destroy() } catch (_: Exception) { }
                     recognizer = null
@@ -497,6 +520,7 @@ class VoiceManager(
                 recognizer?.startListening(createRecognizerIntent())
                 isRecognizerActive = true
                 lastRecognizerStartAt = SystemClock.elapsedRealtime()
+                recognizerNeedsRecreation = false  // fresh recognizer now uses the new language
             } catch (e: Exception) {
                 isRecognizerActive = false
                 scheduleRestart(1500)

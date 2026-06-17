@@ -311,11 +311,15 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     var systemLangFeedback by remember { mutableStateOf<String?>(null) }
     var customerLangFeedback by remember { mutableStateOf<String?>(null) }
 
-    // Match "cs" against "cs-CZ", "en" against "en-GB"/"en-US" etc.
+    // Match "cs" against "cs-CZ", "en" against "en-GB". Exact match wins; a prefix
+    // match only counts when the STORED value is a short code (no dash) — otherwise
+    // "en-GB" and "en-US" would both light up for a stored "en-GB".
     fun langPrefix(code: String) = code.lowercase().substringBefore("-")
-    fun findLabel(code: String) = supportedLangs.firstOrNull {
-        it.first.equals(code, ignoreCase = true) || langPrefix(it.first) == langPrefix(code)
-    }?.second ?: langDisplayName(code)
+    fun langMatches(optionCode: String, current: String) =
+        optionCode.equals(current, ignoreCase = true) ||
+        (!current.contains("-") && langPrefix(optionCode) == langPrefix(current))
+    fun findLabel(code: String) = supportedLangs.firstOrNull { langMatches(it.first, code) }?.second
+        ?: langDisplayName(code)
     val systemLangLabel = findLabel(currentSystemLang)
     val customerLangLabel = findLabel(currentCustomerLang)
 
@@ -333,6 +337,10 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                     Text("Změnit")
                 }
             }
+        }
+        if (state.languageSyncPending) {
+            Text("⚠ Uloženo lokálně, synchronizace na server se nezdařila — zkusím to znovu.",
+                fontSize = 11.sp, color = Color(0xFFE65100))
         }
         systemLangFeedback?.let {
             Text(it, fontSize = 12.sp, color = if (it.startsWith("✅")) Color(0xFF4CAF50) else Color.Red)
@@ -371,8 +379,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                         fontSize = 11.sp, color = Color.Gray)
                     Spacer(Modifier.height(4.dp))
                     appUiLangs.forEach { (code, label) ->
-                        val selected = code.equals(currentSystemLang, ignoreCase = true)
-                            || langPrefix(code) == langPrefix(currentSystemLang)
+                        val selected = langMatches(code, currentSystemLang)
                         Row(
                             Modifier.fillMaxWidth().clickable {
                                 showSystemLangPicker = false
@@ -402,8 +409,7 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
             text = {
                 Column {
                     supportedLangs.forEach { (code, label) ->
-                        val selected = code.equals(currentCustomerLang, ignoreCase = true)
-                            || langPrefix(code) == langPrefix(currentCustomerLang)
+                        val selected = langMatches(code, currentCustomerLang)
                         Row(
                             Modifier.fillMaxWidth().clickable {
                                 showCustomerLangPicker = false

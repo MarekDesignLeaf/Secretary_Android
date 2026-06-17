@@ -340,16 +340,27 @@ class SettingsManager(context: Context) {
         val normalized = normalizeAppLanguage(lang)
         val userId = currentBackendUserId
         if (userId.isNotBlank()) {
-            prefs.edit { putString("app_language_user_$userId", normalized) }
+            // commit() (synchronous) — a subsequent speak()/recognizer read must
+            // NOT see the old value. apply() is async and caused Czech text being
+            // spoken with an English voice right after a switch.
+            prefs.edit().putString("app_language_user_$userId", normalized).commit()
         }
         appLanguage = normalized
     }
-    fun getAppLanguageForUser(userId: String?, fallback: String = appLanguage): String {
+
+    /**
+     * Returns the user's LOCALLY-CHOSEN app language only, or null when they have
+     * never chosen locally on this device. Callers decide the fallback (server
+     * preference, then global). A server value must NEVER masquerade as a local
+     * choice — that was the "switch then it flips back" bug.
+     */
+    fun getAppLanguageForUser(userId: String?, fallback: String? = null): String? {
         val resolved = userId?.takeIf { it.isNotBlank() } ?: currentBackendUserId
         if (resolved.isNotBlank()) {
-            return normalizeAppLanguage(prefs.getString("app_language_user_$resolved", fallback) ?: fallback)
+            val stored = prefs.getString("app_language_user_$resolved", null)
+            if (!stored.isNullOrBlank()) return normalizeAppLanguage(stored)
         }
-        return normalizeAppLanguage(fallback)
+        return fallback?.let { normalizeAppLanguage(it) }
     }
 
     fun getVoiceAliases(): List<VoiceAlias> {
