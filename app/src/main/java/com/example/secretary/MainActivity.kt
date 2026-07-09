@@ -898,7 +898,11 @@ fun MainAppScaffold(viewModel: SecretaryViewModel, navController: NavHostControl
 
 @Composable
 fun ToolsScreen(viewModel: SecretaryViewModel) {
-    ToolsHubScreen(viewModel = viewModel) { _ -> }
+    // Tapping a tile opens its recognition mode (identify / health / mushroom),
+    // arming the camera the same way the voice path does. Previously inert.
+    ToolsHubScreen(viewModel = viewModel) { mode ->
+        viewModel.requestPlantCaptureFromVoice(mode)
+    }
 }
 
 @Composable
@@ -10407,7 +10411,11 @@ class SecretaryViewModel : ViewModel() {
     suspend fun gcalSync(): Boolean = try {
         api.gcalSync().isSuccessful
     } catch (e: Exception) { Log.w("GCal", "sync: ${e.message}"); false }
-    fun exportCrmData() { viewModelScope.launch { setStatus(Strings.exportUnavailable) } }
+    /** Fetch the CRM clients CSV from the backend; returns the text or null on error. */
+    suspend fun fetchCrmCsv(): String? = try {
+        val resp = api.exportCsv()
+        if (resp.isSuccessful) resp.body()?.string() else null
+    } catch (e: Exception) { Log.w("Export", "csv: ${e.message}"); null }
     fun triggerManualImport() {
         val path = settingsManager?.importFilePath ?: ""
         val table = settingsManager?.importTargetTable ?: "clients"
@@ -10415,7 +10423,48 @@ class SecretaryViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(pendingImport = mapOf("source" to path, "table" to table))
     }
     fun cancelImport() { _uiState.value = _uiState.value.copy(pendingImport = null) }
-    fun confirmImport() { _uiState.value = _uiState.value.copy(pendingImport = null); setStatus(Strings.importStarted) }
+
+    /** Read the CSV at the given path and bulk-import its rows into the table. */
+    fun confirmImport() {
+        val pending = _uiState.value.pendingImport
+        _uiState.value = _uiState.value.copy(pendingImport = null)
+        val path = pending?.get("source") ?: return
+        val table = pending["table"] ?: "clients"
+        setStatus(Strings.importStarted)
+        viewModelScope.launch {
+            try {
+                val rows = withContext(Dispatchers.IO) { parseCsvToRows(path) }
+                if (rows.isEmpty()) { setStatus(Strings.pathNotSet); return@launch }
+                val resp = api.importRecords(mapOf("table" to table, "rows" to rows))
+                if (resp.isSuccessful) {
+                    val n = (resp.body()?.get("imported_count") as? Number)?.toInt() ?: rows.size
+                    setStatus("Import: $n záznamů → $table")
+                    refreshCrmData()
+                } else {
+                    setStatus(Strings.gcalSyncFailed)
+                }
+            } catch (e: Exception) {
+                Log.w("Import", "csv: ${e.message}"); setStatus(Strings.gcalSyncFailed)
+            }
+        }
+    }
+
+    /** Minimal CSV parser: first line = headers, remaining lines = records. */
+    private fun parseCsvToRows(path: String): List<Map<String, String>> {
+        val f = java.io.File(path)
+        if (!f.exists() || !f.canRead()) return emptyList()
+        val lines = f.readLines().filter { it.isNotBlank() }
+        if (lines.size < 2) return emptyList()
+        val sep = if (lines[0].contains(';') && !lines[0].contains(',')) ';' else ','
+        val headers = lines[0].split(sep).map { it.trim().trim('"') }
+        return lines.drop(1).mapNotNull { line ->
+            val cells = line.split(sep).map { it.trim().trim('"') }
+            if (cells.all { it.isBlank() }) return@mapNotNull null
+            headers.mapIndexedNotNull { i, hdr ->
+                if (hdr.isBlank()) null else hdr to (cells.getOrNull(i) ?: "")
+            }.toMap()
+        }
+    }
 
     fun toggleBackground() {
         val current = _uiState.value.isBackgroundActive

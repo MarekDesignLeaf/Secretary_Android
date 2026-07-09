@@ -245,6 +245,9 @@ interface SecretaryApi {
     @POST("crm/communications/import")
     suspend fun importCommunications(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 
+    @POST("crm/import")
+    suspend fun importRecords(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
+
     @POST("crm/communications/provider-history-import")
     suspend fun importProviderCommunicationHistory(@Body data: Map<String, @JvmSuppressWildcards Any?>): Response<Map<String, @JvmSuppressWildcards Any?>>
 

@@ -1107,7 +1107,14 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
                 Spacer(Modifier.width(6.dp))
                 Text(Strings.reload)
             }
-            // TODO: user creation disabled until system is stable
+            Button(
+                onClick = { userFeedback = null; showCreateBackendUser = true },
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(Strings.t("New user", "Nový uživatel", "Nowy użytkownik"))
+            }
         }
         userFeedback?.let { (message, ok) ->
             Text(message, color = if (ok) Color(0xFF2E7D32) else Color.Red, fontSize = 12.sp)
@@ -1453,7 +1460,29 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
     if (showCl) AlertDialog(onDismissRequest = { showCl = false }, title = { Text(Strings.clearHistoryQuestion) }, confirmButton = { Button(onClick = { vm.clearHistory(); showCl = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text(Strings.delete) } }, dismissButton = { TextButton(onClick = { showCl = false }) { Text(Strings.cancel) } })
     if (showRs) AlertDialog(onDismissRequest = { showRs = false }, title = { Text(Strings.restoreDefaultsQuestion) }, confirmButton = { Button(onClick = { vm.resetSettings(); showRs = false }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text(Strings.restoreDefaults) } }, dismissButton = { TextButton(onClick = { showRs = false }) { Text(Strings.cancel) } })
     SCard(Strings.dataStorage, Icons.Default.AccountBox, exp, { exp = !exp }) {
-        Button(onClick = { vm.exportCrmData() }, Modifier.fillMaxWidth()) { Text(Strings.exportCrmCsv) }
+        val exportCtx = LocalContext.current
+        val exportScope = rememberCoroutineScope()
+        var exportMsg by remember { mutableStateOf<String?>(null) }
+        Button(onClick = {
+            exportScope.launch {
+                val csv = vm.fetchCrmCsv()
+                if (csv == null) { exportMsg = Strings.gcalSyncFailed; return@launch }
+                try {
+                    val f = java.io.File(exportCtx.cacheDir, "crm_export_${System.currentTimeMillis()}.csv")
+                    f.writeText(csv)
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        exportCtx, "${exportCtx.packageName}.provider", f)
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/csv"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    exportCtx.startActivity(android.content.Intent.createChooser(send, Strings.exportCrmCsv))
+                    exportMsg = null
+                } catch (e: Exception) { exportMsg = e.message }
+            }
+        }, Modifier.fillMaxWidth()) { Text(Strings.exportCrmCsv) }
+        exportMsg?.let { Text(it, fontSize = 12.sp, color = Color.Red) }
         Spacer(Modifier.height(8.dp))
         val ctx = LocalContext.current
         var syncResult by remember { mutableStateOf<String?>(null) }
@@ -1486,6 +1515,17 @@ fun SettingsScreen(viewModel: SecretaryViewModel, navController: NavHostControll
         var ai by remember { mutableStateOf(sm.autoImportEnabled) }
         SSwitch(Strings.autoImportOnStartup, null, ai) { ai = it; sm.autoImportEnabled = it }
         Button(onClick = { vm.triggerManualImport() }, Modifier.fillMaxWidth(), enabled = path.isNotBlank()) { Text(Strings.startImport) }
+        // Confirm dialog: triggerManualImport stashes pendingImport, the user
+        // confirms, confirmImport reads the CSV and uploads it.
+        val dataState by vm.uiState.collectAsState()
+        dataState.pendingImport?.let { pend ->
+            AlertDialog(
+                onDismissRequest = { vm.cancelImport() },
+                title = { Text(Strings.startImport) },
+                text = { Text("${pend["source"]} → ${Strings.localizeCrmTab(pend["table"] ?: "clients")}") },
+                confirmButton = { Button(onClick = { vm.confirmImport() }) { Text(Strings.startImport) } },
+                dismissButton = { TextButton(onClick = { vm.cancelImport() }) { Text(Strings.cancel) } })
+        }
         Text(Strings.voiceImportHint, fontSize = 11.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = { showCl = true }, Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)) { Text(Strings.clearHistory) }
