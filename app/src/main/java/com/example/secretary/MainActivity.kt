@@ -416,7 +416,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("První spuštění / First setup", style = MaterialTheme.typography.titleMedium) },
+                title = { Text(Strings.t("First setup", "První spuštění", "Pierwsze uruchomienie"), style = MaterialTheme.typography.titleMedium) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface
@@ -435,7 +435,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             // ── Company ──────────────────────────────────────────────
             item {
                 Text(
-                    "Firma / Company",
+                    Strings.t("Company", "Firma", "Firma"),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
@@ -444,21 +444,21 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             item {
                 OutlinedTextField(
                     value = companyName, onValueChange = { companyName = it },
-                    label = { Text("Název firmy / Company name *") },
+                    label = { Text(Strings.t("Company name *", "Název firmy *", "Nazwa firmy *")) },
                     modifier = Modifier.fillMaxWidth(), singleLine = true
                 )
             }
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FirstInstallDropdown(
-                        label = "Země / Country",
+                        label = Strings.t("Country", "Země", "Kraj"),
                         selectedLabel = country,
                         options = listOf("GB" to "GB – United Kingdom", "CZ" to "CZ – Czech Republic", "SK" to "SK – Slovakia", "PL" to "PL – Poland", "DE" to "DE – Germany", "US" to "US – United States"),
                         onSelect = { country = it },
                         modifier = Modifier.weight(1f)
                     )
                     FirstInstallDropdown(
-                        label = "Měna / Currency",
+                        label = Strings.t("Currency", "Měna", "Waluta"),
                         selectedLabel = currency,
                         options = listOf("GBP" to "GBP £", "CZK" to "CZK Kč", "EUR" to "EUR €", "USD" to "USD \$", "PLN" to "PLN zł"),
                         onSelect = { currency = it },
@@ -470,7 +470,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             // ── Languages ────────────────────────────────────────────
             item {
                 Text(
-                    "Jazyky / Languages",
+                    Strings.t("Languages", "Jazyky", "Języki"),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
@@ -479,14 +479,14 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FirstInstallDropdown(
-                        label = "Jazyk firmy / Internal",
+                        label = Strings.t("Company (internal)", "Jazyk firmy", "Język firmy"),
                         selectedLabel = langOptions.firstOrNull { it.first == internalLang }?.second ?: internalLang,
                         options = langOptions,
                         onSelect = { internalLang = it },
                         modifier = Modifier.weight(1f)
                     )
                     FirstInstallDropdown(
-                        label = "Jazyk zákazníků / Customer",
+                        label = Strings.t("Customers", "Jazyk zákazníků", "Język klientów"),
                         selectedLabel = langOptions.firstOrNull { it.first == customerLang }?.second ?: customerLang,
                         options = langOptions,
                         onSelect = { customerLang = it },
@@ -498,7 +498,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             // ── Industry ─────────────────────────────────────────────
             item {
                 Text(
-                    "Odvětví / Industry",
+                    Strings.t("Industry", "Odvětví", "Branża"),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
@@ -512,14 +512,16 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                     ) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
-                        Text("Načítám odvětví…", style = MaterialTheme.typography.bodyMedium)
+                        Text(Strings.t("Loading industries…", "Načítám odvětví…", "Wczytuję branże…"), style = MaterialTheme.typography.bodyMedium)
                     }
                     state.firstInstallIndustries.isEmpty() -> Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                     ) {
                         Text(
-                            "Odvětví se nepodařilo načíst. Zkontroluj připojení k serveru.",
+                            Strings.t("Could not load industries. Check the server connection.",
+                                "Odvětví se nepodařilo načíst. Zkontroluj připojení k serveru.",
+                                "Nie udało się wczytać branż. Sprawdź połączenie z serwerem."),
                             modifier = Modifier.padding(12.dp),
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -548,7 +550,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                                     )
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        "Vybrat vše / Select all",
+                                        Strings.t("Select all", "Vybrat vše", "Zaznacz wszystko"),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                                     )
@@ -591,7 +593,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             // ── Admin account ────────────────────────────────────────
             item {
                 Text(
-                    "Správce / Administrator",
+                    Strings.t("Administrator", "Správce", "Administrator"),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
@@ -600,7 +602,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             item {
                 OutlinedTextField(
                     value = adminName, onValueChange = { adminName = it },
-                    label = { Text("Zobrazované jméno / Display name *") },
+                    label = { Text(Strings.t("Display name *", "Zobrazované jméno *", "Wyświetlana nazwa *")) },
                     modifier = Modifier.fillMaxWidth(), singleLine = true
                 )
             }
@@ -614,7 +616,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             item {
                 OutlinedTextField(
                     value = adminPassword, onValueChange = { adminPassword = it },
-                    label = { Text("Heslo / Password * (min. 12 znaků)") },
+                    label = { Text(Strings.t("Password * (min. 12 characters)", "Heslo * (min. 12 znaků)", "Hasło * (min. 12 znaków)")) },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
                     visualTransformation = if (showPassword) androidx.compose.ui.text.input.VisualTransformation.None
                         else androidx.compose.ui.text.input.PasswordVisualTransformation(),
@@ -628,7 +630,7 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
             item {
                 OutlinedTextField(
                     value = confirmPassword, onValueChange = { confirmPassword = it },
-                    label = { Text("Potvrdit heslo / Confirm password *") },
+                    label = { Text(Strings.t("Confirm password *", "Potvrdit heslo *", "Potwierdź hasło *")) },
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     isError = confirmPassword.isNotBlank() && confirmPassword != adminPassword
@@ -653,11 +655,11 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                     enabled = !state.firstInstallSubmitting,
                     onClick = {
                         localError = when {
-                            companyName.isBlank() -> "Zadejte název firmy."
-                            adminName.isBlank() -> "Zadejte zobrazované jméno správce."
-                            adminEmail.isBlank() -> "Zadejte e-mail správce."
-                            adminPassword.length < 12 -> "Heslo musí mít alespoň 12 znaků."
-                            confirmPassword != adminPassword -> "Hesla se neshodují."
+                            companyName.isBlank() -> Strings.t("Enter a company name.", "Zadejte název firmy.", "Podaj nazwę firmy.")
+                            adminName.isBlank() -> Strings.t("Enter the administrator's display name.", "Zadejte zobrazované jméno správce.", "Podaj wyświetlaną nazwę administratora.")
+                            adminEmail.isBlank() -> Strings.t("Enter the administrator's email.", "Zadejte e-mail správce.", "Podaj e-mail administratora.")
+                            adminPassword.length < 12 -> Strings.t("Password must be at least 12 characters.", "Heslo musí mít alespoň 12 znaků.", "Hasło musi mieć co najmniej 12 znaków.")
+                            confirmPassword != adminPassword -> Strings.t("Passwords don't match.", "Hesla se neshodují.", "Hasła się nie zgadzają.")
                             else -> null
                         }
                         if (localError == null) {
@@ -690,9 +692,9 @@ private fun FirstInstallWizardScreen(viewModel: SecretaryViewModel) {
                     if (state.firstInstallSubmitting) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(8.dp))
-                        Text("Vytvářím…")
+                        Text(Strings.t("Creating…", "Vytvářím…", "Tworzę…"))
                     } else {
-                        Text("Vytvořit firmu a správce")
+                        Text(Strings.t("Create company and administrator", "Vytvořit firmu a správce", "Utwórz firmę i administratora"))
                     }
                 }
             }
@@ -2125,7 +2127,7 @@ fun VoiceResolveDialog(
                                 )
                                 result.resolutionMethod?.let { method ->
                                     Text(
-                                        text = "rozpoznáno přes: $method",
+                                        text = Strings.t("recognized via: $method", "rozpoznáno přes: $method", "rozpoznano przez: $method"),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -2140,7 +2142,7 @@ fun VoiceResolveDialog(
                     onClick = onConfirmAction,
                     colors = ButtonDefaults.buttonColors(containerColor = riskColor)
                 ) {
-                    Text("Potvrdit")
+                    Text(Strings.confirm)
                 }
             },
             dismissButton = {
